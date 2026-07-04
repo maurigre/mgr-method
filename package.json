@@ -1,0 +1,41 @@
+{
+  "name": "mgr-method",
+  "version": "0.1.0",
+  "description": "MGR — Método Governado por Rastreabilidade: framework de desenvolvimento dirigido por especificação (plan/develop/qa) para agentes de código, portável entre Claude Code e GitHub Copilot.",
+  "type": "module",
+  "bin": {
+    "mgr": "bin/mgr.js",
+    "mgr-method": "bin/mgr.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "skills/",
+    "shared/"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "validate": "node bin/mgr.js validate"
+  },
+  "keywords": [
+    "agent-skills",
+    "claude-code",
+    "github-copilot",
+    "spec-driven-development",
+    "hexagonal",
+    "bmad"
+  ],
+  "license": "MIT",
+  "author": "Mauri",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mauri/mgr-method.git"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.7.0",
+    "picocolors": "^1.1.1"
+  }
+}

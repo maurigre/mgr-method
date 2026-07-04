@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.tgz
+.DS_Store
+
+# Saída de build do MGR
+/dist/mgr-runtime/
+
+# Nota: .specs/ é a fonte de verdade do handoff — NÃO ignore em projetos que usam o MGR.

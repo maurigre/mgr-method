@@ -1,7 +1,7 @@
 # MGR — Método Governado por Rastreabilidade
 
-Framework de **Specification-Driven Development (SDD)** para agentes de código,
-empacotado no estilo BMAD: um CLI instala um conjunto de Agent Skills que conduzem o
+Framework de **Specification-Driven Development (SDD)** para agentes de código:
+um CLI instala um conjunto de Agent Skills que conduzem o
 projeto do brief à entrega com checkpoints humanos, decisões rastreáveis (ADRs) e
 review governado por regras do próprio projeto. Portável entre **Claude Code** e
 **GitHub Copilot** (padrão aberto de Agent Skills), com integração opcional à memória
@@ -91,9 +91,12 @@ shared/scripts/     # sdd-check.sh (verifica pré-requisitos do spec-create)
 test/               # node:test
 ```
 
-Dependências mínimas (@clack/prompts e picocolors, só para a TUI do instalador); Node ≥ 18. Desenvolvimento: `npm test`,
+Dependências mínimas (@clack/prompts e picocolors na TUI; esbuild só em dev — o pacote
+publicado é um bundle minificado). Node ≥ 18. Release: `git tag vX.Y.Z && git push --tags`
+dispara o workflow de publish (valida, testa e publica no npm com provenance). Desenvolvimento: `npm test`,
 `node bin/mgr.js validate`.
 
 ## Licença
 
-MIT — veja [LICENSE](LICENSE).
+Source-available — código aberto para leitura e uso pessoal/interno; redistribuição,
+revenda ou derivados distribuídos exigem autorização do autor. Veja [LICENSE](LICENSE).

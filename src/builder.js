@@ -1,4 +1,4 @@
-// Build no modelo runtime + lançadores (estilo BMAD).
+// Build no modelo runtime + lançadores.
 // - Runtime: conteúdo completo escrito uma vez (as skills e utilitários compartilhados).
 //   A CONSTITUTION.md do PROJETO é gerada pela skill spec-init — não pelo instalador.
 // - Lançadores: SKILL.md finos, gerados na pasta do motor, que apontam para o runtime.

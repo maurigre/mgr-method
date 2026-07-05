@@ -17,6 +17,9 @@ jobs:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
           cache: npm
+      # Trusted Publishing (OIDC) exige npm >= 11.5.1; o npm que vem no Node 22 e mais antigo
+      - name: Atualizar npm para versao com suporte a OIDC
+        run: npm install -g npm@latest
       - run: npm ci
       # Gates de qualidade ANTES de publicar (política do próprio MGR)
       - run: node bin/mgr.js validate
@@ -27,7 +30,6 @@ jobs:
           TAG="${GITHUB_REF_NAME#v}"
           PKG=$(jq -r '.version' package.json)
           [ "$TAG" = "$PKG" ] || { echo "tag v$TAG != package.json $PKG"; exit 1; }
-      # prepack roda o build minificado automaticamente
-      - run: npm publish --provenance --access public
-       # env:
-       #   NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # prepack roda o build minificado automaticamente.
+      # Sem NODE_AUTH_TOKEN: auth via OIDC (Trusted Publisher). Provenance e automatica.
+      - run: npm publish --access public

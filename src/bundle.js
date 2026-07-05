@@ -8,7 +8,7 @@ import path from "node:path";
 const PKG_ROOT = fileURLToPath(new URL("../", import.meta.url));
 
 // Nome da pasta de runtime criada no projeto. Configurável aqui (ou via --runtime-dir).
-// Default `_mgr` (visível, espelha o `.bmad-core/` do BMAD v4 (escolha do Mauri).
+// Default definido pelo autor.
 // ferramentas). Para usar ".mgr-core", basta trocar esta linha.
 export const RUNTIME_DIR_NAME = ".mgr-core";
 

@@ -1,21 +1,24 @@
-MIT License
+MGR-METHOD — Licença Source-Available v1.0
 
-Copyright (c) 2026 Mauri Reis
+Copyright (c) 2026 Mauri Reis <maurigre@gmail.com>. Todos os direitos reservados.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. CONCESSÃO. É concedida permissão, gratuita e não exclusiva, para:
+   a) visualizar e estudar o código-fonte e o conteúdo deste Software;
+   b) instalar e usar o Software para fins pessoais, educacionais e de uso interno
+      em projetos próprios ou da organização do usuário, inclusive comerciais.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+2. RESTRIÇÕES. Sem autorização prévia e por escrito do autor, é PROIBIDO:
+   a) redistribuir, sublicenciar, vender ou publicar o Software ou partes dele
+      (incluindo as skills, guias e templates), modificados ou não;
+   b) oferecer o Software, no todo ou em parte, como serviço ou produto a terceiros;
+   c) criar e distribuir frameworks derivados baseados neste Software;
+   d) remover ou alterar avisos de autoria e esta licença.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+3. CONTRIBUIÇÕES. Ao submeter contribuições, o contribuidor concede ao autor licença
+   perpétua, irrevogável e gratuita para usá-las, modificá-las e distribuí-las como
+   parte do Software.
+
+4. SEM GARANTIAS. O SOFTWARE É FORNECIDO "COMO ESTÁ", SEM GARANTIAS DE QUALQUER TIPO.
+   EM NENHUMA HIPÓTESE O AUTOR SERÁ RESPONSÁVEL POR DANOS DECORRENTES DO USO.
+
+Contato para licenciamento além destas permissões: maurigre@gmail.com

@@ -33,6 +33,13 @@ jobs:
           TAG="${GITHUB_REF_NAME#v}"
           PKG=$(jq -r '.version' package.json)
           [ "$TAG" = "$PKG" ] || { echo "tag v$TAG != package.json $PKG"; exit 1; }
+      - name: Diagnostico OIDC
+        run: |
+          echo "ACTIONS_ID_TOKEN_REQUEST_URL set? ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
+          echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN set? ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+yes}"
+          echo "repository.url = $(jq -r '.repository.url' package.json)"
+          echo "GITHUB_REPOSITORY = $GITHUB_REPOSITORY"
+          echo "GITHUB_REF = $GITHUB_REF"
       # prepack roda o build minificado automaticamente.
       # Auth via OIDC (Trusted Publisher) - sem token, sem .npmrc de auth.
-      - run: npm publish --provenance --access public
+      - run: npm publish --provenance --access public --loglevel verbose

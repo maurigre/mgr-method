@@ -31,5 +31,8 @@ jobs:
           PKG=$(jq -r '.version' package.json)
           [ "$TAG" = "$PKG" ] || { echo "tag v$TAG != package.json $PKG"; exit 1; }
       # prepack roda o build minificado automaticamente.
-      # Sem NODE_AUTH_TOKEN: auth via OIDC (Trusted Publisher). Provenance e automatica.
-      - run: npm publish --access public
+      # Auth via OIDC (Trusted Publisher). NODE_AUTH_TOKEN vazio evita que o setup-node
+      # injete um token invalido no .npmrc e quebre o OIDC (E404 / not authenticated).
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ""

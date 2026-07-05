@@ -20,6 +20,13 @@ framework, banco nem HTTP; adapters dependem de ports; o domínio define os port
 
 ## O GUIA (gravar como docs/sdd/09-review-rules.md)
 
+> Proveniência: regras transcritas do guia original do autor (backend-java.md) com
+> normalização apenas TIPOGRÁFICA (correção de typos como "endpoins"→"endpoints",
+> acentuação e concordância), sem qualquer mudança semântica. Seções marcadas como "extensão do autor" foram
+> adicionadas e aprovadas pelo autor posteriormente e têm a MESMA força de regra
+> citável. Este arquivo embarcado é a
+> fonte canônica para as citações textuais do `code-analyzer`.
+
 ### Regras de Design para código Orientado a Objetos
 
 1. Não retornamos nulo dentro das regras da aplicação.
@@ -59,6 +66,39 @@ framework, banco nem HTTP; adapters dependem de ports; o domínio define os port
    logs de erro para métricas em cenários onde não mandamos a exception mas mandamos o
    log de erro.
 4. Log em nível de debug deve ser feito apenas em condicionais que interrompem fluxos.
+
+---
+
+## Escopo do PITest (Mutation Testing)
+
+O PITest deve concentrar-se nas camadas que contêm as regras de negócio — o núcleo do
+hexágono. Em geral, isso significa incluir os pacotes `..domain..` e `..usecase..` **ou
+equivalentes na nomenclatura do projeto** (`application`, `service`, `core`,
+`interactor`); no brownfield, detectar os nomes reais dos pacotes antes de configurar o
+`targetClasses`.
+
+Componentes de infraestrutura — controllers, adapters, mappers, clientes HTTP,
+persistência e configuração — normalmente ficam fora do escopo de mutação: tendem a ser
+melhor validados por testes de integração, e mutá-los costuma aumentar o tempo de
+execução sem ganho proporcional na qualidade dos testes.
+
+Mesmo dentro do núcleo, excluir apenas o que for puramente estrutural ou trivial:
+DTOs/records sem lógica, código gerado, Value Objects **triviais**. Value Objects
+**ricos** (com invariantes, validação ou comportamento — ex.: `Money`, `CNPJ`)
+permanecem no escopo: são regra de negócio, coerente com a constituição de objetos ricos.
+
+A estratégia é maximizar o retorno do mutation testing concentrando-o onde existem
+decisões de negócio: o score de mutação passa a refletir a capacidade dos testes de
+detectar alterações reais na lógica, sem penalizar infraestrutura cuja validação
+adequada é por meio de testes de integração.
+
+### Nomenclatura e clareza (extensão do autor — 2026-07)
+
+1. Nomes de variáveis, métodos e classes devem expressar o que armazenam ou fazem, de
+   forma resumida.
+2. É proibido nome de uma letra ou sem significado (`a`, `b`, `x`, `tmp`, `data`,
+   `obj`). Exceções permitidas: índices de laços curtos (`i`, `j`) e parâmetros de
+   lambda de uma única expressão.
 
 ---
 

@@ -10,7 +10,7 @@ import { readManifest } from "../src/manifest.js";
 import { validateAll } from "../src/validator.js";
 
 const tmp = () => mkdtempSync(path.join(os.tmpdir(), "mgr-"));
-const CORE = ["spec-init", "spec-create", "spec-execute", "adr-create", "code-analyzer", "junit-clean", "arch-hexagonal"];
+const CORE = ["spec-init", "spec-create", "spec-execute", "adr-create", "code-analyzer", "junit-clean", "arch-hexagonal", "evidence-capture"];
 
 test("skills do fluxo SDD presentes e válidas", () => {
   const names = bundle.skillNames();

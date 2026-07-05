@@ -10,6 +10,9 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 
 ## [0.1.0] - 2026-07-03
 ### Adicionado
+- Skill `evidence-capture`: registra evidências AI-First por funcionalidade
+  (specs/<feature>/ai/ + índice global ai/index.md); organiza e pergunta, nunca inventa
+  o julgamento crítico. Inclui o prompt de criação da própria skill.
 - Skill `spec-execute`: fase de execução separada do `spec-create` (SRP), com as
   premissas de desenvolvimento explícitas e retomada direta de execução interrompida.
 - TUI do instalador estilo BMAD (@clack/prompts): banner ASCII com créditos,

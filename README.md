@@ -28,7 +28,9 @@ npx mgr-method status | update | uninstall
 
 O instalador escreve o **runtime** em `.mgr-core/` (conteúdo uma vez + `manifest.json`)
 e **lançadores finos** na pasta do motor (`.claude/skills/` ou `.github/skills/`), que
-apontam para o runtime — instalar para vários motores não duplica conteúdo. O
+apontam para o runtime — instalar para vários motores não duplica conteúdo. As
+convenções de diretório seguem as versões vigentes das ferramentas; se a sua versão
+esperar outro caminho, use `--skills-dir` para forçar. O
 `uninstall` remove só o que o MGR criou; `docs/`, `specs/` e código ficam intactos.
 
 ## O fluxo
@@ -53,6 +55,7 @@ code-analyzer ─ review final, ancorado no guia DO projeto (zero regra inventad
 | `spec-execute` | Executa o plano aprovado task a task (DAG), aplicando as premissas de desenvolvimento (segurança, performance, recursos, clareza — "vocabulário, não checklist") e o controle ativo de contexto (tiers S–F, arquivamento a 75%, hand-off, anti-compactação). Retomada direta de execução interrompida. |
 | `adr-create` | ADRs formato Nygard: auto-detecta diretório, numeração sequencial, imutabilidade de aceitos, modo avulso ou invocado. |
 | `code-analyzer` | Revisor rigoroso com **Restrição Crítica**: toda reprovação cita textualmente uma regra de `docs/sdd/09-review-rules.md`; problema real sem regra vira sugestão não-bloqueante. Agnóstico à arquitetura — as regras vêm do projeto. |
+| `evidence-capture` | Registra evidências AI-First por funcionalidade (prompts, revisões, habilidades) em `specs/<feature>/ai/` + índice global; organiza e pergunta, nunca inventa. |
 | `junit-clean` | Testes Java padronizados por 13 regras (naming should+camelCase, sem herança, ParameterizedTest, AAA, boundary + MC/DC, Sonar-safe). |
 | `arch-hexagonal` | Provedora do guia de regras para Ports & Adapters (guia Java completo e validado). |
 | `arch-clean` · `arch-onion` · `arch-layered` | Provedoras stub: regra de dependência definida; regras detalhadas `[A DEFINIR]` com o time (nunca inventadas). |
@@ -65,7 +68,8 @@ code-analyzer ─ review final, ancorado no guia DO projeto (zero regra inventad
   `[A CONFIRMAR]`/`[A DEFINIR]` + pergunta; reprovação sem regra textual não existe.
 - **Checkpoints bloqueantes** — o humano aprova PRD, spec e plano; commit é humano.
 - **Contexto sob controle** — tiers S/A/B/C/D/E/F, arquivamento a 75%, hand-off de
-  sessão, proibição de compactação. Projetado para o orçamento mais apertado (~128K).
+  sessão, proibição de compactação. Projetado para caber no menor orçamento de contexto
+  entre os motores suportados (limites variam por ferramenta/versão — não presuma janela grande).
 - **mgr-code se disponível** — cada skill sonda o `mgr-mcp` no início; usa a memória
   quando presente e **alerta visivelmente** quando ausente. Nunca é dependência crítica.
 
@@ -82,7 +86,7 @@ feature, idêntico.
 ```
 bin/mgr.js          # CLI (install · status · update · uninstall · build · validate · list)
 src/                # bundle · builder (runtime+lançadores) · installer (2 fases) · manifest · validator
-skills/             # as 10 skills (fonte)
+skills/             # as 11 skills (fonte)
 shared/scripts/     # sdd-check.sh (verifica pré-requisitos do spec-create)
 test/               # node:test
 ```

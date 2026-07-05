@@ -1,6 +1,6 @@
 ---
 name: spec-create
-description: Implementa o fluxo SDD completo para EVOLUIR um projeto já inicializado pelo spec-init - recebe um brief de feature, bugfix ou refactor, gera PRD, spec técnica e plano de tasks com checkpoints humanos bloqueantes, e após aprovação delega a implementação à skill spec-execute, fechando ao final com o completion (sem commit automático). Use sempre que o usuário pedir para adicionar ou implementar uma feature, corrigir bug com SDD, refatorar mantendo comportamento, criar spec e implementar, ou retomar uma feature em andamento. Exige /docs/sdd/ e CONSTITUTION.md existentes.
+description: Implementa o fluxo SDD completo para EVOLUIR um projeto já inicializado pelo spec-init - recebe um brief de feature, bugfix ou refactor, gera PRD, spec técnica e plano de tasks com checkpoints humanos bloqueantes, e após aprovação delega a implementação à skill spec-execute e, no fechamento, registra as evidências AI-First via evidence-capture quando a política do projeto habilitar (sem commit automático). Use sempre que o usuário pedir para adicionar ou implementar uma feature, corrigir bug com SDD, refatorar mantendo comportamento, criar spec e implementar, ou retomar uma feature em andamento. Exige /docs/sdd/ e CONSTITUTION.md existentes.
 ---
 
 # spec-create — Evolução do projeto via SDD
@@ -48,6 +48,16 @@ Slug da feature: kebab-case do brief, sem acentos, ≤ 50 chars — confirmar co
 
 ## Fluxo — 6 fases com checkpoints
 
+### Fase 0 — Versionamento (se a política estiver habilitada na CONSTITUTION)
+Antes de abrir a spec: existem branches de specs anteriores CONCLUÍDOS sem merge?
+Sugerir o merge em ordem de abertura. Conflitos MECÂNICOS (imports, formatação, linhas
+sem interseção semântica) → resolver, EXIBIR o diff da resolução e confirmar. Conflitos
+SEMÂNTICOS (a mesma regra alterada de formas diferentes) → HALT obrigatório: apresentar
+os dois lados e perguntar — decidir qual regra vence é decisão de negócio, não de merge.
+Spec com execução pendente não entra na fila. Em seguida, criar a branch desta spec
+(convenção da CONSTITUTION; default `feat/<slug>`), com confirmação. Sem git no projeto
+→ pular esta fase inteira, sem perguntas.
+
 ### Fase 1 — Contextualização (sem interação)
 **1a. Retomada:** se existe `/specs/<slug>/.handoff.md`, carregar APENAS o estado salvo
 (tiers S/A/B + decisões), pular fases já aprovadas e tasks concluídas, e avisar:
@@ -92,14 +102,24 @@ Com o plano aprovado, invoque a skill `spec-execute` informando o slug. Ela carr
 tiers do disco (constituição, brief, spec, tasks pendentes), executa o DAG P0→P1→P2 com
 as premissas de desenvolvimento (segurança, performance, recursos, clareza — vocabulário,
 não checklist), registra `05-execution.md`, aplica os checkpoints por bloco de prioridade
-e o controle de contexto/hand-off. **Nunca commitar** — `git commit` é do humano.
+e o controle de contexto/hand-off. **Nada de git automático** — commit/push só com confirmação explícita (Fase 6).
 Retomada de execução interrompida: acionar `spec-execute` direto, sem repassar pelo
 planejamento.
 
 ### Fase 6 — Completion (`06-completion.md`)
 Resumo do que mudou · testes (verdes?) · atualização INCREMENTAL da `/docs/sdd/` (diff)
-· links para ADRs criados · pendências. **Review final:** sugira rodar o `code-analyzer`
+· links para ADRs criados · pendências. **Commit (com confirmação, nunca automático):** se a política estiver habilitada,
+PREPARE o commit na convenção da CONSTITUTION (prefixo, idioma, ≤72 no imperativo, o quê
+e não o como), EXIBA mensagem + arquivos e PERGUNTE; execute só com "sim" explícito.
+**Push (com confirmação e guardas):** só a branch da spec; nunca force-push; exiba antes
+o checklist (gates verdes, convenção ok, `git log origin/<branch>..<branch>` do que
+sobe) e pergunte; remoto divergente → halt; fluxo PR → sugerir abrir o PR. **Review final:** sugira rodar o `code-analyzer`
 sobre os arquivos tocados antes do commit humano.
+**Evidências AI-First (condicional pela CONSTITUTION):** verifique a política do
+projeto. `habilitado` → invocar `evidence-capture` passando o slug (OBRIGATÓRIO em toda
+feature — política não é escolha pontual); registra `specs/<slug>/ai/` e atualiza o
+`ai/index.md`, e o `06-completion.md` referencia o `ai/` da feature. `desabilitado` ou
+ausente → pular, sem perguntar de novo (mudar a política = editar a CONSTITUTION).
 
 ## Controle ativo de contexto (Lei do fluxo — NUNCA compactar)
 (Durante a Fase 5, o controle detalhado — arquivamento a 75%, hand-off, anti-
@@ -140,7 +160,9 @@ contagem real, use-a. Imprecisão é aceitável — o threshold de 75% tem marge
    onde fizer sentido, error handling consistente.
 5. **Patterns por necessidade** — cada uso justificado pelo problema concreto.
 6. **Skills customizadas têm prioridade** quando cobrem a task.
-7. **Não commitar nunca.**
+7. **Nenhuma ação de git automática.** Commit e push existem SÓ via o fluxo de
+   confirmação da política de versionamento (Fase 0/6); force-push e push em branch
+   protegida, nunca.
 8. **Falha cedo:** ambiguidade no brief → perguntar antes do PRD; buraco no PRD →
    perguntar antes da spec. Perguntar custa menos que refazer.
 9. **Não inventar:** não-derivável da spec/código → `[A DEFINIR]` + pergunta no checkpoint.

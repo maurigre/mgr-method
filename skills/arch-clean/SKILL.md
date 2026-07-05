@@ -19,6 +19,10 @@ Ao ser invocada, informe ao `spec-init` (ou ao usuário) que este guia está inc
 conduza a coleta: para cada seção abaixo, pergunte quais regras o time adota e grave
 APENAS o que for confirmado. Use o guia da `arch-hexagonal` como referência de formato.
 
+### Alvo do PITest (camadas de regra de negócio) — [A DEFINIR com o time]
+<!-- candidato típico: clean → entities+usecases · onion → domain+application · layered → services
+     (ou equivalentes na nomenclatura do projeto; detectar os nomes reais no brownfield) -->
+
 ### Regras de Design — [A DEFINIR com o time]
 ### Padrões de teste — [A DEFINIR com o time]
 ### Padrões para logs — [A DEFINIR com o time]

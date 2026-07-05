@@ -1,12 +1,12 @@
 ---
 name: spec-execute
-description: Executa o plano aprovado de uma feature SDD (specs/<feature>/04-plan.md) task a task respeitando o DAG de dependências e prioridades P0/P1/P2, aplicando as premissas de desenvolvimento (segurança, performance, uso de recursos, clareza) e o controle ativo de contexto (tiers, hand-off). Invocada pelo spec-create após a aprovação do plano, ou diretamente para retomar uma execução interrompida. Use quando o usuário pedir para executar o plano, implementar as tasks aprovadas, continuar ou retomar a implementação de uma feature. Exige plano aprovado; nunca commita.
+description: Executa o plano aprovado de uma feature SDD (specs/<feature>/04-plan.md) task a task respeitando o DAG de dependências e prioridades P0/P1/P2, aplicando as premissas de desenvolvimento (segurança, performance, uso de recursos, clareza) e o controle ativo de contexto (tiers, hand-off). Invocada pelo spec-create após a aprovação do plano, ou diretamente para retomar uma execução interrompida. Use quando o usuário pedir para executar o plano, implementar as tasks aprovadas, continuar ou retomar a implementação de uma feature. Exige plano aprovado; nenhuma ação de git automática.
 ---
 
 # spec-execute — Execução do plano
 
 Você implementa uma feature cujo plano já foi aprovado, task a task. Você NÃO planeja
-(isso é do `spec-create`) e NÃO commita (isso é do humano).
+(isso é do `spec-create`) e NÃO executa git automaticamente (commit/push só via confirmação, no fechamento).
 
 ## Carga inicial (handoff por disco — nunca por memória de conversa)
 
@@ -40,9 +40,14 @@ Quatro lentes permanentes, governadas por uma disciplina soberana:
    cache só com invalidação pensada; conexões via pool e sempre fechadas
    (try-with-resources); preferir imutabilidade a locks; concorrência explícita só com
    ganho medido.
-4. **Clareza e simplicidade** — métodos/classes pequenos, nomes significativos, guard
-   clauses/early return, sem null de retorno, exceptions específicas, fail fast; SOLID e
-   DRY a serviço da clareza, nunca como dogma (DRY prematuro acopla).
+4. **Clareza e simplicidade (Clean Code)** — métodos/classes pequenos; guard clauses/
+   early return; sem null de retorno; exceptions específicas; fail fast; evitar
+   comentários desnecessários, duplicação, boolean ambíguo e excesso de parâmetros;
+   SOLID e DRY a serviço da clareza, nunca como dogma (DRY prematuro acopla).
+   **Nomes:** variáveis, métodos e classes expressam o que armazenam ou fazem, de forma
+   resumida. PROIBIDO nome de uma letra ou sem significado (`a`, `b`, `x`, `tmp`,
+   `data`, `obj`); exceções: índices de laço curtos (`i`, `j`) e parâmetros de lambda
+   de uma expressão.
 
 Por task, registrar no log de execução um bloco `Premissas aplicadas` com o que foi
 aplicado **e o que foi deliberadamente NÃO aplicado com o porquê** (ex.: "sem retry:
@@ -59,7 +64,14 @@ task local, sem chamada de rede"). Marcar o não-aplicado é o que impede over-e
   que não deriva de nenhum → `[A DEFINIR]` + pergunta (nunca inventar).
 - Task que revela problema no plano (dependência faltante, estimativa estourada) →
   PARAR e reportar ao usuário; replanejar é papel do `spec-create`, não seu.
-- **Nunca commitar.**
+- **Gates de qualidade do projeto** (definidos na CONSTITUTION pelo `spec-init`): antes
+  de marcar uma feature concluída, rodar o build de verificação — cobertura (JaCoCo e,
+  se adotado, PITest) nos limiares do projeto, linters (Checkstyle/PMD/SpotBugs+
+  FindSecBugs) e checagem de dependências (OWASP Dependency-Check) limpos. Gate vermelho
+  → corrigir antes de avançar; limiar inatingível sem teste inflado → reportar ao
+  usuário (não inflar teste para bater métrica — regra 12 do junit-clean).
+- **Nada de git automático.** Commit/push acontecem só no fechamento, via o fluxo de
+  confirmação do `spec-create` (política de versionamento da CONSTITUTION).
 
 ## Controle ativo de contexto (durante toda a execução)
 

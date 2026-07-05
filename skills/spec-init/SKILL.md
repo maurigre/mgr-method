@@ -80,13 +80,80 @@ Blocos de entrevista (cada um alimenta um artefato):
 4. **Bordas & Contratos** — REST/gRPC/GraphQL, mensageria (Kafka/RabbitMQ/nenhuma),
    contract-first ou code-first. → **ADRs**.
 5. **Testes & Qualidade** — framework de teste, boundary + MC/DC (defaults), política de
-   mock (só banco e HTTP externo), estática (Checkstyle/Sonar), ArchUnit sim/não.
+   mock (só banco e HTTP externo), ArchUnit sim/não, e a POLÍTICA DE QUALIDADE abaixo.
 6. **Logs & Observabilidade** — convenção de níveis; tracing/métricas (opcional).
 7. **Não-negociáveis** — o que é reprovação vs sugestão; sufixos de nomenclatura; idioma.
 
 Saída: os mesmos `/docs/sdd/` + `CONSTITUTION.md` + `09-review-rules.md`, marcando
 claramente que nasceram de entrevista (`[ORIGEM: entrevista greenfield]`), e o esqueleto
 de diretórios da arquitetura escolhida (sem gerar código de negócio).
+
+## Política de qualidade (greenfield pergunta; brownfield segue o existente)
+
+Regra de precedência: **projeto existente é a fonte de verdade** — se a ferramenta/limiar
+já está configurado, siga-o sem rediscutir. Se NÃO existir, pergunte se deseja adicionar
+(ofereça os defaults abaixo). Em greenfield, pergunte tudo com os defaults pré-marcados.
+Toda adoção/limiar vira registro na CONSTITUTION (e ADR quando estrutural).
+
+1. **Cobertura como gate de build:**
+   - **Exclusões sensatas VALEM PARA AMBOS** (JaCoCo e PITest), com a MESMA lista,
+     confirmada com o usuário e registrada na CONSTITUTION: classes de config/boot
+     (`*Application`, `*Config`), código gerado (mappers gerados, builders de lib),
+     DTOs/records sem lógica, e constantes. Mutar/medir essas classes só produz ruído.
+   - **Escopos ASSIMÉTRICOS (de propósito):** JaCoCo mede execução — roda AMPLO;
+     PITest mede força do teste onde errar dói — roda FOCADO nas camadas de regra de
+     negócio. Quem define os pacotes-alvo do PITest é a ARQUITETURA escolhida (a skill
+     `arch-*` correspondente informa; ex.: hexagonal → `..domain..` + `..usecase..` ou
+     equivalentes na nomenclatura do projeto — no brownfield, detectar os nomes reais).
+   - **JaCoCo** — escopo amplo (tudo menos as exclusões) — limiar default **≥ 98%**
+     (linhas e branches).
+   - **PITest** — escopo focado (`targetClasses` = camadas de negócio da arquitetura,
+     mantendo as exclusões dentro do escopo, ex.: value object trivial) — limiar
+     default **≥ 90% de mutantes mortos** nesse escopo. Bônus: focado, roda em minutos
+     e vira gate viável por feature.
+   - **Anti-inflação (regra dura, vale para os dois):** NUNCA criar teste para classe
+     sem lógica só para bater métrica — a resposta correta é EXCLUIR a classe do
+     escopo, não testá-la (regra 12 do `junit-clean`: cobertura é métrica, não meta).
+   - Ambos plugados ao build (verify) para QUEBRAR abaixo do limiar.
+2. **Versões — sempre atuais e suportadas:**
+   - Java: **última LTS**. Spring Boot: **última GA estável em suporte OSS** (Spring Boot
+     não tem "LTS" formal). Dependências: últimas versões COMPATÍVEIS com esse par.
+   - NUNCA cravar números de versão de memória: verificar as versões vigentes no momento
+     (documentação oficial/web, `versions-maven-plugin`) e registrar a data da checagem.
+3. **Análise estática e segurança de código:** Checkstyle + PMD + SpotBugs com
+   **FindSecBugs**, plugados ao build. Código coeso, limpo e sem vulnerabilidades
+   conhecidas de padrão de código.
+4. **Evidências AI-First (opt-in):** perguntar se o projeto registrará evidências de uso
+   de IA por funcionalidade via `evidence-capture` (prompts, revisões, habilidades).
+   **Default: NÃO** (registro é cerimônia que só se justifica quando exigido — desafios,
+   auditoria, histórico). Brownfield: se existir `ai/index.md` ou `specs/*/ai/`, o
+   projeto JÁ registra → seguir. A resposta vira entrada na CONSTITUTION
+   (`Evidências AI-First: habilitado|desabilitado`) e vale para TODAS as features —
+   política de projeto, não escolha por feature.
+5. **Versionamento (commits, branches, push) — política com confirmação, nunca ação
+   automática.** PRIMEIRO detectar: sem `.git` no projeto → política desabilitada, ZERO
+   perguntas sobre commit/branch (greenfield pode oferecer `git init` uma única vez).
+   Com git, detectar e SEGUIR as convenções existentes (`git log` para o padrão de
+   mensagem; nomes de branch; fluxo de PR). Greenfield pergunta com estes defaults:
+   - **Commits:** prefixo Conventional (`feat:`, `fix:`, `refactor:`...); idioma do
+     projeto; título ≤ 72 caracteres no imperativo, descrevendo O QUE faz (não o como);
+     corpo só quando for preciso explicar o porquê/impacto.
+   - **Branch por spec:** toda spec nasce numa branch nova (default `feat/<slug>`).
+   - **Commit ao fim da spec:** a skill PREPARA e EXIBE (mensagem + arquivos) e
+     PERGUNTA; só executa com "sim" explícito.
+   - **Push com confirmação e guardas:** só a branch da spec (nunca main/protegidas
+     direto); NUNCA force-push; antes de perguntar, exibir checklist (gates de qualidade
+     verdes, commits na convenção, lista exata do que sobe); remoto divergente
+     (não fast-forward) → halt e perguntar; fluxo PR detectado → sugerir abrir o PR.
+   - **Merge entre specs:** sugerir merge da branch anterior antes de abrir nova spec;
+     postergados entram em fila por ordem de abertura (só specs CONCLUÍDOS).
+   Registrar tudo na CONSTITUTION.
+6. **Vulnerabilidades em dependências:** **OWASP Dependency-Check** (ou equivalente) no
+   build; CVEs encontradas → atualizar/substituir a dependência (registrando em ADR se a
+   troca for estrutural). Aplicação mais segura e robusta por default.
+
+No brownfield, a Fase 5 (Qualidade/Operação) DETECTA o que já existe (plugins no
+pom/gradle, configs de linter, limiares) e documenta; só oferece adição do que falta.
 
 ## Guia de regras de review (delegação às skills arch-*)
 
@@ -97,7 +164,11 @@ NUNCA embuta regras de arquitetura aqui — delegue:
    greenfield: Bloco 2 da entrevista).
 2. Invoque a skill provedora correspondente: `arch-hexagonal`, `arch-clean`, `arch-onion`
    ou `arch-layered`, passando a linguagem do projeto.
-3. Ela retorna o guia de regras; grave-o em `docs/sdd/09-review-rules.md`.
+3. Ela retorna o guia de regras; grave-o em `docs/sdd/09-review-rules.md`, acrescentando
+   ao final a seção geral **"Nomenclatura e clareza"** (agnóstica à arquitetura): nomes
+   expressam o que armazenam/fazem de forma resumida; proibido nome de uma letra ou sem
+   significado (`a`, `b`, `x`, `tmp`, `data`, `obj`), exceto índices de laço curtos
+   (`i`, `j`) e parâmetros de lambda de uma expressão.
 4. Registre a escolha num ADR (via `adr-create`, modo invocado).
 
 Se a skill da arquitetura for um stub `[A DEFINIR]`, avise o usuário e grave um guia

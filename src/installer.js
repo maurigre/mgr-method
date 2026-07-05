@@ -123,6 +123,13 @@ export function update(scope, repo) {
   const man = readManifest(runtime);
   if (!man) throw new Error("nenhum manifesto MGR encontrado — rode `mgr install` antes");
   const engines = man.engines || [man.engine];
-  const plan = planInstall(engines, scope, repo);
+  let plan;
+  if (engines.includes("custom")) {
+    // instalado com --skills-dir: reutiliza o diretório registrado no manifesto
+    const d = (man.skillsDirs || [man.skillsDir])[0];
+    plan = planInstall([], scope, repo, { skillsDir: absDir(d, scope, repo) });
+  } else {
+    plan = planInstall(engines, scope, repo);
+  }
   return execute(plan);
 }

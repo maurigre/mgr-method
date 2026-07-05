@@ -31,11 +31,15 @@
     "hexagonal"
   ],
   "license": "SEE LICENSE IN LICENSE",
-  "author": "Mauri",
+  "author": "Mauri Reis <maurigre@gmail.com> (https://github.com/maurigre)",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mauri/mgr-method.git"
+    "url": "git+https://github.com/maurigre/mgr-method.git"
   },
+  "homepage": "https://github.com/maurigre/mgr-method#readme",
+  "bugs": {
+    "url": "https://github.com/maurigre/mgr-method/issues"
+},
   "dependencies": {
     "@clack/prompts": "^1.7.0",
     "picocolors": "^1.1.1"

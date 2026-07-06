@@ -21,15 +21,9 @@ function frontmatter(text) {
   return meta;
 }
 
-export function validateSkill(name) {
+// Lógica pura de validação (sem IO): recebe o nome esperado e o conteúdo do SKILL.md.
+export function checkSkill(name, text) {
   const problems = [];
-  const md = path.join(bundle.skillsDir(), name, "SKILL.md");
-  let text;
-  try {
-    text = readFileSync(md, "utf8");
-  } catch {
-    return [`${name}: falta SKILL.md`];
-  }
   const meta = frontmatter(text);
   if (Object.keys(meta).length === 0) {
     problems.push(`${name}: sem frontmatter YAML (--- ... ---)`);
@@ -49,6 +43,17 @@ export function validateSkill(name) {
     problems.push(`${name}: SKILL.md com ${nLines} linhas (> ${MAX_LINES}); use references/`);
   }
   return problems;
+}
+
+export function validateSkill(name) {
+  const md = path.join(bundle.skillsDir(), name, "SKILL.md");
+  let text;
+  try {
+    text = readFileSync(md, "utf8");
+  } catch {
+    return [`${name}: falta SKILL.md`];
+  }
+  return checkSkill(name, text);
 }
 
 export function validateAll(names) {

@@ -1,5 +1,12 @@
 # MGR — Método Governado por Rastreabilidade
 
+[![CI](https://img.shields.io/github/actions/workflow/status/maurigre/mgr-method/ci.yml?branch=main&label=CI&logo=github)](https://github.com/maurigre/mgr-method/actions/workflows/ci.yml)
+[![coverage](https://img.shields.io/coveralls/github/maurigre/mgr-method?branch=main&logo=coveralls)](https://coveralls.io/github/maurigre/mgr-method?branch=main)
+[![npm](https://img.shields.io/npm/v/mgr-method?logo=npm)](https://www.npmjs.com/package/mgr-method)
+[![node](https://img.shields.io/node/v/mgr-method?logo=node.js&logoColor=white)](https://www.npmjs.com/package/mgr-method)
+[![downloads](https://img.shields.io/npm/dm/mgr-method?logo=npm)](https://www.npmjs.com/package/mgr-method)
+[![license](https://img.shields.io/badge/license-Source--Available-blue)](LICENSE)
+
 Framework de **Specification-Driven Development (SDD)** para agentes de código:
 um CLI instala um conjunto de Agent Skills que conduzem o
 projeto do brief à entrega com checkpoints humanos, decisões rastreáveis (ADRs) e

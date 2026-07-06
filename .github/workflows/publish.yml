@@ -3,25 +3,27 @@ on:
   push:
     tags: ["v*"]
 
+# NOTA: a publicacao no npm e MANUAL por ora. Os dois caminhos automatizados
+# estao bloqueados por bugs do lado do npm:
+#   - OIDC Trusted Publishing: token exchange retorna "package not found" (npm/cli#8730)
+#   - Granular token com bypass_2fa: registry retorna E403 (npm/cli#8869)
+# A conta usa 2FA por passkey (npm removeu TOTP), entao o publish manual usa recovery code.
+# Quando o npm corrigir os bugs, reativar o passo de publish (ver historico do git).
+
 permissions:
   contents: read
-  id-token: write   # OIDC Trusted Publishing + provenance no npm
 
 jobs:
-  publish:
+  release-gates:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Node 24 (LTS ativo) ja traz npm >= 11.5.1, requisito do OIDC Trusted Publishing.
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-          registry-url: "https://registry.npmjs.org"
           cache: npm
-      - name: Verificar npm >= 11.5.1 (minimo do OIDC)
-        run: npm --version
       - run: npm ci
-      # Gates de qualidade ANTES de publicar (política do próprio MGR)
+      # Gates de qualidade da tag de release (política do próprio MGR)
       - run: node bin/mgr.js validate
       - run: npm test
       # Confere que a tag bate com a versão do package.json
@@ -30,6 +32,8 @@ jobs:
           TAG="${GITHUB_REF_NAME#v}"
           PKG=$(jq -r '.version' package.json)
           [ "$TAG" = "$PKG" ] || { echo "tag v$TAG != package.json $PKG"; exit 1; }
-      # prepack roda o build minificado automaticamente.
-      # Auth via OIDC (Trusted Publisher) - sem token. Provenance automatica.
-      - run: npm publish --provenance --access public
+      - name: Instrucoes de publicacao manual
+        run: |
+          echo "Gates OK para ${GITHUB_REF_NAME}."
+          echo "Publique manualmente (2FA passkey -> recovery code no --otp):"
+          echo "  npm publish --access public --otp=<recovery-code>"

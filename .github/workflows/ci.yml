@@ -21,3 +21,5 @@ jobs:
         uses: coverallsapp/github-action@v2
         with:
           file: lcov.info
+          # Nao derruba o CI se o upload de cobertura falhar (ex: repo ainda nao habilitado no Coveralls)
+          fail-on-error: false

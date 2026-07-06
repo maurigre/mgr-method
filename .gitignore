@@ -7,3 +7,8 @@ dist/
 /dist/mgr-runtime/
 
 # Nota: .specs/ é a fonte de verdade do handoff — NÃO ignore em projetos que usam o MGR.
+exemplos/
+
+# Cobertura de testes
+lcov.info
+coverage/

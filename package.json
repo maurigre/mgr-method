@@ -19,6 +19,7 @@
   ],
   "scripts": {
     "test": "node --test",
+    "coverage": "node --test --experimental-test-coverage --test-coverage-exclude='test/**' --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=lcov.info",
     "validate": "node bin/mgr.js validate",
     "build": "esbuild bin/mgr.js --bundle --minify --platform=node --format=esm --external:@clack/prompts --external:picocolors --outfile=dist/mgr.min.js",
     "prepack": "npm run build"

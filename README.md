@@ -4,7 +4,6 @@
 [![coverage](https://img.shields.io/coveralls/github/maurigre/mgr-method?branch=main&logo=coveralls)](https://coveralls.io/github/maurigre/mgr-method?branch=main)
 [![npm](https://img.shields.io/npm/v/mgr-method?logo=npm)](https://www.npmjs.com/package/mgr-method)
 [![node](https://img.shields.io/node/v/mgr-method?logo=node.js&logoColor=white)](https://www.npmjs.com/package/mgr-method)
-[![downloads](https://img.shields.io/npm/dm/mgr-method?logo=npm)](https://www.npmjs.com/package/mgr-method)
 [![license](https://img.shields.io/badge/license-Source--Available-blue)](LICENSE)
 
 Framework de **Specification-Driven Development (SDD)** para agentes de código:

@@ -12,17 +12,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Sem registry-url: assim o setup-node NAO cria um .npmrc com linha de _authToken,
-      # que faria o npm ignorar o OIDC. O registry padrao ja e o registry.npmjs.org.
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          registry-url: "https://registry.npmjs.org"
           cache: npm
-      # Trusted Publishing (OIDC) exige npm >= 11.5.1; o npm que vem no Node 22 e mais antigo
-      - name: Atualizar npm para versao com suporte a OIDC
-        run: |
-          npm install -g npm@latest
-          npm --version
       - run: npm ci
       # Gates de qualidade ANTES de publicar (política do próprio MGR)
       - run: node bin/mgr.js validate
@@ -33,13 +27,8 @@ jobs:
           TAG="${GITHUB_REF_NAME#v}"
           PKG=$(jq -r '.version' package.json)
           [ "$TAG" = "$PKG" ] || { echo "tag v$TAG != package.json $PKG"; exit 1; }
-      - name: Diagnostico OIDC
-        run: |
-          echo "ACTIONS_ID_TOKEN_REQUEST_URL set? ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
-          echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN set? ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+yes}"
-          echo "repository.url = $(jq -r '.repository.url' package.json)"
-          echo "GITHUB_REPOSITORY = $GITHUB_REPOSITORY"
-          echo "GITHUB_REF = $GITHUB_REF"
       # prepack roda o build minificado automaticamente.
-      # Auth via OIDC (Trusted Publisher) - sem token, sem .npmrc de auth.
-      - run: npm publish --provenance --access public --loglevel verbose
+      # Auth via Automation token (secret NPM_TOKEN). Provenance continua ativa.
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

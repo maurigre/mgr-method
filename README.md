@@ -101,7 +101,7 @@ test/               # node:test
 ```
 
 Dependências mínimas (@clack/prompts e picocolors na TUI; esbuild só em dev — o pacote
-publicado é um bundle minificado). Node ≥ 18. Release: `git tag vX.Y.Z && git push --tags`
+publicado é um bundle minificado). Node ≥ 22. Release: `git tag vX.Y.Z && git push --tags`
 dispara o workflow de publish (valida, testa e publica no npm com provenance). Desenvolvimento: `npm test`,
 `node bin/mgr.js validate`.
 

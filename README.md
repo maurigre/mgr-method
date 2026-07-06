@@ -16,8 +16,11 @@ de longo prazo **mgr-code**.
 ## Instalação
 
 ```bash
-npx mgr-method install          # TUI interativa: multiselect de motores + escopo
+npx mgr-method@latest install   # TUI interativa: multiselect de motores + escopo
 ```
+
+> Use `@latest` para o `npx` sempre pegar a versão publicada mais recente (sem tag, ele
+> pode reusar uma versão em cache). Para fixar uma versão específica: `npx mgr-method@0.1.3 install`.
 
 O instalador permite selecionar **vários motores de uma vez** (espaço marca, enter
 confirma): dá para instalar em `.claude/skills` **e** `.github/skills` simultaneamente,

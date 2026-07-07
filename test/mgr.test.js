@@ -131,13 +131,38 @@ test("copilot vai para .github/skills sem tocar .claude", () => {
   assert.ok(!existsSync(path.join(repo, ".claude")));
 });
 
-test("instalação com --skills-dir (custom)", () => {
+test("instalação com --skills-dir (custom) resolve o token do shared", () => {
   const repo = tmp();
   const custom = path.join(repo, "meus-skills");
-  const plan = installer.planInstall([], "project", repo, { skillsDir: custom, names: ["spec-init"] });
+  const plan = installer.planInstall([], "project", repo, { skillsDir: custom, names: ["spec-init", "arch-clean"] });
   assert.deepEqual(plan.engines, ["custom"]);
   installer.execute(plan);
   assert.ok(existsSync(path.join(custom, "spec-init", "SKILL.md")));
+  assert.ok(existsSync(path.join(custom, "_shared", "arch", "regras-transversais.md")));
+  assert.ok(!readFileSync(path.join(custom, "arch-clean", "SKILL.md"), "utf8").includes("{{MGR_ARCH_RULES}}"));
+});
+
+test("detect, installs e detectPrior enxergam a instalação", () => {
+  const repo = tmp();
+  assert.equal(installer.detectPrior("project", repo), null);
+  assert.deepEqual(installer.installs("project", repo), []);
+  installer.execute(installer.planInstall(["claude-code"], "project", repo, { architecture: "hexagonal" }));
+
+  assert.ok(installer.detect(repo).some((f) => f.path.endsWith(path.join(".claude", "skills")) && f.count >= 1));
+  const prior = installer.detectPrior("project", repo);
+  assert.ok(prior && prior.model === "self-contained");
+  assert.equal(installer.installs("project", repo).length, 1);
+});
+
+test("update e uninstall exigem instalação existente", () => {
+  const repo = tmp();
+  assert.throws(() => installer.update("project", repo), /rode `mgr install`/);
+  assert.throws(() => installer.uninstall("project", repo), /nada a desinstalar/);
+});
+
+test("catálogo expõe arquiteturas e linguagens", () => {
+  assert.ok(catalog.architectures().includes("hexagonal"));
+  assert.ok(catalog.languages().includes("java"));
 });
 
 test("planInstall rejeita motor desconhecido", () => {

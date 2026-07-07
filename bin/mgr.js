@@ -228,7 +228,7 @@ Uso: mgr <comando> [opções]
 
   install [repo]   instala as skills (seletivo) direto na pasta do motor
                    (--engine claude-code|copilot|both, --scope, --language, --arch,
-                    --all-skills, --skills-dir, --dry-run, -y)
+                    --project-id, --all-skills, --skills-dir, --dry-run, -y)
   status [repo]    mostra o que está instalado
   update [repo]    re-sincroniza (--scope)
   uninstall [repo] remove as skills instaladas (--scope, -y)

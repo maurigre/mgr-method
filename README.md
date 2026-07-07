@@ -16,31 +16,46 @@ de longo prazo **mgr-code**.
 ## Instalação
 
 ```bash
-npx mgr-method@latest install   # TUI interativa: multiselect de motores + escopo
+npx mgr-method@latest install   # TUI: motores + escopo + linguagem + arquitetura
 ```
 
 > Use `@latest` para o `npx` sempre pegar a versão publicada mais recente (sem tag, ele
-> pode reusar uma versão em cache). Para fixar uma versão específica: `npx mgr-method@0.1.3 install`.
+> pode reusar uma versão em cache). Para fixar uma versão: `npx mgr-method@0.3.0 install`.
 
-O instalador permite selecionar **vários motores de uma vez** (espaço marca, enter
-confirma): dá para instalar em `.claude/skills` **e** `.github/skills` simultaneamente,
-com um único runtime.
+A instalação é **seletiva**: o TUI pergunta os motores, o escopo, a **linguagem** e a
+**arquitetura** do projeto, e um `MGR_PROJECT_ID`. Só as skills que o projeto usa são
+copiadas — o núcleo (`spec-init`, `spec-create`, `spec-execute`, `adr-create`,
+`code-analyzer`), a skill da arquitetura escolhida (ex.: `arch-hexagonal`) e os helpers da
+linguagem (ex.: `junit-clean` em Java).
 
 Não-interativo / ciclo de vida:
 
 ```bash
-npx mgr-method install --engine claude-code --scope project .
-npx mgr-method install --engine copilot --scope project .   # lançadores em .github/skills
+npx mgr-method install --engine claude-code --language java --arch hexagonal .
+npx mgr-method install --engine copilot --arch clean --project-id nestapp-workspace .
+npx mgr-method install --all-skills .        # instala todas as skills (sem seleção)
 npx mgr-method install --dry-run
 npx mgr-method status | update | uninstall
 ```
 
-O instalador escreve o **runtime** em `.mgr-core/` (conteúdo uma vez + `manifest.json`)
-e **lançadores finos** na pasta do motor (`.claude/skills/` ou `.github/skills/`), que
-apontam para o runtime — instalar para vários motores não duplica conteúdo. As
-convenções de diretório seguem as versões vigentes das ferramentas; se a sua versão
-esperar outro caminho, use `--skills-dir` para forçar. O
-`uninstall` remove só o que o MGR criou; `docs/`, `specs/` e código ficam intactos.
+### Layout instalado
+
+Cada motor é **autossuficiente**: o conteúdo completo das skills vai direto para a pasta do
+motor (`.claude/skills/` ou `.github/skills/`), sem duplicação e sem apontadores. O
+`.mgr-core/` guarda apenas **config do projeto** (versione-o):
+
+```
+.mgr-core/
+├── manifest.json     # o que foi instalado (motores, skills, linguagem, arquitetura)
+└── .env              # MGR_PROJECT_ID=<id>, usado pela memória estendida (mgr-code)
+.claude/skills/       # as skills (única árvore de skills)
+```
+
+Instalar para dois motores gera duas árvores independentes — apagar uma **não** afeta a
+outra. Instalações no modelo antigo (runtime + `.mgr-core/skills` + lançadores) são
+**migradas automaticamente** no `install`/`update`. Use `--skills-dir` para forçar um
+diretório específico. O `uninstall` remove só o que o MGR criou; `docs/`, `specs/` e código
+ficam intactos.
 
 ## O fluxo
 

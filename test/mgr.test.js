@@ -1,16 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, existsSync, readFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import * as bundle from "../src/bundle.js";
-import { buildRuntime, generateLauncher, buildSkill } from "../src/builder.js";
+import { buildRuntime, buildSkill, installEngine } from "../src/builder.js";
 import * as installer from "../src/installer.js";
-import { readManifest } from "../src/manifest.js";
+import * as catalog from "../src/catalog.js";
 import { validateAll, validateSkill, checkSkill } from "../src/validator.js";
 
 const tmp = () => mkdtempSync(path.join(os.tmpdir(), "mgr-"));
-const CORE = ["spec-init", "spec-create", "spec-execute", "adr-create", "code-analyzer", "junit-clean", "arch-hexagonal", "evidence-capture"];
+const CORE = ["spec-init", "spec-create", "spec-execute", "adr-create", "code-analyzer"];
 
 test("skills do fluxo SDD presentes e válidas", () => {
   const names = bundle.skillNames();
@@ -20,82 +20,118 @@ test("skills do fluxo SDD presentes e válidas", () => {
   }
 });
 
-test("runtime .mgr-core com skills e launcher apontando pra lá", () => {
-  const dir = tmp();
-  const runtime = path.join(dir, ".mgr-core");
-  const names = buildRuntime(runtime);
-  for (const n of names) assert.ok(existsSync(path.join(runtime, "skills", n, "SKILL.md")));
-  assert.ok(existsSync(path.join(runtime, "shared", "scripts", "sdd-check.sh")));
+test("selectSkills monta o subconjunto por linguagem/arquitetura", () => {
+  const s = catalog.selectSkills({ architecture: "hexagonal", language: "java" });
+  for (const c of CORE) assert.ok(s.includes(c), c);
+  assert.ok(s.includes("arch-hexagonal") && s.includes("junit-clean"));
+  assert.ok(!s.includes("arch-clean") && !s.includes("arch-onion") && !s.includes("arch-layered"));
+  assert.ok(!s.includes("evidence-capture"));
 
-  const launchers = path.join(dir, ".claude", "skills");
-  generateLauncher("spec-create", ".mgr-core/skills/spec-create", launchers);
-  const text = readFileSync(path.join(launchers, "spec-create", "SKILL.md"), "utf8");
-  assert.ok(text.includes("name: spec-create"));
-  assert.ok(text.includes(".mgr-core/skills/spec-create/SKILL.md"));
+  const s2 = catalog.selectSkills({ architecture: "clean", optional: ["evidence-capture"] });
+  assert.ok(s2.includes("arch-clean") && s2.includes("evidence-capture"));
+  assert.ok(!s2.includes("junit-clean"));
+
+  assert.throws(() => catalog.selectSkills({ architecture: "xyz" }), /arquitetura desconhecida/);
 });
 
-test("templates do spec-create acompanham o runtime", () => {
-  const runtime = path.join(tmp(), ".mgr-core");
-  buildRuntime(runtime);
-  for (const f of ["01-brief.md", "04-plan.md", "06-completion.md", "handoff.md"]) {
-    assert.ok(existsSync(path.join(runtime, "skills", "spec-create", "templates", f)), f);
+test("install autossuficiente: só o subconjunto na pasta do motor, sem .mgr-core", () => {
+  const repo = tmp();
+  installer.execute(installer.planInstall(["claude-code"], "project", repo, { language: "java", architecture: "hexagonal" }));
+  const sk = path.join(repo, ".claude", "skills");
+
+  for (const n of [...CORE, "arch-hexagonal", "junit-clean"]) {
+    assert.ok(existsSync(path.join(sk, n, "SKILL.md")), `deveria instalar ${n}`);
+  }
+  for (const n of ["arch-clean", "arch-onion", "arch-layered", "evidence-capture"]) {
+    assert.ok(!existsSync(path.join(sk, n)), `${n} não deveria existir`);
+  }
+  assert.ok(!existsSync(path.join(repo, ".mgr-core")), "não deve criar .mgr-core");
+
+  assert.ok(existsSync(path.join(sk, "_shared", "arch", "regras-transversais.md")));
+  const archMd = readFileSync(path.join(sk, "arch-hexagonal", "SKILL.md"), "utf8");
+  assert.ok(!archMd.includes("{{MGR_ARCH_RULES}}"), "token deve ser resolvido");
+  assert.ok(archMd.includes("_shared/arch/regras-transversais.md"), "deve apontar para a fonte co-locada");
+
+  const man = JSON.parse(readFileSync(path.join(sk, ".mgr-manifest.json"), "utf8"));
+  assert.equal(man.model, "self-contained");
+  assert.equal(man.architecture, "hexagonal");
+  assert.equal(man.language, "java");
+});
+
+test("dois motores: cada um autossuficiente e independente", () => {
+  const repo = tmp();
+  installer.execute(installer.planInstall(["claude-code", "copilot"], "project", repo, { architecture: "onion" }));
+  for (const dir of [".claude/skills", ".github/skills"]) {
+    assert.ok(existsSync(path.join(repo, dir, "spec-init", "SKILL.md")), dir);
+    assert.ok(existsSync(path.join(repo, dir, "arch-onion", "SKILL.md")), dir);
+    assert.ok(existsSync(path.join(repo, dir, ".mgr-manifest.json")), dir);
   }
 });
 
-test("ciclo install/update/uninstall preserva specs e docs", () => {
+test("migra instalação antiga (runtime-launcher) para o novo layout", () => {
   const repo = tmp();
-  installer.execute(installer.planInstall(["claude-code", "copilot"], "project", repo));
-  const man = readManifest(path.join(repo, ".mgr-core"));
-  assert.deepEqual(man.engines, ["claude-code", "copilot"]);
-  assert.ok(existsSync(path.join(repo, ".claude/skills/spec-init/SKILL.md")));
+  const core = path.join(repo, ".mgr-core");
+  mkdirSync(path.join(core, "skills"), { recursive: true });
+  mkdirSync(path.join(repo, ".claude", "skills", "spec-init"), { recursive: true });
+  writeFileSync(path.join(repo, ".claude", "skills", "spec-init", "SKILL.md"), "launcher antigo", "utf8");
+  writeFileSync(path.join(core, "manifest.json"), JSON.stringify({
+    model: "runtime-launcher", version: "0.0.1", engines: ["claude-code"], scope: "project",
+    skillsDirs: [".claude/skills"], skills: ["spec-init"],
+  }), "utf8");
 
-  installer.update("project", repo);
+  const res = installer.execute(installer.planInstall(["claude-code"], "project", repo, { architecture: "hexagonal" }));
+  assert.ok(res.migrated, "deve reportar migração");
+  assert.ok(!existsSync(core), ".mgr-core deve ser removido");
+  const md = readFileSync(path.join(repo, ".claude/skills/spec-init/SKILL.md"), "utf8");
+  assert.ok(md.includes("name: spec-init") && !md.includes("launcher antigo"));
+});
 
+test("uninstall remove skills e preserva docs/specs", () => {
+  const repo = tmp();
+  installer.execute(installer.planInstall(["claude-code"], "project", repo, { architecture: "hexagonal" }));
   mkdirSync(path.join(repo, "docs", "sdd"), { recursive: true });
   mkdirSync(path.join(repo, "specs", "keep"), { recursive: true });
+
   installer.uninstall("project", repo);
-  assert.ok(!existsSync(path.join(repo, ".mgr-core")));
   assert.ok(!existsSync(path.join(repo, ".claude/skills/spec-init")));
-  assert.ok(!existsSync(path.join(repo, ".github/skills/spec-init")));
+  assert.ok(!existsSync(path.join(repo, ".claude/skills/_shared")));
   assert.ok(existsSync(path.join(repo, "docs", "sdd")));
   assert.ok(existsSync(path.join(repo, "specs", "keep")));
 });
 
+test("update re-sincroniza preservando o conjunto instalado", () => {
+  const repo = tmp();
+  installer.execute(installer.planInstall(["claude-code"], "project", repo, { architecture: "clean", language: "java" }));
+  const res = installer.update("project", repo);
+  assert.ok(res.skills.includes("arch-clean") && res.skills.includes("junit-clean"));
+  assert.ok(!res.skills.includes("arch-hexagonal"));
+});
+
 test("copilot vai para .github/skills sem tocar .claude", () => {
   const repo = tmp();
-  installer.execute(installer.planInstall(["copilot"], "project", repo));
+  installer.execute(installer.planInstall(["copilot"], "project", repo, { architecture: "hexagonal" }));
   assert.ok(existsSync(path.join(repo, ".github/skills/code-analyzer/SKILL.md")));
   assert.ok(!existsSync(path.join(repo, ".claude")));
 });
 
-test("detect e detectPrior enxergam a instalação de projeto", () => {
-  const repo = tmp();
-  assert.equal(installer.detectPrior("project", repo), null);
-  installer.execute(installer.planInstall(["claude-code"], "project", repo, { names: ["spec-init"] }));
-
-  const found = installer.detect(repo);
-  const claude = found.find((f) => f.path.endsWith(path.join(".claude", "skills")));
-  assert.ok(claude, "deveria detectar .claude/skills");
-  assert.ok(claude.count >= 1, "deveria contar as skills instaladas");
-
-  const man = installer.detectPrior("project", repo);
-  assert.ok(man && man.engines.includes("claude-code"));
-});
-
-test("instalação com --skills-dir (custom) e update reutilizam o diretório", () => {
+test("instalação com --skills-dir (custom)", () => {
   const repo = tmp();
   const custom = path.join(repo, "meus-skills");
   const plan = installer.planInstall([], "project", repo, { skillsDir: custom, names: ["spec-init"] });
   assert.deepEqual(plan.engines, ["custom"]);
   installer.execute(plan);
   assert.ok(existsSync(path.join(custom, "spec-init", "SKILL.md")));
-
-  const res = installer.update("project", repo);
-  assert.ok(res.targets.some((t) => path.resolve(t.dir) === path.resolve(custom)));
 });
 
 test("planInstall rejeita motor desconhecido", () => {
-  assert.throws(() => installer.planInstall(["motor-x"], "project", tmp()), /motor inválido/);
+  assert.throws(() => installer.planInstall(["motor-x"], "project", tmp(), { architecture: "hexagonal" }), /motor inválido/);
+});
+
+test("buildRuntime gera skills + shared num diretório", () => {
+  const dir = path.join(tmp(), "rt");
+  buildRuntime(dir, ["spec-init"]);
+  assert.ok(existsSync(path.join(dir, "skills", "spec-init", "SKILL.md")));
+  assert.ok(existsSync(path.join(dir, "shared", "arch", "regras-transversais.md")));
 });
 
 test("bundle.pkgDir lança para recurso ausente e readVersion retorna semver", () => {

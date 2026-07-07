@@ -155,7 +155,8 @@ preencha cada slot com o idioma da linguagem:
    cada perfil (ArchUnit, go-arch-lint/depguard, import-linter, NetArchTest, dependency-cruiser).
    Quando adotado (ex.: `archunit: true` no plano/ADR), codifica: núcleo não importa
    framework/ORM/adapters; ports não dependem de adapters; use case não conhece
-   web/persistência; sem ciclos entre pacotes.
+   web/persistência; sem ciclos entre pacotes. Em **layered**, o enforcement codifica a
+   direção **top-down** (presentation → service/domínio → data), proibindo chamadas para cima.
 2. **Convenções de sufixo de nomenclatura** — use case termina em `UseCase`; port em
    `Port`/`Gateway`; adapter em `Adapter`/`Controller`/`Repository` (e equivalentes
    idiomáticos). Confirmar com o time antes de incluir no guia.
@@ -163,6 +164,9 @@ preencha cada slot com o idioma da linguagem:
    `payments`, `shipping`) em vez da tecnologia (`controller`, `service`, `repository`).
 
 ## Anti-patterns transversais (reprovam)
+
+> Escopo: arquiteturas com inversão de dependência (hexagonal, clean, onion). O layered
+> clássico não tem inversão — a `arch-layered` traz os seus próprios anti-patterns.
 
 - Núcleo importando framework/ORM/HTTP.
 - Regra de negócio em controller, adapter ou presenter.
@@ -172,6 +176,9 @@ preencha cada slot com o idioma da linguagem:
 - Dependência apontando para fora: um elemento do núcleo conhecendo/importando a borda.
 
 ## Checklist (guard-rails da IA — verifique antes e depois de gerar/alterar código)
+
+> Escopo: arquiteturas com inversão de dependência (hexagonal, clean, onion). A `arch-layered`
+> traz o seu próprio checklist (dependência top-down).
 
 - Arquivo do **núcleo**? Então não importa framework/DB/HTTP/mensageria.
 - É **borda/adaptador**? Então não contém regra de negócio e implementa/chama uma porta.

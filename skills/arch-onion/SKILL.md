@@ -22,8 +22,7 @@ ordem:
 
 1. **Fundamentação Teórica** e **Princípios** (deste arquivo — verbatim).
 2. **Regras Obrigatórias**, **Boas Práticas**, **Anti-patterns transversais** e **Checklist**
-   da fonte única `shared/arch/regras-transversais.md` (no runtime instalado:
-   `.mgr-core/shared/arch/regras-transversais.md`), gravando **apenas o perfil da linguagem**
+   da fonte única `{{MGR_ARCH_RULES}}`, gravando **apenas o perfil da linguagem**
    do projeto.
 3. **Anti-patterns específicos de Onion** (deste arquivo) e **Referências** (deste arquivo).
 

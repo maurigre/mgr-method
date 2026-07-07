@@ -1,28 +1,34 @@
-// Manifesto de instalação: fonte de verdade do que o MGR escreveu num projeto.
-// Gravado em <runtime>/manifest.json. Habilita status/update/uninstall.
+// Manifesto de instalação: fonte de verdade do que o MGR escreveu num motor.
+// Modelo novo (self-contained): um manifesto POR motor, gravado dentro da pasta de skills
+// do motor, em `.mgr-manifest.json` — cada instalação se autodescreve e é independente.
+// Modelo antigo (runtime-launcher): `manifest.json` dentro de `.mgr-core/` (lido só p/ migração).
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-export const MANIFEST_NAME = "manifest.json";
+export const MANIFEST_NAME = ".mgr-manifest.json";
+export const LEGACY_MANIFEST_NAME = "manifest.json";
 
-export function manifestPath(runtimeDir) {
-  return path.join(runtimeDir, MANIFEST_NAME);
-}
+export const manifestPath = (dir) => path.join(dir, MANIFEST_NAME);
 
-export function writeManifest(runtimeDir, data) {
+export function writeManifest(dir, data) {
   const manifest = {
-    model: "runtime-launcher",
+    model: "self-contained",
     installedAt: new Date().toISOString(),
     ...data,
   };
-  mkdirSync(runtimeDir, { recursive: true });
-  const dest = manifestPath(runtimeDir);
+  mkdirSync(dir, { recursive: true });
+  const dest = manifestPath(dir);
   writeFileSync(dest, JSON.stringify(manifest, null, 2) + "\n", "utf8");
   return dest;
 }
 
-export function readManifest(runtimeDir) {
-  const p = manifestPath(runtimeDir);
-  if (!existsSync(p)) return null;
-  return JSON.parse(readFileSync(p, "utf8"));
+export function readManifest(dir) {
+  const p = manifestPath(dir);
+  return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : null;
+}
+
+// Lê o manifesto do modelo antigo (runtime-launcher) em `<runtimeDir>/manifest.json`.
+export function readLegacyManifest(runtimeDir) {
+  const p = path.join(runtimeDir, LEGACY_MANIFEST_NAME);
+  return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : null;
 }

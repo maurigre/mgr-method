@@ -1,25 +1,11 @@
-// Build no modelo runtime + lançadores.
-// - Runtime: conteúdo completo escrito uma vez (as skills e utilitários compartilhados).
-//   A CONSTITUTION.md do PROJETO é gerada pela skill spec-init — não pelo instalador.
-// - Lançadores: SKILL.md finos, gerados na pasta do motor, que apontam para o runtime.
+// Build das skills.
+// Modelo autossuficiente por motor: o conteúdo completo das skills é escrito DIRETO na pasta
+// do motor (.claude/skills ou .github/skills). Sem runtime compartilhado, sem lançadores —
+// cada motor é independente e pode ser removido sem afetar o outro.
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import * as bundle from "./bundle.js";
-
-function frontmatter(text) {
-  const m = /^---\n([\s\S]*?)\n---/.exec(text);
-  const meta = {};
-  if (m) {
-    for (const line of m[1].split("\n")) {
-      const t = line.trim();
-      if (t && !t.startsWith("#") && t.includes(":")) {
-        const idx = line.indexOf(":");
-        meta[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
-      }
-    }
-  }
-  return meta;
-}
+import * as catalog from "./catalog.js";
 
 export function buildSkill(name, destSkills) {
   const src = path.join(bundle.skillsDir(), name);
@@ -38,6 +24,7 @@ export function buildAll(destSkills, names) {
   return names.map((n) => buildSkill(n, destSkills));
 }
 
+// Gera um diretório com o conteúdo completo (utilitário do comando `mgr build`).
 export function buildRuntime(runtimeDir, names) {
   names = names || bundle.skillNames();
   buildAll(path.join(runtimeDir, "skills"), names);
@@ -49,27 +36,27 @@ export function buildRuntime(runtimeDir, names) {
   return names;
 }
 
-export function generateLauncher(name, runtimeRef, destSkills) {
-  const srcMd = readFileSync(path.join(bundle.skillsDir(), name, "SKILL.md"), "utf8");
-  const meta = frontmatter(srcMd);
-  const desc = meta.description || `Skill ${name} do MGR.`;
-  const target = `${runtimeRef}/SKILL.md`;
+// Instala o conjunto de skills DIRETO na pasta do motor (modelo autossuficiente).
+// Copia a fonte transversal (_shared/arch) quando há skill de arquitetura e resolve o token
+// {{MGR_ARCH_RULES}} para o caminho passado em archRulesRef.
+export function installEngine(engineSkillsDir, skills, { archRulesRef } = {}) {
+  mkdirSync(engineSkillsDir, { recursive: true });
+  const dirs = skills.map((name) => buildSkill(name, engineSkillsDir));
 
-  const launcher =
-    `---\n` +
-    `name: ${name}\n` +
-    `description: ${desc}\n` +
-    `---\n\n` +
-    `# ${name} (lançador MGR)\n\n` +
-    `Esta skill faz parte do MGR e seu conteúdo canônico vive no runtime do projeto.\n` +
-    `Abra \`${target}\` e siga **todas** as instruções contidas nele, incluindo os\n` +
-    `recursos referenciados em \`${runtimeRef}/references/\` (constituição, contrato de\n` +
-    `artefato, gates, práticas, arquiteturas). Trate aquele arquivo como se fosse o\n` +
-    `corpo desta skill.\n`;
+  if (catalog.needsArchShared(skills)) {
+    const dst = path.join(engineSkillsDir, "_shared", "arch");
+    mkdirSync(dst, { recursive: true });
+    const shared = path.join(bundle.pkgDir("shared"), "arch", "regras-transversais.md");
+    cpSync(shared, path.join(dst, "regras-transversais.md"));
 
-  const dest = path.join(destSkills, name);
-  rmSync(dest, { recursive: true, force: true });
-  mkdirSync(dest, { recursive: true });
-  writeFileSync(path.join(dest, "SKILL.md"), launcher, "utf8");
-  return dest;
+    const ref = archRulesRef || path.join("_shared", "arch", "regras-transversais.md");
+    const archSkills = Object.values(catalog.ARCHITECTURES);
+    for (const name of skills) {
+      if (!archSkills.includes(name)) continue;
+      const md = path.join(engineSkillsDir, name, "SKILL.md");
+      const text = readFileSync(md, "utf8").replaceAll(catalog.ARCH_RULES_TOKEN, ref);
+      writeFileSync(md, text, "utf8");
+    }
+  }
+  return dirs;
 }

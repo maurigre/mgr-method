@@ -21,8 +21,7 @@ Você recebe a **linguagem do projeto**. Gere `docs/sdd/09-review-rules.md` **co
 ordem:
 
 1. **Fundamentação Teórica** e **Princípios** (deste arquivo — verbatim).
-2. Da fonte única `shared/arch/regras-transversais.md` (no runtime instalado:
-   `.mgr-core/shared/arch/regras-transversais.md`), inclua **apenas** as seções **UNIVERSAIS**:
+2. Da fonte única `{{MGR_ARCH_RULES}}`, inclua **apenas** as seções **UNIVERSAIS**:
    **Regras Obrigatórias** (design, testes, logs, mutation) + o **perfil da linguagem** do
    projeto + as **Boas Práticas** de nomenclatura e Screaming Architecture. **NÃO** inclua os
    "Anti-patterns transversais" nem o "Checklist" da fonte (assumem inversão de dependência) —

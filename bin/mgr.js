@@ -124,8 +124,7 @@ async function cmdInstall(flags, positional) {
 
   const prior = installer.detectPrior(scope, repo);
   if (prior) {
-    const legacy = prior.find((m) => m.legacy);
-    if (legacy) p.log.warn(`Instalação antiga (v${legacy.version}, modelo runtime-launcher) detectada — será MIGRADA para o novo layout.`);
+    if (prior.model === "runtime-launcher") p.log.warn(`Instalação antiga (v${prior.version}, modelo runtime-launcher) detectada — será MIGRADA para o novo layout.`);
     else p.log.warn("Instalação MGR existente detectada — será re-sincronizada.");
   }
 

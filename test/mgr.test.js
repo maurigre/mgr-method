@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import os from "node:os";
 import path from "node:path";
 import * as bundle from "../src/bundle.js";
@@ -163,6 +165,23 @@ test("update e uninstall exigem instalação existente", () => {
 test("catálogo expõe arquiteturas e linguagens", () => {
   assert.ok(catalog.architectures().includes("hexagonal"));
   assert.ok(catalog.languages().includes("java"));
+});
+
+test("CLI: install migra instalação antiga sem crash (smoke)", () => {
+  const repo = tmp();
+  mkdirSync(path.join(repo, ".mgr-core", "skills"), { recursive: true });
+  mkdirSync(path.join(repo, ".claude", "skills", "spec-init"), { recursive: true });
+  writeFileSync(path.join(repo, ".claude", "skills", "spec-init", "SKILL.md"), "antigo", "utf8");
+  writeFileSync(path.join(repo, ".mgr-core", "manifest.json"), JSON.stringify({
+    model: "runtime-launcher", version: "0.2.0", engines: ["claude-code"], scope: "project",
+    skillsDirs: [".claude/skills"], skills: ["spec-init"],
+  }), "utf8");
+
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const out = execFileSync("node", [bin, "install", "--engine", "claude-code", "--arch", "hexagonal", "--project-id", "x", "-y", repo], { encoding: "utf8" });
+  assert.doesNotMatch(out, /is not a function/);
+  assert.ok(!existsSync(path.join(repo, ".mgr-core", "skills")), "deve migrar (remover .mgr-core/skills)");
+  assert.ok(readFileSync(path.join(repo, ".claude/skills/spec-init/SKILL.md"), "utf8").includes("name: spec-init"));
 });
 
 test("planInstall rejeita motor desconhecido", () => {

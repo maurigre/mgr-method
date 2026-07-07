@@ -163,12 +163,14 @@ NUNCA embuta regras de arquitetura aqui — delegue:
 1. Determine a arquitetura (brownfield: detectada na Fase 2 e confirmada com o usuário;
    greenfield: Bloco 2 da entrevista).
 2. Invoque a skill provedora correspondente: `arch-hexagonal`, `arch-clean`, `arch-onion`
-   ou `arch-layered`, passando a linguagem do projeto.
-3. Ela retorna o guia de regras; grave-o em `docs/sdd/09-review-rules.md`, acrescentando
-   ao final a seção geral **"Nomenclatura e clareza"** (agnóstica à arquitetura): nomes
-   expressam o que armazenam/fazem de forma resumida; proibido nome de uma letra ou sem
-   significado (`a`, `b`, `x`, `tmp`, `data`, `obj`), exceto índices de laço curtos
-   (`i`, `j`) e parâmetros de lambda de uma expressão.
+   ou `arch-layered`, passando a linguagem do projeto. Cada skill segue o template padrão
+   (Objetivo, Fundamentação, Princípios/`INV`, Anti-patterns, Referências) e instrui a
+   montagem: combina seus **Princípios** com a **fonte única**
+   `.mgr-core/shared/arch/regras-transversais.md` — Regras Obrigatórias (design/teste/log/
+   mutation), o **perfil da linguagem** do projeto e as boas práticas.
+3. Grave o guia retornado em `docs/sdd/09-review-rules.md`, preservando os IDs citáveis
+   (`INV-`, `DES-`, `TST-`, `LOG-`, `MUT-`, `NAM-`, `<PERFIL>-`). As regras de nomenclatura
+   (`NAM-1`/`NAM-2`) já vêm da fonte transversal — não é preciso acrescentá-las à mão.
 4. Registre a escolha num ADR (via `adr-create`, modo invocado).
 
 Se a skill da arquitetura for um stub `[A DEFINIR]`, avise o usuário e grave um guia

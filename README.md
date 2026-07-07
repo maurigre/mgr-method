@@ -81,8 +81,8 @@ code-analyzer ─ review final, ancorado no guia DO projeto (zero regra inventad
 | `code-analyzer` | Revisor rigoroso com **Restrição Crítica**: toda reprovação cita textualmente uma regra de `docs/sdd/09-review-rules.md`; problema real sem regra vira sugestão não-bloqueante. Agnóstico à arquitetura — as regras vêm do projeto. |
 | `evidence-capture` | Registra evidências AI-First por funcionalidade (prompts, revisões, habilidades) em `specs/<feature>/ai/` + índice global; organiza e pergunta, nunca inventa. |
 | `junit-clean` | Testes Java padronizados por 13 regras (naming should+camelCase, sem herança, ParameterizedTest, AAA, boundary + MC/DC, Sonar-safe). |
-| `arch-hexagonal` | Provedora do guia de regras para Ports & Adapters (guia Java completo e validado). |
-| `arch-clean` · `arch-onion` · `arch-layered` | Provedoras stub: regra de dependência definida; regras detalhadas `[A DEFINIR]` com o time (nunca inventadas). |
+| `arch-hexagonal` | Guia de regras para Ports & Adapters (Cockburn), agnóstico à linguagem (perfis Java/Go/Python/C#/TS + genérico). |
+| `arch-clean` · `arch-onion` · `arch-layered` | Guias canônicos de Clean (Martin), Onion (Palermo) e Layered (Fowler), no mesmo template agnóstico, com regras transversais compartilhadas. |
 
 ### Princípios que governam tudo
 

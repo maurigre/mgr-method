@@ -1,12 +1,13 @@
-// Manifesto de instalação: fonte de verdade do que o MGR escreveu num motor.
-// Modelo novo (self-contained): um manifesto POR motor, gravado dentro da pasta de skills
-// do motor, em `.mgr-manifest.json` — cada instalação se autodescreve e é independente.
-// Modelo antigo (runtime-launcher): `manifest.json` dentro de `.mgr-core/` (lido só p/ migração).
+// Config do projeto MGR, em `.mgr-core/` (leve, sem skills — só metadados):
+//   manifest.json  fonte de verdade do que foi instalado (motores, skills, linguagem, arquitetura)
+//   .env           MGR_PROJECT_ID=<id>, usado pela memória estendida (mgr-code)
+// O campo `model` no manifesto distingue instalações novas ("self-contained") das antigas
+// ("runtime-launcher"), habilitando a migração.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-export const MANIFEST_NAME = ".mgr-manifest.json";
-export const LEGACY_MANIFEST_NAME = "manifest.json";
+export const MANIFEST_NAME = "manifest.json";
+export const ENV_NAME = ".env";
 
 export const manifestPath = (dir) => path.join(dir, MANIFEST_NAME);
 
@@ -27,8 +28,10 @@ export function readManifest(dir) {
   return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : null;
 }
 
-// Lê o manifesto do modelo antigo (runtime-launcher) em `<runtimeDir>/manifest.json`.
-export function readLegacyManifest(runtimeDir) {
-  const p = path.join(runtimeDir, LEGACY_MANIFEST_NAME);
-  return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : null;
+// Grava `.mgr-core/.env` com o identificador do projeto para o mgr-code.
+export function writeEnv(dir, projectId) {
+  mkdirSync(dir, { recursive: true });
+  const dest = path.join(dir, ENV_NAME);
+  writeFileSync(dest, `MGR_PROJECT_ID=${projectId}\n`, "utf8");
+  return dest;
 }

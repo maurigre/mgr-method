@@ -45,17 +45,22 @@ test("install autossuficiente: só o subconjunto na pasta do motor, sem .mgr-cor
   for (const n of ["arch-clean", "arch-onion", "arch-layered", "evidence-capture"]) {
     assert.ok(!existsSync(path.join(sk, n)), `${n} não deveria existir`);
   }
-  assert.ok(!existsSync(path.join(repo, ".mgr-core")), "não deve criar .mgr-core");
+  // .mgr-core existe como CONFIG (manifest + .env), sem skills dentro
+  const core = path.join(repo, ".mgr-core");
+  assert.ok(existsSync(path.join(core, "manifest.json")), "deve criar .mgr-core/manifest.json");
+  assert.ok(!existsSync(path.join(core, "skills")), ".mgr-core não deve conter skills");
+  assert.match(readFileSync(path.join(core, ".env"), "utf8"), /MGR_PROJECT_ID=/);
 
   assert.ok(existsSync(path.join(sk, "_shared", "arch", "regras-transversais.md")));
   const archMd = readFileSync(path.join(sk, "arch-hexagonal", "SKILL.md"), "utf8");
   assert.ok(!archMd.includes("{{MGR_ARCH_RULES}}"), "token deve ser resolvido");
   assert.ok(archMd.includes("_shared/arch/regras-transversais.md"), "deve apontar para a fonte co-locada");
 
-  const man = JSON.parse(readFileSync(path.join(sk, ".mgr-manifest.json"), "utf8"));
+  const man = JSON.parse(readFileSync(path.join(core, "manifest.json"), "utf8"));
   assert.equal(man.model, "self-contained");
   assert.equal(man.architecture, "hexagonal");
   assert.equal(man.language, "java");
+  assert.ok(man.projectId, "deve gravar projectId");
 });
 
 test("dois motores: cada um autossuficiente e independente", () => {
@@ -64,8 +69,9 @@ test("dois motores: cada um autossuficiente e independente", () => {
   for (const dir of [".claude/skills", ".github/skills"]) {
     assert.ok(existsSync(path.join(repo, dir, "spec-init", "SKILL.md")), dir);
     assert.ok(existsSync(path.join(repo, dir, "arch-onion", "SKILL.md")), dir);
-    assert.ok(existsSync(path.join(repo, dir, ".mgr-manifest.json")), dir);
   }
+  const man = JSON.parse(readFileSync(path.join(repo, ".mgr-core", "manifest.json"), "utf8"));
+  assert.deepEqual(man.engines, ["claude-code", "copilot"]);
 });
 
 test("migra instalação antiga (runtime-launcher) para o novo layout", () => {
@@ -81,7 +87,9 @@ test("migra instalação antiga (runtime-launcher) para o novo layout", () => {
 
   const res = installer.execute(installer.planInstall(["claude-code"], "project", repo, { architecture: "hexagonal" }));
   assert.ok(res.migrated, "deve reportar migração");
-  assert.ok(!existsSync(core), ".mgr-core deve ser removido");
+  assert.ok(!existsSync(path.join(core, "skills")), "conteúdo antigo (.mgr-core/skills) deve sumir");
+  assert.ok(existsSync(path.join(core, "manifest.json")), ".mgr-core permanece como config");
+  assert.equal(JSON.parse(readFileSync(path.join(core, "manifest.json"), "utf8")).model, "self-contained");
   const md = readFileSync(path.join(repo, ".claude/skills/spec-init/SKILL.md"), "utf8");
   assert.ok(md.includes("name: spec-init") && !md.includes("launcher antigo"));
 });
@@ -95,8 +103,17 @@ test("uninstall remove skills e preserva docs/specs", () => {
   installer.uninstall("project", repo);
   assert.ok(!existsSync(path.join(repo, ".claude/skills/spec-init")));
   assert.ok(!existsSync(path.join(repo, ".claude/skills/_shared")));
+  assert.ok(!existsSync(path.join(repo, ".mgr-core")), ".mgr-core (config) deve ser removido");
   assert.ok(existsSync(path.join(repo, "docs", "sdd")));
   assert.ok(existsSync(path.join(repo, "specs", "keep")));
+});
+
+test("projectId explícito vai para o manifest e o .env", () => {
+  const repo = tmp();
+  installer.execute(installer.planInstall(["claude-code"], "project", repo, { architecture: "hexagonal", projectId: "nestapp-workspace" }));
+  const man = JSON.parse(readFileSync(path.join(repo, ".mgr-core", "manifest.json"), "utf8"));
+  assert.equal(man.projectId, "nestapp-workspace");
+  assert.match(readFileSync(path.join(repo, ".mgr-core", ".env"), "utf8"), /MGR_PROJECT_ID=nestapp-workspace/);
 });
 
 test("update re-sincroniza preservando o conjunto instalado", () => {

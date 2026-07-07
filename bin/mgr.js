@@ -25,6 +25,7 @@ function parseArgs(argv) {
     else if (a === "--skills-dir") flags.skillsDir = argv[++i];
     else if (a === "--language") flags.language = argv[++i];
     else if (a === "--arch") flags.arch = argv[++i];
+    else if (a === "--project-id") flags.projectId = argv[++i];
     else if (a === "--all-skills") flags.allSkills = true;
     else if (a === "--out") flags.out = argv[++i];
     else if (a.startsWith("-")) { console.error(`flag desconhecida: ${a}`); process.exit(1); }
@@ -53,6 +54,7 @@ async function cmdInstall(flags, positional) {
   let scope = flags.scope;
   let language = flags.language || null;
   let architecture = flags.arch || null;
+  let projectId = flags.projectId || null;
   const optional = [];
 
   if (!skillsDir && isTTY && !flags.yes) {
@@ -106,6 +108,15 @@ async function cmdInstall(flags, positional) {
       if (p.isCancel(ev)) bail();
       if (ev) optional.push("evidence-capture");
     }
+    if (!projectId) {
+      const pid = await p.text({
+        message: "MGR_PROJECT_ID (identificador do projeto para a memória do mgr-code)?",
+        initialValue: path.basename(repo),
+        placeholder: path.basename(repo),
+      });
+      if (p.isCancel(pid)) bail();
+      projectId = (pid || path.basename(repo)).trim();
+    }
   }
   if (!engines.length) engines = ["claude-code"];
   scope = scope || "project";
@@ -118,11 +129,13 @@ async function cmdInstall(flags, positional) {
     else p.log.warn("Instalação MGR existente detectada — será re-sincronizada.");
   }
 
-  const plan = installer.planInstall(engines, scope, repo, { skillsDir, language, architecture, optional, all: flags.allSkills });
+  const plan = installer.planInstall(engines, scope, repo, { skillsDir, language, architecture, optional, all: flags.allSkills, projectId });
   p.note(
     [
-      `motor(es):   ${plan.engines.join(", ")}    escopo: ${plan.scope}`,
+      `projeto:     ${plan.projectId}    escopo: ${plan.scope}`,
+      `motor(es):   ${plan.engines.join(", ")}`,
       `linguagem:   ${plan.language || "—"}    arquitetura: ${plan.architecture || "—"}`,
+      `config   →   ${installer.coreDir(plan.scope, plan.repo)}  ${pc.dim("(manifest.json + .env)")}`,
       ...plan.targets.map((t) => `skills   →   ${t.dir}`),
       `skills (${plan.skills.length}): ${plan.skills.join(", ")}`,
     ].join("\n"),
@@ -150,13 +163,14 @@ function cmdStatus(_f, positional) {
   for (const scope of SCOPES) {
     for (const man of installer.installs(scope, repo)) {
       shown = true;
-      const model = man.legacy ? "runtime-launcher (ANTIGO)" : (man.model || "self-contained");
-      const eng = man.legacy ? (man.engines || [man.engine]).join(", ") : man.engine;
-      console.log(pc.bold(`[${scope}]`) + ` MGR v${man.version} — ${eng} — ${model}`);
-      console.log(`  dir:    ${man.dir}`);
-      if (man.language || man.architecture) console.log(`  stack:  linguagem=${man.language || "—"} arquitetura=${man.architecture || "—"}`);
-      console.log(`  skills: ${(man.skills || []).join(", ")}`);
-      console.log(`  em:     ${man.installedAt}`);
+      const model = man.model === "runtime-launcher" ? "runtime-launcher (ANTIGO — rode `mgr update` para migrar)" : (man.model || "self-contained");
+      console.log(pc.bold(`[${scope}]`) + ` MGR v${man.version} — ${(man.engines || [man.engine]).join(", ")} — ${model}`);
+      console.log(`  projeto: ${man.projectId || "—"}`);
+      console.log(`  config:  ${man.core}`);
+      if (man.language || man.architecture) console.log(`  stack:   linguagem=${man.language || "—"} arquitetura=${man.architecture || "—"}`);
+      for (const d of man.skillsDirs || [man.skillsDir]) if (d) console.log(`  skills:  ${d}`);
+      console.log(`  skills:  ${(man.skills || []).join(", ")}`);
+      console.log(`  em:      ${man.installedAt}`);
     }
   }
   if (!shown) { console.log("Nenhuma instalação MGR encontrada (projeto ou global)."); return 1; }

@@ -166,13 +166,13 @@ NUNCA embuta regras de arquitetura aqui — delegue:
    ou `arch-layered`, passando a linguagem do projeto. Cada skill segue o template padrão
    (Objetivo, Fundamentação, Princípios/`INV`, Anti-patterns, Referências) e instrui a
    montagem: combina seus **Princípios** com a **fonte única**
-   `.mgr-core/shared/arch/regras-transversais.md` — Regras Obrigatórias (design/teste/log/
+   `_shared/arch/regras-transversais.md` (co-localizada nas skills) — Regras Obrigatórias (design/teste/log/
    mutation), o **perfil da linguagem** do projeto e as boas práticas.
 3. Grave o guia retornado em `docs/sdd/09-review-rules.md`, preservando os IDs citáveis
    (`INV-`, `DES-`, `TST-`, `LOG-`, `MUT-`, `NAM-`, `<PERFIL>-`). As regras de nomenclatura
    (`NAM-1`/`NAM-2`) já vêm da fonte transversal — não é preciso acrescentá-las à mão.
 4. Acrescente ao guia a seção **Qualidade de código** a partir da fonte
-   `.mgr-core/shared/quality/regras-qualidade.md`: as **Regras universais** (`QUAL-`) e o
+   `_shared/quality/regras-qualidade.md` (co-localizada nas skills): as **Regras universais** (`QUAL-`) e o
    **perfil da linguagem** do projeto (idiomas do canon + lint — ex.: Java: `JQ-`/`JS-`), com
    IDs citáveis. Aplicadas pelo `spec-execute` ao codificar e pelo `code-analyzer` no review.
 5. Registre a escolha num ADR (via `adr-create`, modo invocado).

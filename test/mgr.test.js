@@ -54,6 +54,7 @@ test("install autossuficiente: só o subconjunto na pasta do motor, sem .mgr-cor
   assert.match(readFileSync(path.join(core, ".env"), "utf8"), /MGR_PROJECT_ID=/);
 
   assert.ok(existsSync(path.join(sk, "_shared", "arch", "regras-transversais.md")));
+  assert.ok(existsSync(path.join(sk, "_shared", "quality", "regras-qualidade.md")), "fonte de qualidade co-locada (spec-init)");
   const archMd = readFileSync(path.join(sk, "arch-hexagonal", "SKILL.md"), "utf8");
   assert.ok(!archMd.includes("{{MGR_ARCH_RULES}}"), "token deve ser resolvido");
   assert.ok(archMd.includes("_shared/arch/regras-transversais.md"), "deve apontar para a fonte co-locada");

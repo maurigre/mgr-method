@@ -58,5 +58,13 @@ export function installEngine(engineSkillsDir, skills, { archRulesRef } = {}) {
       writeFileSync(md, text, "utf8");
     }
   }
+
+  // Fonte de qualidade (co-locada) — usada pelo spec-init ao montar o guia de review.
+  if (skills.includes("spec-init")) {
+    const qdst = path.join(engineSkillsDir, "_shared", "quality");
+    mkdirSync(qdst, { recursive: true });
+    cpSync(path.join(bundle.pkgDir("shared"), "quality", "regras-qualidade.md"),
+      path.join(qdst, "regras-qualidade.md"));
+  }
   return dirs;
 }

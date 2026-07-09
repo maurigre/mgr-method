@@ -105,6 +105,9 @@ funcionando nas duas organizações.
 Todo **`Port`** é interface (entrada e saída). `entity`/`mapper`/`projection`/`dto` idealmente
 package-private (não vazam para o core nem para outro adapter). Distinga: **outbound port** do
 core (`...Port`) ≠ **Spring Data** (`...JpaRepository`, interno) ≠ **adapter** (`...Adapter`).
+Os **DTOs (`...Request`/`...Response`) e mappers da web moram sob a versão do controller**
+(`controller.v1.dto`, `controller.v1.mapper`), não soltos em `adapter.in.web` — isola o contrato
+por versão da API (opt-in; para APIs sem versionamento, dispensável).
 
 ### Command/Query e composition root
 
@@ -171,6 +174,14 @@ noClasses().that().resideInAPackage("..core..usecase..")
 // Entidades JPA só no adapter
 classes().that().areAnnotatedWith(jakarta.persistence.Entity.class)
     .should().resideInAPackage("..adapter.out..");
+
+// DTO/mapper da web moram sob a versão do controller (isolamento de versão; opt-in)
+classes().that().resideInAPackage("..adapter.in.web..").and().haveSimpleNameEndingWith("Request")
+    .should().resideInAPackage("..adapter.in.web.controller..");
+classes().that().resideInAPackage("..adapter.in.web..").and().haveSimpleNameEndingWith("Response")
+    .should().resideInAPackage("..adapter.in.web.controller..");
+classes().that().resideInAPackage("..adapter.in.web..").and().haveSimpleNameEndingWith("Mapper")
+    .should().resideInAPackage("..adapter.in.web.controller..");
 
 // Features independentes (SÓ na organização por feature; só compartilham via core.shared)
 slices().matching("..core.(*)..").should().notDependOnEachOther()

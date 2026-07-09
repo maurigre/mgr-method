@@ -7,6 +7,13 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
+## [0.3.7] - 2026-07-08
+### Corrigido
+- A fonte `shared/quality/regras-qualidade.md` agora é instalada (`_shared/quality/`) e o
+  `spec-init` referencia `_shared/arch`/`_shared/quality` (co-localizadas), em vez do caminho
+  antigo `.mgr-core/shared/...` (inexistente no modelo autossuficiente) — corrige a montagem da
+  seção de qualidade do guia introduzida no 0.3.6.
+
 ## [0.3.6] - 2026-07-08
 ### Adicionado
 - `spec-execute`: **gate de fidelidade ao plano** (reafirma o artefato exato antes de cada task;

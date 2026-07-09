@@ -3,6 +3,11 @@
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
+### Planejado
+- Suporte a Cursor como motor de instalação.
+- Modo scaffold (geração de estrutura de código no greenfield).
+
+## [0.3.3] - 2026-07-08
 ### Adicionado
 - Governança do enforcement de arquitetura (guard-rail; nunca enfraquecer regra; drift corrige
   o código; mudança de regra via `adr-create`) nas Boas Práticas transversais.
@@ -10,9 +15,6 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   `...UseCasePort`/`...UseCase`/`...Adapter`) e ruleset ArchUnit de referência.
 - Nota de Enforcement em `arch-clean`/`arch-onion`/`arch-layered` (traduzir os `INV` para a
   ferramenta de arch-lint do perfil da linguagem).
-### Planejado
-- Suporte a Cursor como motor de instalação.
-- Modo scaffold (geração de estrutura de código no greenfield).
 
 ## [0.3.2] - 2026-07-07
 ### Adicionado

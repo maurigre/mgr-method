@@ -48,16 +48,35 @@ Quatro lentes permanentes, governadas por uma disciplina soberana:
    resumida. PROIBIDO nome de uma letra ou sem significado (`a`, `b`, `x`, `tmp`,
    `data`, `obj`); exceções: índices de laço curtos (`i`, `j`) e parâmetros de lambda
    de uma expressão.
+5. **Qualidade e idioma da linguagem** — aplicar as regras de qualidade do guia
+   (`docs/sdd/09-review-rules.md`, seção **Qualidade de código**) **durante** a codificação:
+   idiomas do canon (ex.: Java/*Effective Java*: `Optional` nunca como parâmetro — `JQ-1`) +
+   estilo/lint (Checkstyle). Os idiomas pegam o que o linter não pega; não deixar para o fim.
 
 Por task, registrar no log de execução um bloco `Premissas aplicadas` com o que foi
 aplicado **e o que foi deliberadamente NÃO aplicado com o porquê** (ex.: "sem retry:
 task local, sem chamada de rede"). Marcar o não-aplicado é o que impede over-engineering.
 
+## Fidelidade ao plano (trilho — não improvisar)
+
+Você segue o plano como **trilho**. Antes de cada task, reafirme o **artefato EXATO** que ela
+pede — nome, forma, assinatura e **quantidade**. Ex.: *"1 `ProjectController` com POST/GET/
+PATCH/DELETE"* — **não** quatro controllers, não renomear, não dividir, não "melhorar" a forma.
+
+- **NÃO** altere forma, escopo, quantidade ou nomes de artefatos por conta própria — mesmo que
+  pareça melhor. Otimizar/reorganizar fora do plano é **proibido** aqui (é papel do `spec-create`).
+- Se o plano estiver mesmo errado/insuficiente (dependência faltante, artefato mal definido) →
+  **PARAR** e reportar ao `spec-create`; replanejar não é seu papel.
+- Dúvida técnica → **buscar fonte sólida** (canon/doc oficial); não achando → **PERGUNTAR**.
+  Nunca inventar, nunca improvisar para "seguir em frente".
+
 ## Execução (log em tempo real em `05-execution.md`)
 
 - Respeitar o DAG: task só inicia com `depends_on` concluídas; ordem P0 → P1 → P2.
-- Por task: implementar → rodar testes → registrar (task, arquivos, decisões, premissas,
-  resultado). Task de teste em projeto Java → invocar `junit-clean` com o escopo.
+- Por task: implementar → rodar testes → **auto-review** (fidelidade ao artefato planejado;
+  premissas aplicadas; qualidade/idioma da linguagem pelo guia) → corrigir ou, em dúvida,
+  perguntar → registrar (task, arquivos, decisões, premissas, resultado). Task de teste em
+  projeto Java → invocar `junit-clean` com o escopo.
 - **Checkpoint de execução:** ao concluir cada bloco de prioridade (P0, depois P1),
   mostrar resumo e aguardar ok do usuário.
 - Toda decisão de implementação rastreia à spec, à constituição ou ao código real; o
@@ -72,6 +91,13 @@ task local, sem chamada de rede"). Marcar o não-aplicado é o que impede over-e
   usuário (não inflar teste para bater métrica — regra 12 do junit-clean).
 - **Nada de git automático.** Commit/push acontecem só no fechamento, via o fluxo de
   confirmação do `spec-create` (política de versionamento da CONSTITUTION).
+
+## Economia de tokens (disciplina em todo passo)
+
+- Ler só o necessário (tiers/disco); **não reprocessar** o que já foi arquivado em
+  `05-execution.md`/`.specs-cache` nem recarregar arquivo já em contexto.
+- Editar **trechos** em vez de reescrever arquivos inteiros; respostas objetivas.
+- Não repetir contexto já em disco; **um** bloco de log por task, estruturado (não prosa longa).
 
 ## Controle ativo de contexto (durante toda a execução)
 

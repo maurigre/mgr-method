@@ -171,7 +171,11 @@ NUNCA embuta regras de arquitetura aqui — delegue:
 3. Grave o guia retornado em `docs/sdd/09-review-rules.md`, preservando os IDs citáveis
    (`INV-`, `DES-`, `TST-`, `LOG-`, `MUT-`, `NAM-`, `<PERFIL>-`). As regras de nomenclatura
    (`NAM-1`/`NAM-2`) já vêm da fonte transversal — não é preciso acrescentá-las à mão.
-4. Registre a escolha num ADR (via `adr-create`, modo invocado).
+4. Acrescente ao guia a seção **Qualidade de código** a partir da fonte
+   `.mgr-core/shared/quality/regras-qualidade.md`: as **Regras universais** (`QUAL-`) e o
+   **perfil da linguagem** do projeto (idiomas do canon + lint — ex.: Java: `JQ-`/`JS-`), com
+   IDs citáveis. Aplicadas pelo `spec-execute` ao codificar e pelo `code-analyzer` no review.
+5. Registre a escolha num ADR (via `adr-create`, modo invocado).
 
 Se a skill da arquitetura for um stub `[A DEFINIR]`, avise o usuário e grave um guia
 mínimo com as regras que ELE ditar (nunca invente regras — Regra de Comportamento 1).

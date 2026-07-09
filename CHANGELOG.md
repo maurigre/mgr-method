@@ -3,10 +3,63 @@
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
+### Adicionado
+- Governança do enforcement de arquitetura (guard-rail; nunca enfraquecer regra; drift corrige
+  o código; mudança de regra via `adr-create`) nas Boas Práticas transversais.
+- Perfil Hexagonal + Java (validado): convenção de nomes/pacotes (`core.*`,
+  `...UseCasePort`/`...UseCase`/`...Adapter`) e ruleset ArchUnit de referência.
+- Nota de Enforcement em `arch-clean`/`arch-onion`/`arch-layered` (traduzir os `INV` para a
+  ferramenta de arch-lint do perfil da linguagem).
 ### Planejado
-- Guias completos para arch-clean, arch-onion e arch-layered (hoje stubs).
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
+
+## [0.3.2] - 2026-07-07
+### Adicionado
+- Guard de versão do Node no CLI: em Node < 22, mensagem clara em vez de crash minificado
+  (launcher CJS `bin/mgr.cjs`).
+### Corrigido
+- README: a tabela de skills não descreve mais `arch-clean`/`arch-onion`/`arch-layered` como
+  stubs (já são canônicas).
+
+## [0.3.1] - 2026-07-07
+### Corrigido
+- `install` não quebra mais ("find is not a function") quando há instalação anterior detectada.
+
+## [0.3.0] - 2026-07-07
+### Alterado
+- Instalação **seletiva**: pergunta linguagem e arquitetura e copia só as skills usadas.
+- Modelo **autossuficiente por motor**: skills direto na pasta do motor, sem `.mgr-core/skills`
+  nem lançadores.
+- `.mgr-core/` passa a ser **config do projeto** (`manifest.json` + `.env` com `MGR_PROJECT_ID`
+  para o mgr-code).
+### Adicionado
+- Migração automática de instalações no modelo antigo (runtime-launcher) no `install`/`update`.
+- Flags `--language`, `--arch`, `--project-id`, `--all-skills`.
+
+## [0.2.0] - 2026-07-07
+### Adicionado
+- Guias de arquitetura **canônicos e completos**: `arch-clean` (Martin), `arch-onion`
+  (Palermo), `arch-layered` (Fowler) — deixam de ser stubs.
+- Fonte transversal única (`shared/arch/regras-transversais.md`) com perfis de linguagem
+  (Java/Go/Python/C#/TS + genérico).
+- Cobertura de testes e badges no README (CI, coverage, npm, node, license).
+### Alterado
+- `arch-hexagonal` reestruturada em template agnóstico (invariantes + design + testes/logs +
+  perfil da linguagem).
+- `engines`: Node >= 22 (alinhado ao LTS testado no CI).
+
+## [0.1.3] - 2026-07-06
+### Corrigido
+- Ajustes no fluxo de publicação no npm (sem mudança funcional).
+
+## [0.1.2] - 2026-07-06
+### Corrigido
+- Ajustes no fluxo de publicação no npm (sem mudança funcional).
+
+## [0.1.1] - 2026-07-05
+### Adicionado
+- Primeira publicação no npm.
 
 ## [0.1.0] - 2026-07-03
 ### Adicionado

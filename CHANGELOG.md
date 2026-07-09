@@ -7,6 +7,12 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
+## [0.3.5] - 2026-07-08
+### Adicionado
+- Convenção Hexagonal (perfil Java, opt-in): DTOs (`...Request`/`...Response`) e mappers da web
+  moram sob a versão do controller (`controller.v1.dto`/`mapper`), isolando o contrato por versão
+  da API — com regras ArchUnit. Dispensável em APIs sem versionamento.
+
 ## [0.3.4] - 2026-07-08
 ### Adicionado
 - Refino da convenção Hexagonal (perfil Java): `Command`/`Query` co-locados com o input port;

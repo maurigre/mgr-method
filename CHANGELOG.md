@@ -7,6 +7,17 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
+## [0.3.4] - 2026-07-08
+### Adicionado
+- Refino da convenção Hexagonal (perfil Java): `Command`/`Query` co-locados com o input port;
+  `config` como composition root (regra ArchUnit dedicada); relação entre domínios (Shared
+  Kernel, referência por ID, ACL por port — DDD, Evans/Vernon); estrutura de adapters
+  web/rabbit/persistence/client com sufixos `Controller`/`Receiver`/`RepositoryAdapter`/`ApiAdapter`.
+### Alterado
+- Organização de pacotes documentada como escolha neutra (por feature × por camada, via ADR);
+  Screaming Architecture creditada a Robert C. Martin (prática transversal), não ao Cockburn.
+- Regras ArchUnit passam a usar `..core..X..` (servem organização por camada e por feature).
+
 ## [0.3.3] - 2026-07-08
 ### Adicionado
 - Governança do enforcement de arquitetura (guard-rail; nunca enfraquecer regra; drift corrige

@@ -67,6 +67,78 @@ Além dos anti-patterns transversais, reprovam nesta arquitetura:
 - Entidade de ORM usada como modelo de domínio, sem mapeamento no adapter de persistência.
 - Driving adapter que executa regra de negócio em vez de apenas chamar um inbound port.
 
+## Convenção e enforcement — Java (VALIDADO)
+
+Convenção de nomes/pacotes e ruleset ArchUnit validados para Hexagonal em Java (é uma **Boa
+Prática opt-in**: o `spec-init` oferece e confirma com o time). Outras linguagens **adaptam** —
+traduza os `INV` para a ferramenta de arch-lint do perfil (ver "Governança do enforcement" nas
+Boas Práticas transversais): `[ADAPTADO — validar com o time]`.
+
+### Nomes e pacotes
+
+| Papel | Nome | Pacote |
+|---|---|---|
+| Entidade/VO de domínio | `Project` | `..core.domain..` |
+| Input port (interface) | `CreateProjectUseCasePort` | `..core.port.in..` |
+| Use case (impl, package-private) | `CreateProjectUseCase` | `..core.usecase..` |
+| Output port (interface) | `ProjectRepositoryPort` / `...GatewayPort` | `..core.port.out..` |
+| Exceções | `...Exception` | `..core.exception..` (ou junto do domínio) |
+| Inbound adapter | `ProjectController` | `..adapter.in..` |
+| Outbound adapter | `ProjectGatewayAdapter` | `..adapter.out..` |
+| ORM entity · mapper · projection · Spring Data repo | `BranchEntity` · `BranchMapper` · `OrderProjection` · `BranchRepository` | `..adapter.out.*.{entity,mapper,projection,repository}..` |
+
+Todo **`Port`** é interface (entrada e saída). `entity`/`mapper`/`projection` idealmente
+package-private (não vazam para o core nem para outro adapter). Impls de use case
+package-private, com wiring por `@Configuration` (o core fica sem `@Component`/`@Service`).
+Distinga: o **outbound port** do core (`...Port`) NÃO é o **Spring Data repository**
+(`...Repository`, detalhe interno do adapter) nem o **adapter** (`...Adapter`).
+
+### Regras ArchUnit (o "com o quê" do enforcement)
+
+```java
+// Todo Port é interface (entrada e saída)
+classes().that().haveSimpleNameEndingWith("Port").should().beInterfaces();
+
+// Input port: sufixo UseCasePort, mora em core.port.in
+classes().that().haveSimpleNameEndingWith("UseCasePort")
+    .should().beInterfaces().andShould().resideInAPackage("..core.port.in..");
+
+// Impl de use case: sufixo UseCase (não interface) em core.usecase
+classes().that().resideInAPackage("..core.usecase..").and().areNotInterfaces()
+    .should().haveSimpleNameEndingWith("UseCase");
+
+// Outbound adapter: sufixo Adapter em adapter.out
+classes().that().resideInAPackage("..adapter.out..").and().areNotInterfaces()
+    .should().haveSimpleNameEndingWith("Adapter");
+
+// Núcleo agnóstico (SLF4J liberado: é facade de log)
+noClasses().that().resideInAPackage("..core..").should().dependOnClassesThat()
+    .resideInAnyPackage("org.springframework..", "jakarta.persistence..", "org.hibernate..", "..adapter..");
+
+// Anel interno: Entities não conhecem Use Cases nem ports
+noClasses().that().resideInAPackage("..core.domain..")
+    .should().dependOnClassesThat().resideInAnyPackage("..core.usecase..", "..core.port..");
+
+// Controller depende do PORT de entrada, não da impl do use case
+noClasses().that().resideInAPackage("..adapter.in..")
+    .should().dependOnClassesThat().resideInAPackage("..core.usecase..");
+
+// Use case não depende de outro use case
+noClasses().that().resideInAPackage("..core.usecase..")
+    .should().dependOnClassesThat().resideInAPackage("..core.usecase..");
+
+// Entidades JPA só no adapter
+classes().that().areAnnotatedWith(jakarta.persistence.Entity.class)
+    .should().resideInAPackage("..adapter.out..");
+
+// Camadas (Core ← Adapter)
+layeredArchitecture().consideringOnlyDependenciesInLayers()
+    .layer("Core").definedBy("..core..")
+    .layer("Adapter").definedBy("..adapter..")
+    .whereLayer("Adapter").mayNotBeAccessedByAnyLayer()
+    .whereLayer("Core").mayOnlyBeAccessedByLayers("Adapter");
+```
+
 ## Referências Oficiais
 
 - Cockburn, Alistair. *Hexagonal Architecture (Ports & Adapters)*, 2005 —

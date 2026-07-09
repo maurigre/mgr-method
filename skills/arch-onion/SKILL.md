@@ -72,6 +72,14 @@ Além dos anti-patterns transversais, reprovam nesta arquitetura:
 - Persistência tratada como camada central/base em vez de borda externa (recaída no
   layered/N-tier tradicional).
 
+## Enforcement
+
+Codifique os `INV` acima na ferramenta de arch-lint do perfil da linguagem (ArchUnit/Java,
+NetArchTest/C#, import-linter/Python, go-arch-lint/Go, dependency-cruiser/TS), seguindo a
+"Governança do enforcement" das Boas Práticas transversais (guard-rail; nunca enfraquecer;
+mudança de regra só via `adr-create`). Ruleset concreto `[ADAPTADO — validar com o time]`;
+referência validada de estilo: Hexagonal + Java + ArchUnit (na `arch-hexagonal`).
+
 ## Referências Oficiais
 
 - Palermo, Jeffrey. *The Onion Architecture* (série, partes 1–4), 2008 —

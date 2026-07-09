@@ -162,6 +162,18 @@ preencha cada slot com o idioma da linguagem:
    idiomáticos). Confirmar com o time antes de incluir no guia.
 3. **Screaming Architecture** — a estrutura de diretórios deve "gritar" o domínio (`orders`,
    `payments`, `shipping`) em vez da tecnologia (`controller`, `service`, `repository`).
+4. **Governança do enforcement** (vale para todas as arquiteturas e ferramentas) — o arch-lint
+   é um **guard-rail, não um obstáculo a burlar**:
+   - Nunca **enfraquecer** uma regra só para o código passar; corrija o código.
+   - Violação normalmente é **drift** do código → conserte a **estrutura de produção** primeiro.
+   - As regras de arquitetura só mudam quando a **arquitetura muda de propósito** — e aí via
+     `adr-create` (ADR) antes de alterar o teste/lint.
+   - Prefira **alinhar pacote/visibilidade** à estrutura existente a adicionar exceções ou
+     supressões (`@ArchIgnore`, `ignore` do lint).
+   - **Como codificar as regras**: traduza os **`INV`** (Princípios) da arquitetura escolhida
+     para a ferramenta de arch-lint do **perfil da linguagem**. Os `INV` dizem *o que*
+     enforçar; o perfil diz *com o quê*. Ruleset validado de referência: Hexagonal + Java +
+     ArchUnit (ver `arch-hexagonal`); demais combinações adaptam, `[ADAPTADO — validar com o time]`.
 
 ## Anti-patterns transversais (reprovam)
 

@@ -83,6 +83,13 @@ Além dos anti-patterns de design (ver Regras Obrigatórias), reprovam nesta arq
 - Testes com objetos reais (TST-1), mock só na borda (TST-2), sem matcher genérico (TST-5);
   nomes significativos (NAM-1, NAM-2).
 
+## Enforcement
+
+Codifique os `INV` acima (direção **top-down**: presentation → domínio/service → data, sem
+chamadas para cima) na ferramenta de arch-lint do perfil da linguagem, seguindo a "Governança
+do enforcement" das Boas Práticas transversais (guard-rail; nunca enfraquecer; mudança de
+regra só via `adr-create`). Ruleset concreto `[ADAPTADO — validar com o time]`.
+
 ## Referências Oficiais
 
 - Fowler, Martin. *Patterns of Enterprise Application Architecture*. Addison-Wesley, 2002

@@ -79,6 +79,14 @@ Além dos anti-patterns transversais, reprovam nesta arquitetura:
 - Estrutura de diretórios que revela tecnologia (`controller`/`service`/`repository`) em vez
   do negócio (ver Screaming Architecture nas Boas Práticas).
 
+## Enforcement
+
+Codifique os `INV` acima na ferramenta de arch-lint do perfil da linguagem (ArchUnit/Java,
+NetArchTest/C#, import-linter/Python, go-arch-lint/Go, dependency-cruiser/TS), seguindo a
+"Governança do enforcement" das Boas Práticas transversais (guard-rail; nunca enfraquecer;
+mudança de regra só via `adr-create`). Ruleset concreto `[ADAPTADO — validar com o time]`;
+referência validada de estilo: Hexagonal + Java + ArchUnit (na `arch-hexagonal`).
+
 ## Referências Oficiais
 
 - Martin, Robert C. *Clean Architecture: A Craftsman's Guide to Software Structure and Design*.

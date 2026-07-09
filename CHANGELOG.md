@@ -7,6 +7,18 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
+## [0.3.6] - 2026-07-08
+### Adicionado
+- `spec-execute`: **gate de fidelidade ao plano** (reafirma o artefato exato antes de cada task;
+  proíbe alterar forma/quantidade/nome por conta própria) + **auto-review por task** +
+  disciplina de trilho (buscar fonte sólida ou perguntar) e economia de tokens.
+- Fonte única `shared/quality/regras-qualidade.md`: regras de qualidade por linguagem em duas
+  camadas — idiomas/design (Java validado com *Effective Java*/Bloch; ex.: `Optional` nunca como
+  parâmetro) e estilo/lint (Google Checkstyle); demais linguagens `[ADAPTADO]`. Aplicadas pelo
+  `spec-execute` ao codificar e citadas pelo `code-analyzer`.
+### Alterado
+- `spec-init` passa a gravar a seção **Qualidade de código** no `09-review-rules.md`.
+
 ## [0.3.5] - 2026-07-08
 ### Adicionado
 - Convenção Hexagonal (perfil Java, opt-in): DTOs (`...Request`/`...Response`) e mappers da web

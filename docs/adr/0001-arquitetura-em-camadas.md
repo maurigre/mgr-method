@@ -8,8 +8,8 @@
 ## Context
 
 O `mgr-method` é uma CLI Node (ESM) que instala e governa Agent Skills. A inicialização SDD
-exige declarar a arquitetura, porque é ela que gera o guia de regras
-(`docs/sdd/09-review-rules.md`) usado pelo `code-analyzer`.
+exige declarar a arquitetura, porque é ela que gera o **guia de regras de review** usado pelo
+`code-analyzer`.
 
 A análise do código encontrou:
 
@@ -52,11 +52,17 @@ transversal + perfil de linguagem JS/Node (adaptado do perfil TS/Node) + regras 
 
 **Enforcement**
 - Regra `INV-2` (`src/ ↛ bin/`) é candidata a **enforcement automatizado** via
-  `dependency-cruiser` ou `eslint-plugin-boundaries` — registrado como Boa Prática opt-in
-  em `09-review-rules.md`, ainda `[A IMPLEMENTAR]`.
+  `dependency-cruiser` ou `eslint-plugin-boundaries` — registrado como Boa Prática opt-in no
+  guia de regras de review, ainda `[A IMPLEMENTAR]`.
+  *(Cumprido pelo **ADR-0002**: o enforce é feito por `no-restricted-imports`, do core do
+  ESLint — as duas ferramentas acima foram rejeitadas por custo de dependência.)*
 
 ## References
 
 - Fowler, Martin. *Patterns of Enterprise Application Architecture*, 2002 — cap. "Layering".
 - Buschmann, F. et al. *Pattern-Oriented Software Architecture, Vol. 1* — padrão **Layers**.
-- `docs/sdd/02-architecture.md` · `docs/sdd/09-review-rules.md`
+- `docs/adr/0002-gates-de-qualidade-automatizados.md` — implementa o enforcement do `INV-2`.
+
+> Os artefatos SDD que detalham esta decisão (arquitetura, guia de regras de review) são mantidos
+> **fora do versionamento**, só no ambiente do autor. Este ADR é **autocontido**: a decisão e o
+> racional estão acima e não dependem deles.

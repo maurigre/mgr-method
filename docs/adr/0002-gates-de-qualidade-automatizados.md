@@ -20,7 +20,8 @@ Consequência: a qualidade dependia de **ninguém escorregar**. Se o autor (ou u
 escorregasse, o defeito entrava na `main` e era publicado. O ADR-0001 já havia registrado o
 enforcement do **INV-2** (`src/` ↛ `bin/`) como `[A IMPLEMENTAR]` — esta decisão o cumpre.
 
-**Reference:** Spec técnica em `specs/gates-de-qualidade/03-spec.md`.
+**Origem:** feature `gates-de-qualidade` (fluxo SDD). Os artefatos da spec são mantidos **fora do
+versionamento**, só no ambiente do autor — este ADR é **autocontido**.
 
 ## Decision
 
@@ -113,7 +114,12 @@ o CI**: `--no-verify` contorna hook local, CI não.
 ## References
 
 - `docs/adr/0001-arquitetura-em-camadas.md` — o INV-2 que o ESLint passa a enforçar.
-- `docs/sdd/CONSTITUTION.md` §3.1 (nunca inventar regra), §4 (anti-inflação), §5 (commits).
-- `specs/gates-de-qualidade/03-spec.md` · `docs/sdd/06-quality.md`
 - Documentação oficial: ESLint (flat config), commitlint (local plugins), Node.js
   (`--test-coverage-lines`), npm (`audit --audit-level`).
+- **Constituição do projeto** (artefato local, fora do versionamento) — as seções citadas acima:
+  §3.1 *nunca inventar regra*, §4 *anti-inflação*, §5 *convenção de commits*. O conteúdo de cada
+  uma está reproduzido no corpo deste ADR, que não depende do arquivo para ser lido.
+
+**Onde os gates vivem, no repositório:** `eslint.config.js` · `commitlint.config.js` ·
+`.githooks/commit-msg` · `package.json` (scripts `lint`, `coverage`, `prepare`) ·
+`.github/workflows/ci.yml`.

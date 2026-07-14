@@ -5,13 +5,22 @@ import * as p from "@clack/prompts";
 import pc from "picocolors";
 import * as bundle from "../src/bundle.js";
 import * as installer from "../src/installer.js";
-import * as catalog from "../src/catalog.js";
 import { buildRuntime } from "../src/builder.js";
 import { validateAll } from "../src/validator.js";
 import { printBanner } from "../src/banner.js";
+import { collectInstallAnswers, CANCELLED } from "../src/prompts.js";
 
 const SCOPES = ["project", "global"];
 const isTTY = process.stdin.isTTY && process.stdout.isTTY;
+
+// Adaptador real de prompts; o src/prompts.js o recebe injetado (nos testes, um stub).
+const CLACK = {
+  multiselect: p.multiselect,
+  select: p.select,
+  confirm: p.confirm,
+  text: p.text,
+  isCancel: p.isCancel,
+};
 
 function parseArgs(argv) {
   const flags = { engines: [] };
@@ -58,65 +67,14 @@ async function cmdInstall(flags, positional) {
   const optional = [];
 
   if (!skillsDir && isTTY && !flags.yes) {
-    if (!engines.length) {
-      const sel = await p.multiselect({
-        message: "Quais motores devem receber as skills? (espaço marca, enter confirma)",
-        options: [
-          { value: "claude-code", label: "Claude Code", hint: ".claude/skills" },
-          { value: "copilot", label: "GitHub Copilot", hint: ".github/skills" },
-        ],
-        initialValues: ["claude-code"],
-        required: true,
-      });
-      if (p.isCancel(sel)) bail();
-      engines = sel;
-    }
-    if (!scope) {
-      const s = await p.select({
-        message: "Escopo da instalação?",
-        options: [
-          { value: "project", label: "project", hint: "neste repositório" },
-          { value: "global", label: "global", hint: "para todos os projetos (home)" },
-        ],
-      });
-      if (p.isCancel(s)) bail();
-      scope = s;
-    }
-    if (!flags.allSkills && !architecture) {
-      const a = await p.select({
-        message: "Arquitetura do projeto? (define qual skill arch-* instalar)",
-        options: catalog.architectures().map((k) => ({ value: k, label: k })),
-        initialValue: "hexagonal",
-      });
-      if (p.isCancel(a)) bail();
-      architecture = a;
-    }
-    if (!flags.allSkills && !language) {
-      const l = await p.select({
-        message: "Linguagem principal? (define helpers específicos)",
-        options: [
-          ...catalog.languages().map((k) => ({ value: k, label: k })),
-          { value: "outra", label: "outra / não especificar", hint: "sem helpers de linguagem" },
-        ],
-        initialValue: catalog.languages()[0],
-      });
-      if (p.isCancel(l)) bail();
-      language = l === "outra" ? null : l;
-    }
-    if (!flags.allSkills) {
-      const ev = await p.confirm({ message: "Incluir a skill opcional evidence-capture?", initialValue: false });
-      if (p.isCancel(ev)) bail();
-      if (ev) optional.push("evidence-capture");
-    }
-    if (!projectId) {
-      const pid = await p.text({
-        message: "MGR_PROJECT_ID (identificador do projeto para a memória do mgr-code)?",
-        initialValue: path.basename(repo),
-        placeholder: path.basename(repo),
-      });
-      if (p.isCancel(pid)) bail();
-      projectId = (pid || path.basename(repo)).trim();
-    }
+    const answers = await collectInstallAnswers(
+      CLACK,
+      { engines, scope, language, architecture, projectId },
+      { repo, allSkills: flags.allSkills }
+    );
+    if (answers === CANCELLED) bail();
+    ({ engines, scope, language, architecture, projectId } = answers);
+    optional.push(...answers.optional);
   }
   if (!engines.length) engines = ["claude-code"];
   scope = scope || "project";

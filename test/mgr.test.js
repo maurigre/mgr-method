@@ -9,6 +9,7 @@ import * as bundle from "../src/bundle.js";
 import { buildRuntime, buildSkill, installEngine } from "../src/builder.js";
 import * as installer from "../src/installer.js";
 import * as catalog from "../src/catalog.js";
+import { collectInstallAnswers, CANCELLED } from "../src/prompts.js";
 import { validateAll, validateSkill, checkSkill } from "../src/validator.js";
 
 const tmp = () => mkdtempSync(path.join(os.tmpdir(), "mgr-"));
@@ -166,6 +167,76 @@ test("update e uninstall exigem instalação existente", () => {
 test("catálogo expõe arquiteturas e linguagens", () => {
   assert.ok(catalog.architectures().includes("hexagonal"));
   assert.ok(catalog.languages().includes("java"));
+});
+
+test("collectInstallAnswers: coleta completa via prompter injetado", async () => {
+  const repo = tmp();
+  const ask = {
+    multiselect: async () => ["claude-code"],
+    select: async ({ message }) =>
+      /Arquitetura/.test(message) ? "clean" : /Linguagem/.test(message) ? "java" : "project",
+    confirm: async () => true,
+    text: async () => "meu-projeto",
+    isCancel: () => false,
+  };
+  const out = await collectInstallAnswers(ask, {}, { repo });
+  assert.deepEqual(out.engines, ["claude-code"]);
+  assert.equal(out.scope, "project");
+  assert.equal(out.architecture, "clean");
+  assert.equal(out.language, "java");
+  assert.deepEqual(out.optional, ["evidence-capture"]);
+  assert.equal(out.projectId, "meu-projeto");
+});
+
+test("collectInstallAnswers: linguagem 'outra' vira null; projectId vazio cai no nome da pasta", async () => {
+  const repo = tmp();
+  const ask = {
+    multiselect: async () => ["copilot"],
+    select: async ({ message }) =>
+      /Arquitetura/.test(message) ? "onion" : /Linguagem/.test(message) ? "outra" : "project",
+    confirm: async () => false,
+    text: async () => "",
+    isCancel: () => false,
+  };
+  const out = await collectInstallAnswers(ask, {}, { repo });
+  assert.equal(out.language, null);
+  assert.deepEqual(out.optional, []);
+  assert.equal(out.projectId, path.basename(repo));
+});
+
+test("collectInstallAnswers: cancelamento em qualquer prompt retorna CANCELLED", async () => {
+  const repo = tmp();
+  const CANCEL = Symbol("cancel");
+  const cancelando = (onde) => ({
+    multiselect: async () => (onde === "engines" ? CANCEL : ["claude-code"]),
+    select: async ({ message }) => {
+      if (onde === "scope" && /Escopo/.test(message)) return CANCEL;
+      if (onde === "arch" && /Arquitetura/.test(message)) return CANCEL;
+      if (onde === "lang" && /Linguagem/.test(message)) return CANCEL;
+      return /Arquitetura/.test(message) ? "hexagonal" : /Linguagem/.test(message) ? "java" : "project";
+    },
+    confirm: async () => (onde === "optional" ? CANCEL : false),
+    text: async () => (onde === "pid" ? CANCEL : "x"),
+    isCancel: (v) => v === CANCEL,
+  });
+  for (const onde of ["engines", "scope", "arch", "lang", "optional", "pid"]) {
+    assert.equal(await collectInstallAnswers(cancelando(onde), {}, { repo }), CANCELLED, onde);
+  }
+});
+
+test("collectInstallAnswers: não pergunta o que já veio por flag (--all-skills pula arch/lang/opcional)", async () => {
+  const repo = tmp();
+  const naoPergunta = { isCancel: () => false };
+  const out = await collectInstallAnswers(
+    naoPergunta,
+    { engines: ["copilot"], scope: "global", projectId: "x" },
+    { repo, allSkills: true }
+  );
+  assert.deepEqual(out.engines, ["copilot"]);
+  assert.equal(out.scope, "global");
+  assert.equal(out.projectId, "x");
+  assert.equal(out.architecture, null);
+  assert.deepEqual(out.optional, []);
 });
 
 test("CLI: comandos básicos e ciclo de vida (smoke)", () => {

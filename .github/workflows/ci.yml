@@ -8,13 +8,14 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # v5 e o primeiro major destas actions que roda em node24; a v4 (node20) esta deprecada.
+      - uses: actions/checkout@v5
         with:
           # O commitlint valida o RANGE de commits do PR; o checkout raso (default) nao
           # enxerga os commits e o step falharia por nao achar o range.
           fetch-depth: 0
       # LTS mais recente; o reporter lcov do node:test (cobertura) exige >= 22, atendido pelo LTS atual.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "lts/*"
           cache: npm

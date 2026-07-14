@@ -17,8 +17,9 @@ jobs:
   release-gates:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # v5 e o primeiro major destas actions que roda em node24; a v4 (node20) esta deprecada.
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "lts/*"
           cache: npm

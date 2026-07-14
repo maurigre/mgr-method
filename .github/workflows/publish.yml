@@ -1,10 +1,16 @@
 name: publish
+# DESATIVADO como gatilho automatico: nao roda mais sozinho ao empurrar uma tag v*.
+# Agora so executa sob demanda (aba Actions -> Run workflow), apontando para a tag desejada.
+# Para reativar o disparo por tag, devolva o gatilho abaixo:
+#   on:
+#     push:
+#       tags: ["v*"]
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
 
-# NOTA: a publicacao no npm e MANUAL por ora. Os dois caminhos automatizados
-# estao bloqueados por bugs do lado do npm:
+# NOTA: este workflow NAO publica — ele roda os gates de release e confere que a tag bate com a
+# versao do package.json. A publicacao no npm e MANUAL por ora, porque os dois caminhos
+# automatizados estao bloqueados por bugs do lado do npm:
 #   - OIDC Trusted Publishing: token exchange retorna "package not found" (npm/cli#8730)
 #   - Granular token com bypass_2fa: registry retorna E403 (npm/cli#8869)
 # A conta usa 2FA por passkey (npm removeu TOTP), entao o publish manual usa recovery code.
@@ -27,11 +33,18 @@ jobs:
       # Gates de qualidade da tag de release (política do próprio MGR)
       - run: node bin/mgr.js validate
       - run: npm test
-      # Confere que a tag bate com a versão do package.json
+      # Confere que a tag bate com a versão do package.json.
+      # Com workflow_dispatch, o run pode ser disparado sobre um branch (default da UI) em vez de
+      # uma tag — nesse caso GITHUB_REF_NAME e o nome do branch e a comparação não faz sentido.
       - name: Verificar tag == versão
         run: |
-          TAG="${GITHUB_REF_NAME#v}"
           PKG=$(jq -r '.version' package.json)
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then
+            echo "Run disparado sobre '${GITHUB_REF_NAME}' (${GITHUB_REF_TYPE}), não sobre uma tag."
+            echo "Checagem tag == versão pulada. package.json: ${PKG}"
+            exit 0
+          fi
+          TAG="${GITHUB_REF_NAME#v}"
           [ "$TAG" = "$PKG" ] || { echo "tag v$TAG != package.json $PKG"; exit 1; }
       - name: Instrucoes de publicacao manual
         run: |

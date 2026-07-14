@@ -7,6 +7,16 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
+## [0.3.8] - 2026-07-14
+### Alterado
+- Refactor (Humble Object): a coleta de prompts do `install` saiu do `bin/mgr.js` para
+  `src/prompts.js`, recebendo o adaptador de prompts **injetado** (clack no CLI, stub nos
+  testes). Comportamento inalterado.
+### Adicionado
+- Testes: smoke dos comandos do CLI (`status`/`update`/`uninstall`/`build`/`validate`/`list`/
+  `version`/`help`, dry-run e caminhos de erro) e da coleta de prompts **sem TTY**.
+  Cobertura de linhas: 81,44% → **96,95%** (todo o `src/` a 100%).
+
 ## [0.3.7] - 2026-07-08
 ### Corrigido
 - A fonte `shared/quality/regras-qualidade.md` agora é instalada (`_shared/quality/`) e o

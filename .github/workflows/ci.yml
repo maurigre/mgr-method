@@ -9,17 +9,42 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # O commitlint valida o RANGE de commits do PR; o checkout raso (default) nao
+          # enxerga os commits e o step falharia por nao achar o range.
+          fetch-depth: 0
       # LTS mais recente; o reporter lcov do node:test (cobertura) exige >= 22, atendido pelo LTS atual.
       - uses: actions/setup-node@v4
         with:
           node-version: "lts/*"
           cache: npm
       - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Convencao de commit (CONSTITUTION §5)
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            npx --no -- commitlint \
+              --from "${{ github.event.pull_request.base.sha }}" \
+              --to "${{ github.event.pull_request.head.sha }}" --verbose
+          else
+            npx --no -- commitlint --from HEAD~1 --to HEAD --verbose
+          fi
+
+      - name: Auditoria de dependencias
+        run: npm audit --audit-level=high
+
       - run: node bin/mgr.js validate
+
+      # Gate de cobertura: o script `coverage` traz --test-coverage-lines=95 e sai != 0 abaixo disso.
       - run: npm run coverage
+
       - name: Enviar cobertura ao Coveralls
         uses: coverallsapp/github-action@v2
         with:
           file: lcov.info
-          # Nao derruba o CI se o upload de cobertura falhar (ex: repo ainda nao habilitado no Coveralls)
+          # Coveralls e reporting, nao gate: nao derruba o CI se o upload falhar.
+          # Quem veta a queda de cobertura e o step acima (--test-coverage-lines).
           fail-on-error: false

@@ -55,13 +55,23 @@ código, execução **fiel ao plano**, review **ancorado em regra textual**.
   métrica. Cobertura é **métrica, não meta**. E **proibido excluir código da medição para
   maquiar o número** — o caminho é extrair a lógica e testá-la.
 
-### Adotados em 2026-07-14 — `[A IMPLEMENTAR]`
-| Gate | Alvo |
-|---|---|
-| **ESLint** | lint de JS/ESM no CI |
-| **Gate de cobertura** | limiar que **quebra o CI** — limiar `[A DEFINIR]` (sugestão ≥95% linhas) |
-| **Commitlint** | enforçar Conventional Commits **sem scope**; corpo ≤ 100 colunas |
-| **Auditoria de dependências** | `npm audit` (ou equivalente) no CI |
+### Gates automatizados (implementados em 2026-07-14 — ADR-0002)
+
+Cada um **quebra o build**. Aviso que não falha não é gate.
+
+| Gate | Como | Onde falha |
+|---|---|---|
+| **ESLint** | flat config (`eslint.config.js`) sobre `@eslint/js` recommended | `npm run lint` + CI |
+| **Gate de cobertura** | `--test-coverage-lines=95` (flag **nativa** do Node) — **linhas ≥ 95%**; branches **fora** do gate | `npm run coverage` + CI |
+| **Commitlint** | `config-conventional` + `scope-empty`, `body-leading-blank` e `no-ai-mention` | hook `commit-msg` (`.githooks/`) + CI |
+| **Auditoria de dependências** | `npm audit --audit-level=high` (deps **e** devDeps) | CI |
+
+**O hook local é conveniência; o gate real é o CI** — `--no-verify` contorna hook, CI não.
+
+**Dois invariantes desta constituição são enforçados pelo lint**, não pela disciplina:
+- **§2.1 (INV-2)** — `src/` importando `bin/` → `no-restricted-imports`.
+- **`bin/mgr.cjs` tem de continuar ES5** (roda **antes** do guard de versão: é ele que dá a
+  mensagem legível em Node < 22) → `ecmaVersion: 5` faz sintaxe moderna virar erro de parse.
 
 ## 5. Política de versionamento (git)
 

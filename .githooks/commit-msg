@@ -1,0 +1,6 @@
+#!/bin/sh
+# Gate local de convencao de commit (CONSTITUTION §5), via core.hooksPath.
+# Ativado pelo script `prepare` do package.json — sem husky, sem dependencia extra.
+# Este hook e conveniencia: falha cedo, na maquina do autor. O gate REAL e o CI,
+# porque `--no-verify` contorna hook local e o CI nao.
+npx --no -- commitlint --edit "$1"

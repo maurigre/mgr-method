@@ -19,11 +19,14 @@
     "README.md"
   ],
   "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "test": "node --test",
-    "coverage": "node --test --experimental-test-coverage --test-coverage-exclude='test/**' --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=lcov.info",
+    "coverage": "node --test --experimental-test-coverage --test-coverage-lines=95 --test-coverage-exclude='test/**' --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=lcov.info",
     "validate": "node bin/mgr.js validate",
     "build": "esbuild bin/mgr.js --bundle --minify --platform=node --format=esm --external:@clack/prompts --external:picocolors --outfile=dist/mgr.min.js",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "keywords": [
     "agent-skills",
@@ -41,12 +44,16 @@
   "homepage": "https://github.com/maurigre/mgr-method#readme",
   "bugs": {
     "url": "https://github.com/maurigre/mgr-method/issues"
-},
+  },
   "dependencies": {
     "@clack/prompts": "^1.7.0",
     "picocolors": "^1.1.1"
   },
   "devDependencies": {
-    "esbuild": "^0.24.0"
+    "@commitlint/cli": "^21.2.1",
+    "@commitlint/config-conventional": "^21.2.0",
+    "@eslint/js": "^10.0.1",
+    "esbuild": "^0.24.0",
+    "eslint": "^10.7.0"
   }
 }

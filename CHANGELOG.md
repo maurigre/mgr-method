@@ -3,6 +3,20 @@
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
+### Adicionado
+- **Gates de qualidade que quebram o build** (ADR-0002). Antes, o projeto não tinha linter algum,
+  a cobertura era medida mas não bloqueava nada, a convenção de commit era só disciplina humana e
+  CVEs não eram verificadas.
+  - **ESLint** (flat config): `npm run lint`, com gate no CI. Além do estilo, enforça dois
+    invariantes de arquitetura — `src/` nunca importa `bin/` (INV-2) e `bin/mgr.cjs` preso ao
+    **ES5** (é ele que dá a mensagem legível em Node < 22).
+  - **Gate de cobertura**: `--test-coverage-lines=95` (flag nativa do Node, sem dependência).
+    Linhas ≥ 95%; branches fora do gate.
+  - **Commitlint** (Conventional Commits **sem scope**, corpo ≤ 100 col, sem atribuição de autoria
+    a IA), via hook `commit-msg` em `.githooks/` + `core.hooksPath` — **sem husky** — e no CI.
+  - **Auditoria de dependências**: `npm audit --audit-level=high` no CI.
+- Nenhuma dependência de **runtime** adicionada; o pacote publicado não muda.
+
 ### Planejado
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).

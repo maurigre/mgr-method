@@ -95,10 +95,14 @@ Camadas concretas deste projeto (ver `02-architecture.md`):
 4. (TS-4) Testes: **`node:test`** nativo; objetos reais (TST-1).
 5. (TS-5) Stubs só na borda (adaptador de prompts, subprocesso) — sem matcher genérico (TST-5).
 6. (TS-6) Mutation: StrykerJS, focado em `src/` — `[A CONFIRMAR]`.
-7. (TS-7) Enforce de dependência (opt-in): `dependency-cruiser` ou `eslint-plugin-boundaries`
-   para proibir `src/ → bin/` — `[A IMPLEMENTAR]`.
+7. (TS-7) Enforce de dependência: **ativo** — `no-restricted-imports` (core do ESLint) proíbe
+   `src/ → bin/` (INV-2). `dependency-cruiser`/`eslint-plugin-boundaries` foram **rejeitados**:
+   duas camadas e uma regra não justificam a dependência (ADR-0002).
 8. (TS-8) Imutabilidade: `const`, objetos congelados quando fizer sentido; validação na criação.
-9. (TS-9) Lint: **ESLint** — `[A IMPLEMENTAR]` (adotado em 2026-07-14; ainda não configurado).
+9. (TS-9) Lint: **ESLint ativo** — `eslint.config.js` (flat config), `npm run lint`, gate no CI.
+10. (TS-10) `bin/mgr.cjs` **tem de continuar ES5** — roda antes do guard de versão e é ele que
+    entrega a mensagem legível em Node < 22. Enforçado por `ecmaVersion: 5` (sintaxe moderna =
+    erro de parse).
 
 ---
 
@@ -118,8 +122,9 @@ Camadas concretas deste projeto (ver `02-architecture.md`):
 
 - **Idiomas:** `strict` não se aplica (JS puro); evitar coerção implícita; união discriminada
   em vez de flags booleanas; `throw new Error("mensagem específica")`, nunca string.
-- **Estilo/lint:** **ESLint** (`[A IMPLEMENTAR]`). Convenções vigentes observadas no código:
-  2 espaços, aspas duplas, ponto e vírgula, `const`/`let` (nunca `var` no ESM).
+- **Estilo/lint:** **ESLint ativo** (`eslint.config.js`, `js.configs.recommended`) — `npm run lint`
+  é gate no CI. Convenções vigentes observadas no código: 2 espaços, aspas duplas, ponto e
+  vírgula, `const`/`let` (nunca `var` no ESM).
 
 ---
 

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import os from "node:os";
 import path from "node:path";
 import * as bundle from "../src/bundle.js";
-import { buildRuntime, buildSkill, installEngine } from "../src/builder.js";
+import { buildRuntime, buildSkill } from "../src/builder.js";
 import * as installer from "../src/installer.js";
 import * as catalog from "../src/catalog.js";
 import { collectInstallAnswers, CANCELLED } from "../src/prompts.js";

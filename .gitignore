@@ -12,3 +12,9 @@ exemplos/
 # Cobertura de testes
 lcov.info
 coverage/
+
+# Cache de análise do spec-init
+.spec-init/cache/
+
+# Auto-install do MGR (dogfooding) — conteúdo gerado por `mgr install`
+.claude/

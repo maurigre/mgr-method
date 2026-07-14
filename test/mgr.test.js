@@ -168,6 +168,34 @@ test("catálogo expõe arquiteturas e linguagens", () => {
   assert.ok(catalog.languages().includes("java"));
 });
 
+test("CLI: comandos básicos e ciclo de vida (smoke)", () => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const run = (args) => execFileSync("node", [bin, ...args], { encoding: "utf8" });
+
+  assert.match(run(["version"]), /mgr-method \d+\.\d+\.\d+/);
+  assert.ok(run(["list"]).includes("spec-init"));
+  assert.ok(run(["validate"]).includes("spec-init"));
+  assert.match(run(["help"]), /Uso: mgr/);
+
+  const repo = tmp();
+  const flags = ["--engine", "claude-code", "--arch", "hexagonal", "--project-id", "x", "-y"];
+
+  run(["install", ...flags, "--dry-run", repo]);
+  assert.ok(!existsSync(path.join(repo, ".claude")), "dry-run não escreve");
+
+  run(["install", ...flags, repo]);
+  assert.match(run(["status", repo]), /self-contained/);
+  assert.match(run(["update", repo]), /Re-sincronizado/);
+  assert.match(run(["uninstall", "-y", repo]), /Desinstalado/);
+
+  const out = path.join(tmp(), "rt");
+  run(["build", "--out", out]);
+  assert.ok(existsSync(path.join(out, "skills")));
+
+  assert.throws(() => run(["comando-inexistente"]), /Command failed/);
+  assert.throws(() => run(["install", "--flag-invalida"]), /Command failed/);
+});
+
 test("CLI: install migra instalação antiga sem crash (smoke)", () => {
   const repo = tmp();
   mkdirSync(path.join(repo, ".mgr-core", "skills"), { recursive: true });

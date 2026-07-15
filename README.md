@@ -68,7 +68,7 @@ spec-create ── por feature ──►  specs/<feature>/ 01-brief → 02-prd �
 adr-create  ── quando há decisão arquitetural (invocada automaticamente)
 diagnosing-bugs ─ bug difícil: loop de reprodução vermelho antes de qualquer hipótese
 junit-clean ── tasks de teste Java (13 regras)
-code-analyzer ─ review final, ancorado no guia DO projeto (zero regra inventada)
+code-analyzer ─ review final de 2 eixos: Standards (guia DO projeto) + Spec (cumpriu o pedido?)
 ```
 
 ### As skills
@@ -79,7 +79,7 @@ code-analyzer ─ review final, ancorado no guia DO projeto (zero regra inventad
 | `spec-create` | Evolui o projeto por feature: brief → PRD → spec → plano (P0/P1/P2 + DAG), com checkpoints bloqueantes; após a aprovação do plano, delega a implementação ao `spec-execute` e fecha com o completion. |
 | `spec-execute` | Executa o plano aprovado task a task (DAG), aplicando as premissas de desenvolvimento (segurança, performance, recursos, clareza — "vocabulário, não checklist") e o controle ativo de contexto (tiers S–F, arquivamento a 75%, hand-off, anti-compactação). Retomada direta de execução interrompida. |
 | `adr-create` | ADRs formato Nygard: auto-detecta diretório, numeração sequencial, imutabilidade de aceitos, modo avulso ou invocado. |
-| `code-analyzer` | Revisor rigoroso com **Restrição Crítica**: toda reprovação cita textualmente uma regra de `docs/sdd/09-review-rules.md`; problema real sem regra vira sugestão não-bloqueante. Agnóstico à arquitetura — as regras vêm do projeto. |
+| `code-analyzer` | Revisor rigoroso de **dois eixos**, reportados lado a lado: **Standards** (o código segue `docs/sdd/09-review-rules.md`?) e **Spec** (o código cumpriu a spec de origem?). **Restrição Crítica** nos dois: toda reprovação cita textualmente — a regra do guia ou a linha da spec; sem citação, não reprova (§3.1). Modelo de dois eixos adaptado de `code-review` de Matt Pocock ([MIT](https://github.com/mattpocock/skills)). |
 | `diagnosing-bugs` | Disciplina de diagnóstico de bug difícil: exige um loop de reprodução **vermelho** antes de qualquer hipótese (*sinal antes de teoria*), 3–5 hipóteses falsificáveis, teste de regressão antes do fix. Acha a causa e para (entrega o conserto ao `spec-create`). Adaptada de `diagnosing-bugs` de Matt Pocock ([MIT](https://github.com/mattpocock/skills)). |
 | `evidence-capture` | Registra evidências AI-First por funcionalidade (prompts, revisões, habilidades) em `specs/<feature>/ai/` + índice global; organiza e pergunta, nunca inventa. |
 | `junit-clean` | Testes Java padronizados por 13 regras (naming should+camelCase, sem herança, ParameterizedTest, AAA, boundary + MC/DC, Sonar-safe). |

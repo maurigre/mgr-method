@@ -3,6 +3,11 @@
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
+### Planejado
+- Suporte a Cursor como motor de instalação.
+- Modo scaffold (geração de estrutura de código no greenfield).
+
+## [0.4.0] - 2026-07-15
 ### Adicionado
 - **Skill `diagnosing-bugs`** no núcleo (sempre instalada) — disciplina de diagnóstico de bug
   difícil: exige um loop de reprodução **vermelho** antes de qualquer hipótese (*sinal antes de
@@ -26,10 +31,6 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
     a IA), via hook `commit-msg` em `.githooks/` + `core.hooksPath` — **sem husky** — e no CI.
   - **Auditoria de dependências**: `npm audit --audit-level=high` no CI.
 - Nenhuma dependência de **runtime** adicionada; o pacote publicado não muda.
-
-### Planejado
-- Suporte a Cursor como motor de instalação.
-- Modo scaffold (geração de estrutura de código no greenfield).
 
 ## [0.3.8] - 2026-07-14
 ### Alterado

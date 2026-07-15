@@ -1,11 +1,10 @@
 name: publish
-# DESATIVADO como gatilho automatico: nao roda mais sozinho ao empurrar uma tag v*.
-# Agora so executa sob demanda (aba Actions -> Run workflow), apontando para a tag desejada.
-# Para reativar o disparo por tag, devolva o gatilho abaixo:
-#   on:
-#     push:
-#       tags: ["v*"]
+# Dispara ao empurrar uma tag v* (roda os gates de release + a checagem tag==versao, guarda
+# contra publicar um numero que nao bate com o package.json) e tambem sob demanda
+# (Actions -> Run workflow), que pode apontar para uma tag ou um branch.
 on:
+  push:
+    tags: ["v*"]
   workflow_dispatch:
 
 # NOTA: este workflow NAO publica — ele roda os gates de release e confere que a tag bate com a

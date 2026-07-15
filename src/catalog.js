@@ -2,8 +2,16 @@
 // É a fonte da instalação SELETIVA — o instalador copia só o subconjunto que o projeto usa.
 
 // Núcleo do fluxo SDD (sempre instalado). code-analyzer entra por ser o revisor invocado
-// pelo spec-create.
-export const CORE = ["spec-init", "spec-create", "spec-execute", "adr-create", "code-analyzer"];
+// pelo spec-create; diagnosing-bugs, por ser a disciplina de diagnóstico de bug (útil em
+// qualquer projeto), fecha a lacuna do fluxo entre especificar/planejar/revisar.
+export const CORE = [
+  "spec-init",
+  "spec-create",
+  "spec-execute",
+  "adr-create",
+  "code-analyzer",
+  "diagnosing-bugs",
+];
 
 // Uma skill por arquitetura; instala apenas a escolhida.
 export const ARCHITECTURES = {

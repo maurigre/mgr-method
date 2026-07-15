@@ -13,7 +13,7 @@ import { collectInstallAnswers, CANCELLED } from "../src/prompts.js";
 import { validateAll, validateSkill, checkSkill } from "../src/validator.js";
 
 const tmp = () => mkdtempSync(path.join(os.tmpdir(), "mgr-"));
-const CORE = ["spec-init", "spec-create", "spec-execute", "adr-create", "code-analyzer"];
+const CORE = ["spec-init", "spec-create", "spec-execute", "adr-create", "code-analyzer", "diagnosing-bugs"];
 
 test("skills do fluxo SDD presentes e válidas", () => {
   const names = bundle.skillNames();

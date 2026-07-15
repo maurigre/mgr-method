@@ -4,6 +4,16 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 
 ## [Não lançado]
 ### Adicionado
+- **Skill `diagnosing-bugs`** no núcleo (sempre instalada) — disciplina de diagnóstico de bug
+  difícil: exige um loop de reprodução **vermelho** antes de qualquer hipótese (*sinal antes de
+  teoria*), 3–5 hipóteses falsificáveis e teste de regressão antes do fix. Acha a causa e para
+  (entrega o conserto ao `spec-create`). Adaptada de `diagnosing-bugs` de Matt Pocock (MIT).
+- **`code-analyzer` agora revisa dois eixos** — além de *Standards* (o código segue
+  `docs/sdd/09-review-rules.md`?), o novo eixo *Spec* verifica se o código **cumpriu a spec de
+  origem**. Reprova requisito ausente/parcial citando a linha da spec; scope creep vira reporte
+  não-bloqueante; sem spec, abstém-se. Modelo de dois eixos adaptado de `code-review` de Matt
+  Pocock (MIT); o *smell baseline* dele foi rejeitado por violar a política de "nunca inventar
+  regra".
 - **Gates de qualidade que quebram o build** (ADR-0002). Antes, o projeto não tinha linter algum,
   a cobertura era medida mas não bloqueava nada, a convenção de commit era só disciplina humana e
   CVEs não eram verificadas.

@@ -49,6 +49,10 @@ const en = {
 
   buildDone: (dest, names) => `runtime built at ${dest}: ${names}`,
 
+  bannerTagline: "AI Development Framework (SDD for coding agents)",
+  bannerInstaller: (version) => `Installer v${version}`,
+  bannerCreatedBy: (author, email) => `Created by ${author} · ${email}`,
+
   qEngines: "Which engines should receive the skills? (space marks, enter confirms)",
   qScope: "Installation scope?",
   scopeProjectHint: "in this repository",
@@ -128,6 +132,10 @@ const ptBR = {
   uninstalled: "Desinstalado.",
 
   buildDone: (dest, names) => `runtime construído em ${dest}: ${names}`,
+
+  bannerTagline: "AI Development Framework (SDD para agentes de código)",
+  bannerInstaller: (version) => `Instalador v${version}`,
+  bannerCreatedBy: (author, email) => `Criado por ${author} · ${email}`,
 
   qEngines: "Quais motores devem receber as skills? (espaço marca, enter confirma)",
   qScope: "Escopo da instalação?",

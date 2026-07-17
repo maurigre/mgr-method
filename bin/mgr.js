@@ -55,7 +55,7 @@ function bail(msg) { p.cancel(msg || M.aborted); process.exit(0); }
 
 async function cmdInstall(flags, positional) {
   const repo = path.resolve(positional[0] || ".");
-  printBanner();
+  printBanner(M);
   p.intro(pc.bgCyan(pc.black(" mgr install ")));
 
   const found = installer.detect(repo);
@@ -84,6 +84,9 @@ async function cmdInstall(flags, positional) {
     optional.push(...answers.optional);
     M = getMessages(userLanguage);
   }
+  // Sem TTY/-y e sem flag: herda o locale — nunca grava null em instalação nova
+  // (o backfill pt-BR do update é só para manifestos da era sem o campo).
+  userLanguage = userLanguage || detectUserLanguage(process.env);
   if (!engines.length) engines = ["claude-code"];
   scope = scope || "project";
   if (!SCOPES.includes(scope)) { p.log.error(M.invalidScope(scope)); process.exit(1); }
@@ -209,7 +212,7 @@ async function main() {
       case "version": case "--version": case "-v":
         console.log(`mgr-method ${bundle.readVersion()}`); return 0;
       case undefined: case "help": case "--help": case "-h":
-        printBanner(); process.stdout.write(M.help); return 0;
+        printBanner(M); process.stdout.write(M.help); return 0;
       default:
         console.error(M.unknownCommand(command)); process.stdout.write(M.help); return 1;
     }

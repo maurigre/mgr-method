@@ -332,12 +332,19 @@ test("collectInstallAnswers: não pergunta o que já veio por flag (--all-skills
 
 test("CLI: comandos básicos e ciclo de vida (smoke)", () => {
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
-  const run = (args) => execFileSync("node", [bin, ...args], { encoding: "utf8" });
+  // Locale fixado: as mensagens da CLI seguem o idioma (flag > manifesto > locale) e o
+  // ambiente do runner varia (dev pt_BR, CI C) — sem fixar, os asserts oscilariam.
+  const run = (args, env = {}) =>
+    execFileSync("node", [bin, ...args], { encoding: "utf8", env: { ...process.env, LC_ALL: "pt_BR.UTF-8", ...env } });
 
   assert.match(run(["version"]), /mgr-method \d+\.\d+\.\d+/);
   assert.ok(run(["list"]).includes("spec-init"));
   assert.ok(run(["validate"]).includes("spec-init"));
   assert.match(run(["help"]), /Uso: mgr/);
+  const helpEn = run(["help"], { LC_ALL: "en_US.UTF-8" });
+  assert.match(helpEn, /Usage: mgr/);
+  assert.match(helpEn, /SDD for coding agents/);
+  assert.match(helpEn, /Método Governado por Rastreabilidade/, "a marca não se traduz");
 
   const repo = tmp();
   const flags = ["--engine", "claude-code", "--arch", "hexagonal", "--project-id", "x", "-y"];
@@ -346,6 +353,11 @@ test("CLI: comandos básicos e ciclo de vida (smoke)", () => {
   assert.ok(!existsSync(path.join(repo, ".claude")), "dry-run não escreve");
 
   run(["install", ...flags, repo]);
+  assert.equal(
+    JSON.parse(readFileSync(path.join(repo, ".mgr-core", "manifest.json"), "utf8")).userLanguage,
+    "pt-BR",
+    "-y sem flag herda o locale, nunca null"
+  );
   assert.match(run(["status", repo]), /self-contained/);
   assert.match(run(["update", repo]), /Re-sincronizado/);
   assert.match(run(["uninstall", "-y", repo]), /Desinstalado/);

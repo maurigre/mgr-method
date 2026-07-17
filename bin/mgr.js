@@ -8,10 +8,15 @@ import * as installer from "../src/installer.js";
 import { buildRuntime } from "../src/builder.js";
 import { validateAll } from "../src/validator.js";
 import { printBanner } from "../src/banner.js";
-import { collectInstallAnswers, CANCELLED } from "../src/prompts.js";
+import { collectInstallAnswers, detectUserLanguage, CANCELLED } from "../src/prompts.js";
+import { getMessages } from "../src/messages.js";
 
 const SCOPES = ["project", "global"];
 const isTTY = process.stdin.isTTY && process.stdout.isTTY;
+
+// Tabela de mensagens da CLI. Começa pelo locale; o main refina com a precedência
+// flag --user-language > manifesto (project > global) > locale.
+let M = getMessages(detectUserLanguage(process.env));
 
 // Adaptador real de prompts; o src/prompts.js o recebe injetado (nos testes, um stub).
 const CLACK = {
@@ -38,7 +43,7 @@ function parseArgs(argv) {
     else if (a === "--project-id") flags.projectId = argv[++i];
     else if (a === "--all-skills") flags.allSkills = true;
     else if (a === "--out") flags.out = argv[++i];
-    else if (a.startsWith("-")) { console.error(`flag desconhecida: ${a}`); process.exit(1); }
+    else if (a.startsWith("-")) { console.error(M.unknownFlag(a)); process.exit(1); }
     else positional.push(a);
   }
   // compat: --engine both = os dois motores
@@ -46,7 +51,7 @@ function parseArgs(argv) {
   return { flags, positional };
 }
 
-function bail(msg) { p.cancel(msg || "abortado."); process.exit(0); }
+function bail(msg) { p.cancel(msg || M.aborted); process.exit(0); }
 
 async function cmdInstall(flags, positional) {
   const repo = path.resolve(positional[0] || ".");
@@ -56,7 +61,7 @@ async function cmdInstall(flags, positional) {
   const found = installer.detect(repo);
   if (found.length) {
     p.note(found.map((f) => `[${f.scope}] ${f.path} — ${f.count} skill(s)`).join("\n"),
-      "Skills existentes detectadas");
+      M.existingSkillsTitle);
   }
 
   const skillsDir = flags.skillsDir ? path.resolve(flags.skillsDir) : null;
@@ -72,48 +77,49 @@ async function cmdInstall(flags, positional) {
     const answers = await collectInstallAnswers(
       CLACK,
       { engines, scope, language, architecture, userLanguage, projectId },
-      { repo, allSkills: flags.allSkills, env: process.env }
+      { repo, allSkills: flags.allSkills, env: process.env, msg: M }
     );
     if (answers === CANCELLED) bail();
     ({ engines, scope, language, architecture, userLanguage, projectId } = answers);
     optional.push(...answers.optional);
+    M = getMessages(userLanguage);
   }
   if (!engines.length) engines = ["claude-code"];
   scope = scope || "project";
-  if (!SCOPES.includes(scope)) { p.log.error(`escopo inválido: ${scope}`); process.exit(1); }
+  if (!SCOPES.includes(scope)) { p.log.error(M.invalidScope(scope)); process.exit(1); }
 
   const prior = installer.detectPrior(scope, repo);
   if (prior) {
-    if (prior.model === "runtime-launcher") p.log.warn(`Instalação antiga (v${prior.version}, modelo runtime-launcher) detectada — será MIGRADA para o novo layout.`);
-    else p.log.warn("Instalação MGR existente detectada — será re-sincronizada.");
+    if (prior.model === "runtime-launcher") p.log.warn(M.oldInstallWarn(prior.version));
+    else p.log.warn(M.resyncWarn);
   }
 
   const plan = installer.planInstall(engines, scope, repo, { skillsDir, language, architecture, userLanguage, optional, all: flags.allSkills, projectId });
   p.note(
     [
-      `projeto:     ${plan.projectId}    escopo: ${plan.scope}`,
-      `motor(es):   ${plan.engines.join(", ")}`,
-      `linguagem:   ${plan.language || "—"}    arquitetura: ${plan.architecture || "—"}`,
-      `idioma:      ${plan.userLanguage || "—"}  ${pc.dim("(saída das skills: conversa e artefatos)")}`,
-      `config   →   ${installer.coreDir(plan.scope, plan.repo)}  ${pc.dim("(manifest.json + .env)")}`,
-      ...plan.targets.map((t) => `skills   →   ${t.dir}`),
-      `skills (${plan.skills.length}): ${plan.skills.join(", ")}`,
+      M.planProject(plan.projectId, plan.scope),
+      M.planEngines(plan.engines.join(", ")),
+      M.planStack(plan.language || "—", plan.architecture || "—"),
+      `${M.planOutput(plan.userLanguage || "—")}  ${pc.dim(M.planOutputHint)}`,
+      `${M.planConfig(installer.coreDir(plan.scope, plan.repo))}  ${pc.dim(M.planConfigHint)}`,
+      ...plan.targets.map((t) => M.planSkillsDir(t.dir)),
+      M.planSkills(plan.skills.length, plan.skills.join(", ")),
     ].join("\n"),
-    "Plano de instalação (autossuficiente por motor)"
+    M.planTitle
   );
 
-  if (flags.dryRun) { p.outro(pc.dim("(dry-run: nada foi escrito.)")); return 0; }
+  if (flags.dryRun) { p.outro(pc.dim(M.dryRun)); return 0; }
   if (isTTY && !flags.yes) {
-    const ok = await p.confirm({ message: "Confirmar instalação?" });
+    const ok = await p.confirm({ message: M.confirmInstall });
     if (p.isCancel(ok) || !ok) bail();
   }
 
   const s = p.spinner();
-  s.start("Instalando skills nos motores");
+  s.start(M.installing);
   const res = installer.execute(plan);
-  s.stop(`Skills instaladas em ${res.targets.map((t) => t.dir).join(" e ")}.`);
-  if (res.migrated) p.log.info(`Migração: modelo antigo removido (${res.migrated.removed.length} item(ns), incluindo .mgr-core).`);
-  p.outro(pc.green("Pronto! Comece com /spec-init e depois /spec-create por feature."));
+  s.stop(M.installedAt(res.targets.map((t) => t.dir).join(" · ")));
+  if (res.migrated) p.log.info(M.migrationInfo(res.migrated.removed.length));
+  p.outro(pc.green(M.done));
   return 0;
 }
 
@@ -123,18 +129,18 @@ function cmdStatus(_f, positional) {
   for (const scope of SCOPES) {
     for (const man of installer.installs(scope, repo)) {
       shown = true;
-      const model = man.model === "runtime-launcher" ? "runtime-launcher (ANTIGO — rode `mgr update` para migrar)" : (man.model || "self-contained");
+      const model = man.model === "runtime-launcher" ? M.statusOldModel : (man.model || "self-contained");
       console.log(pc.bold(`[${scope}]`) + ` MGR v${man.version} — ${(man.engines || [man.engine]).join(", ")} — ${model}`);
-      console.log(`  projeto: ${man.projectId || "—"}`);
-      console.log(`  config:  ${man.core}`);
-      if (man.language || man.architecture) console.log(`  stack:   linguagem=${man.language || "—"} arquitetura=${man.architecture || "—"}`);
-      if (man.userLanguage) console.log(`  idioma:  ${man.userLanguage}`);
-      for (const d of man.skillsDirs || [man.skillsDir]) if (d) console.log(`  skills:  ${d}`);
-      console.log(`  skills:  ${(man.skills || []).join(", ")}`);
-      console.log(`  em:      ${man.installedAt}`);
+      console.log(M.statusProject(man.projectId || "—"));
+      console.log(M.statusConfig(man.core));
+      if (man.language || man.architecture) console.log(M.statusStack(man.language || "—", man.architecture || "—"));
+      if (man.userLanguage) console.log(M.statusOutput(man.userLanguage));
+      for (const d of man.skillsDirs || [man.skillsDir]) if (d) console.log(M.statusSkillsDir(d));
+      console.log(M.statusSkills((man.skills || []).join(", ")));
+      console.log(M.statusInstalledAt(man.installedAt));
     }
   }
-  if (!shown) { console.log("Nenhuma instalação MGR encontrada (projeto ou global)."); return 1; }
+  if (!shown) { console.log(M.statusNone); return 1; }
   return 0;
 }
 
@@ -146,8 +152,8 @@ function cmdUpdate(flags, positional) {
       ? "global" : "project";
   }
   const res = installer.update(scope, repo);
-  if (res.migrated) console.log(pc.dim("(instalação antiga migrada para o novo layout)"));
-  console.log(pc.green(`Re-sincronizado (${scope}): ${res.skills.length} skills em ${res.targets.map((t) => t.dir).join(" e ")}.`));
+  if (res.migrated) console.log(pc.dim(M.updateMigrated));
+  console.log(pc.green(M.updateDone(scope, res.skills.length, res.targets.map((t) => t.dir).join(" · "))));
   return 0;
 }
 
@@ -155,19 +161,19 @@ async function cmdUninstall(flags, positional) {
   const repo = path.resolve(positional[0] || ".");
   const scope = flags.scope || "project";
   if (isTTY && !flags.yes) {
-    const ok = await p.confirm({ message: `Remover instalação MGR (${scope})? docs/ e specs/ serão preservados.`, initialValue: false });
+    const ok = await p.confirm({ message: M.uninstallConfirm(scope), initialValue: false });
     if (p.isCancel(ok) || !ok) bail();
   }
   const res = installer.uninstall(scope, repo);
-  for (const r of res.removed) console.log(pc.dim(`  removido: ${r}`));
-  console.log(pc.green("Desinstalado."));
+  for (const r of res.removed) console.log(pc.dim(M.removedItem(r)));
+  console.log(pc.green(M.uninstalled));
   return 0;
 }
 
 function cmdBuild(flags) {
   const dest = path.resolve(flags.out || "dist/mgr-runtime");
   const names = buildRuntime(dest);
-  console.log(`runtime construído em ${dest}: ${names.join(", ")}`);
+  console.log(M.buildDone(dest, names.join(", ")));
   return 0;
 }
 
@@ -183,25 +189,14 @@ function cmdValidate() {
   return ok ? 0 : 1;
 }
 
-const HELP = `MGR — Método Governado por Rastreabilidade
-
-Uso: mgr <comando> [opções]
-
-  install [repo]   instala as skills (seletivo) direto na pasta do motor
-                   (--engine claude-code|copilot|both, --scope, --language, --arch,
-                    --user-language, --project-id, --all-skills, --skills-dir, --dry-run, -y)
-  status [repo]    mostra o que está instalado
-  update [repo]    re-sincroniza (--scope)
-  uninstall [repo] remove as skills instaladas (--scope, -y)
-  build            gera um diretório com todo o conteúdo (--out)
-  validate         valida as SKILL.md
-  list             lista as skills
-  version          mostra a versão
-`;
-
 async function main() {
   const [, , command, ...rest] = process.argv;
   const { flags, positional } = parseArgs(rest);
+  // Refina o idioma da CLI: flag > manifesto (project > global) > locale (default acima).
+  const repo = path.resolve(positional[0] || ".");
+  const manifestLang = installer.detectPrior("project", repo)?.userLanguage
+    || installer.detectPrior("global", repo)?.userLanguage;
+  M = getMessages(flags.userLanguage || manifestLang || detectUserLanguage(process.env));
   try {
     switch (command) {
       case "install": return await cmdInstall(flags, positional);
@@ -214,12 +209,12 @@ async function main() {
       case "version": case "--version": case "-v":
         console.log(`mgr-method ${bundle.readVersion()}`); return 0;
       case undefined: case "help": case "--help": case "-h":
-        printBanner(); process.stdout.write(HELP); return 0;
+        printBanner(); process.stdout.write(M.help); return 0;
       default:
-        console.error(`comando desconhecido: ${command}\n`); process.stdout.write(HELP); return 1;
+        console.error(M.unknownCommand(command)); process.stdout.write(M.help); return 1;
     }
   } catch (e) {
-    console.error(pc.red(`erro: ${e.message}`));
+    console.error(pc.red(M.errorPrefix(e.message)));
     return 1;
   }
 }

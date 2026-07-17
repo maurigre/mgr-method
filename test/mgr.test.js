@@ -10,6 +10,7 @@ import { buildRuntime, buildSkill, resolveUserLanguage } from "../src/builder.js
 import * as installer from "../src/installer.js";
 import * as catalog from "../src/catalog.js";
 import { collectInstallAnswers, detectUserLanguage, CANCELLED } from "../src/prompts.js";
+import { getMessages } from "../src/messages.js";
 import { validateAll, validateSkill, checkSkill } from "../src/validator.js";
 
 const tmp = () => mkdtempSync(path.join(os.tmpdir(), "mgr-"));
@@ -186,6 +187,35 @@ test("update e uninstall exigem instalação existente", () => {
   assert.throws(() => installer.uninstall("project", repo), /nada a desinstalar/);
 });
 
+test("getMessages: en é o default e qualquer pt-* seleciona a tabela pt-BR", () => {
+  assert.equal(getMessages(null).aborted, "aborted.");
+  assert.equal(getMessages("en-US").aborted, "aborted.");
+  assert.equal(getMessages("es-ES").aborted, "aborted.");
+  assert.equal(getMessages("pt-BR").aborted, "abortado.");
+  assert.equal(getMessages("pt").confirmInstall, "Confirmar instalação?");
+  assert.equal(getMessages("PT-PT").uninstalled, "Desinstalado.");
+});
+
+test("collectInstallAnswers usa a tabela de mensagens injetada (pt-BR)", async () => {
+  const repo = tmp();
+  const vistas = [];
+  const ask = {
+    multiselect: async ({ message }) => { vistas.push(message); return ["claude-code"]; },
+    select: async ({ message }) => {
+      vistas.push(message);
+      return /Arquitetura/.test(message) ? "layered" : /Linguagem/.test(message) ? "outra" : /Idioma de saída/.test(message) ? "pt-BR" : "project";
+    },
+    confirm: async () => false,
+    text: async () => "meu-projeto",
+    isCancel: () => false,
+  };
+  const out = await collectInstallAnswers(ask, {}, { repo, msg: getMessages("pt-BR") });
+  assert.ok(vistas.some((m) => /motores devem receber/.test(m)));
+  assert.ok(vistas.some((m) => /Idioma de saída/.test(m)));
+  assert.equal(out.userLanguage, "pt-BR");
+  assert.equal(out.architecture, "layered");
+});
+
 test("resolveUserLanguage troca o token pelo idioma ou pelo fallback", () => {
   const linha = `Output language: ${catalog.USER_LANGUAGE_TOKEN} — always.`;
   assert.equal(resolveUserLanguage(linha, "pt-BR"), "Output language: pt-BR — always.");
@@ -230,7 +260,7 @@ test("collectInstallAnswers: coleta completa via prompter injetado", async () =>
   const ask = {
     multiselect: async () => ["claude-code"],
     select: async ({ message }) =>
-      /Arquitetura/.test(message) ? "clean" : /Linguagem/.test(message) ? "java" : /Idioma/.test(message) ? "pt-BR" : "project",
+      /architecture/i.test(message) ? "clean" : /programming/.test(message) ? "java" : /Output language/.test(message) ? "pt-BR" : "project",
     confirm: async () => true,
     text: async () => "meu-projeto",
     isCancel: () => false,
@@ -250,7 +280,7 @@ test("collectInstallAnswers: linguagem 'outra' vira null; projectId vazio cai no
   const ask = {
     multiselect: async () => ["copilot"],
     select: async ({ message }) =>
-      /Arquitetura/.test(message) ? "onion" : /Linguagem/.test(message) ? "outra" : /Idioma/.test(message) ? "outro" : "project",
+      /architecture/i.test(message) ? "onion" : /programming/.test(message) ? "outra" : /Output language/.test(message) ? "outro" : "project",
     confirm: async () => false,
     text: async () => "",
     isCancel: () => false,
@@ -268,12 +298,12 @@ test("collectInstallAnswers: cancelamento em qualquer prompt retorna CANCELLED",
   const cancelando = (onde) => ({
     multiselect: async () => (onde === "engines" ? CANCEL : ["claude-code"]),
     select: async ({ message }) => {
-      if (onde === "scope" && /Escopo/.test(message)) return CANCEL;
-      if (onde === "arch" && /Arquitetura/.test(message)) return CANCEL;
-      if (onde === "lang" && /Linguagem/.test(message)) return CANCEL;
-      if (onde === "userlang" && /Idioma/.test(message)) return CANCEL;
-      if (/Idioma/.test(message)) return "en";
-      return /Arquitetura/.test(message) ? "hexagonal" : /Linguagem/.test(message) ? "java" : "project";
+      if (onde === "scope" && /scope/.test(message)) return CANCEL;
+      if (onde === "arch" && /architecture/i.test(message)) return CANCEL;
+      if (onde === "lang" && /programming/.test(message)) return CANCEL;
+      if (onde === "userlang" && /Output language/.test(message)) return CANCEL;
+      if (/Output language/.test(message)) return "en";
+      return /architecture/i.test(message) ? "hexagonal" : /programming/.test(message) ? "java" : "project";
     },
     confirm: async () => (onde === "optional" ? CANCEL : false),
     text: async () => (onde === "pid" ? CANCEL : "x"),

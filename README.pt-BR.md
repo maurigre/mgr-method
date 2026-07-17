@@ -33,7 +33,8 @@ A instalação é **seletiva**: o TUI pergunta os motores, o escopo, a **linguag
 `MGR_PROJECT_ID`. Só as skills que o projeto usa são copiadas — o núcleo (`spec-init`,
 `spec-create`, `spec-execute`, `adr-create`, `code-analyzer`, `diagnosing-bugs`), a skill
 da arquitetura escolhida (ex.: `arch-hexagonal`) e os helpers da linguagem (ex.:
-`junit-clean` em Java).
+`junit-clean` em Java). A própria CLI fala `en` e `pt-BR`, seguindo a mesma preferência
+(flag > manifesto > locale).
 
 Não-interativo / ciclo de vida:
 

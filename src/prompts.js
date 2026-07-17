@@ -3,6 +3,7 @@
 // stub. Assim a lógica das perguntas fica testável sem TTY, e o bin/ fica só com a cola.
 import path from "node:path";
 import * as catalog from "./catalog.js";
+import { getMessages } from "./messages.js";
 
 export const CANCELLED = Symbol("cancelled");
 
@@ -18,7 +19,8 @@ export function detectUserLanguage(env = {}) {
 
 // ask: { multiselect, select, confirm, text, isCancel }
 // current: valores já vindos das flags (não perguntamos o que já foi informado)
-export async function collectInstallAnswers(ask, current = {}, { repo = ".", allSkills = false, env = {} } = {}) {
+// msg: tabela de mensagens (getMessages) — injetada pela borda, como o ask
+export async function collectInstallAnswers(ask, current = {}, { repo = ".", allSkills = false, env = {}, msg = getMessages("en") } = {}) {
   const out = {
     engines: current.engines?.length ? current.engines : [],
     scope: current.scope || null,
@@ -31,7 +33,7 @@ export async function collectInstallAnswers(ask, current = {}, { repo = ".", all
 
   if (!out.engines.length) {
     const sel = await ask.multiselect({
-      message: "Quais motores devem receber as skills? (espaço marca, enter confirma)",
+      message: msg.qEngines,
       options: [
         { value: "claude-code", label: "Claude Code", hint: ".claude/skills" },
         { value: "copilot", label: "GitHub Copilot", hint: ".github/skills" },
@@ -45,10 +47,10 @@ export async function collectInstallAnswers(ask, current = {}, { repo = ".", all
 
   if (!out.scope) {
     const s = await ask.select({
-      message: "Escopo da instalação?",
+      message: msg.qScope,
       options: [
-        { value: "project", label: "project", hint: "neste repositório" },
-        { value: "global", label: "global", hint: "para todos os projetos (home)" },
+        { value: "project", label: "project", hint: msg.scopeProjectHint },
+        { value: "global", label: "global", hint: msg.scopeGlobalHint },
       ],
     });
     if (ask.isCancel(s)) return CANCELLED;
@@ -57,7 +59,7 @@ export async function collectInstallAnswers(ask, current = {}, { repo = ".", all
 
   if (!allSkills && !out.architecture) {
     const a = await ask.select({
-      message: "Arquitetura do projeto? (define qual skill arch-* instalar)",
+      message: msg.qArchitecture,
       options: catalog.architectures().map((k) => ({ value: k, label: k })),
       initialValue: "hexagonal",
     });
@@ -67,10 +69,10 @@ export async function collectInstallAnswers(ask, current = {}, { repo = ".", all
 
   if (!allSkills && !out.language) {
     const l = await ask.select({
-      message: "Linguagem principal? (define helpers específicos)",
+      message: msg.qLanguage,
       options: [
         ...catalog.languages().map((k) => ({ value: k, label: k })),
-        { value: "outra", label: "outra / não especificar", hint: "sem helpers de linguagem" },
+        { value: "outra", label: msg.langOtherLabel, hint: msg.langOtherHint },
       ],
       initialValue: catalog.languages()[0],
     });
@@ -85,18 +87,18 @@ export async function collectInstallAnswers(ask, current = {}, { repo = ".", all
     const detected = detectUserLanguage(env);
     const initial = detected.startsWith("en") ? "en" : detected.startsWith("pt") ? "pt-BR" : "outro";
     const ul = await ask.select({
-      message: "Idioma de saída? (conversa e artefatos gerados pelas skills)",
+      message: msg.qOutputLanguage,
       options: [
-        { value: "en", label: "en", hint: "inglês" },
-        { value: "pt-BR", label: "pt-BR", hint: "português do Brasil" },
-        { value: "outro", label: "outro", hint: "informar qual" },
+        { value: "en", label: "en", hint: msg.outEnHint },
+        { value: "pt-BR", label: "pt-BR", hint: msg.outPtHint },
+        { value: "outro", label: msg.outOtherLabel, hint: msg.outOtherHint },
       ],
       initialValue: initial,
     });
     if (ask.isCancel(ul)) return CANCELLED;
     if (ul === "outro") {
       const t = await ask.text({
-        message: "Qual idioma? (ex.: es-ES, fr-FR)",
+        message: msg.qWhichLanguage,
         initialValue: detected,
         placeholder: detected,
       });
@@ -109,7 +111,7 @@ export async function collectInstallAnswers(ask, current = {}, { repo = ".", all
 
   if (!allSkills) {
     const ev = await ask.confirm({
-      message: "Incluir a skill opcional evidence-capture?",
+      message: msg.qOptionalEvidence,
       initialValue: false,
     });
     if (ask.isCancel(ev)) return CANCELLED;
@@ -119,7 +121,7 @@ export async function collectInstallAnswers(ask, current = {}, { repo = ".", all
   if (!out.projectId) {
     const base = path.basename(path.resolve(repo));
     const pid = await ask.text({
-      message: "MGR_PROJECT_ID (identificador do projeto para a memória do mgr-code)?",
+      message: msg.qProjectId,
       initialValue: base,
       placeholder: base,
     });

@@ -29,7 +29,8 @@ skills use to talk to you and to generate artifacts — suggested from your loca
 `MGR_PROJECT_ID`. Only the skills the project uses are copied — the core (`spec-init`,
 `spec-create`, `spec-execute`, `adr-create`, `code-analyzer`, `diagnosing-bugs`), the
 chosen architecture's skill (e.g. `arch-hexagonal`) and the language helpers (e.g.
-`junit-clean` for Java).
+`junit-clean` for Java). The CLI itself speaks `en` and `pt-BR`, following the same
+preference (flag > manifest > locale).
 
 Non-interactive / lifecycle:
 

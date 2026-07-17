@@ -1,7 +1,7 @@
 {
   "name": "mgr-method",
-  "version": "0.4.0",
-  "description": "MGR — Método Governado por Rastreabilidade: framework de desenvolvimento dirigido por especificação (plan/develop/qa) para agentes de código, portável entre Claude Code e GitHub Copilot.",
+  "version": "0.5.0",
+  "description": "MGR — Método Governado por Rastreabilidade (Traceability-Governed Method): specification-driven development framework for coding agents, portable between Claude Code and GitHub Copilot.",
   "type": "module",
   "bin": {
     "mgr": "bin/mgr.cjs",

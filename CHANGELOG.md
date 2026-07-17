@@ -7,6 +7,29 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
+## [0.5.0] - 2026-07-17
+### Alterado
+- **Inglês é o idioma canônico do conteúdo distribuído** (ADR-0003): as 12 skills, os
+  templates, as fontes compartilhadas, o `sdd-check.sh` e o README foram traduzidos pt→en sob
+  protocolo de integridade (verificador estrutural + inventário load-bearing conferido por
+  arquivo — nada perdido na tradução). Reverte a convenção "skills em pt-BR".
+- Fontes co-localizadas renomeadas: `_shared/arch/cross-cutting-rules.md` e
+  `_shared/quality/quality-rules.md`; template de revisões do `evidence-capture` vira
+  `reviews.md` (a skill honra o nome exigido pelo enunciado do desafio, ex.: `revisoes.md`).
+  Os nomes pt legados são removidos automaticamente no `install`/`update`.
+- `description` do pacote em inglês (vitrine npm), mantendo a marca.
+### Adicionado
+- **Idioma de saída configurável (`userLanguage`)**: o `mgr install` pergunta em que idioma as
+  skills conversam e geram artefatos (default sugerido do locale; flag `--user-language`);
+  gravado no manifesto e resolvido em toda `SKILL.md` via token `{{MGR_USER_LANGUAGE}}` na
+  linha `Output language:`. Regra normativa QUAL-7 na fonte única de qualidade. Instalação
+  existente que rodar `update` herda `pt-BR` silenciosamente — experiência preservada.
+- **CLI bilíngue** (`src/messages.js`): todas as mensagens da borda em en (default) e pt-BR,
+  selecionadas por flag > manifesto > locale — TUI, plano, status, help, banner (tagline e
+  créditos; a marca não se traduz) e erros da borda. `README.pt-BR.md` com links cruzados.
+- Ferramenta de dev `scripts/check-translation.mjs` (fora do tarball): compara traduções com o
+  original no git — headings, IDs de regra, blocos de código, listas, tabelas e frontmatter.
+
 ## [0.4.0] - 2026-07-15
 ### Adicionado
 - **Skill `diagnosing-bugs`** no núcleo (sempre instalada) — disciplina de diagnóstico de bug

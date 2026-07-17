@@ -1,96 +1,101 @@
 ---
 name: arch-clean
-description: Provedora do guia de regras de review para projetos com Clean Architecture (Robert C. Martin), AGNÓSTICA À LINGUAGEM. Invocada pelo spec-init com a linguagem do projeto; monta docs/sdd/09-review-rules.md combinando os princípios da Clean Architecture (Regra da Dependência, os anéis Entities/Use Cases/Interface Adapters/Frameworks) com as regras transversais compartilhadas (design, testes, logs, mutation e o perfil da linguagem). Regras numeradas com IDs estáveis e citáveis textualmente pelo code-analyzer. Use quando a arquitetura do projeto for Clean Architecture.
+description: Provider of the review rules guide for projects with Clean Architecture (Robert C. Martin), LANGUAGE-AGNOSTIC. Invoked by spec-init with the project's language; assembles docs/sdd/09-review-rules.md combining the Clean Architecture principles (the Dependency Rule, the Entities/Use Cases/Interface Adapters/Frameworks rings) with the shared cross-cutting rules (design, tests, logs, mutation and the language profile). Rules numbered with stable IDs, textually citable by the code-analyzer. Use when the project's architecture is Clean Architecture.
 ---
 
-# arch-clean — Guia de regras (Clean Architecture)
+# arch-clean — Rules guide (Clean Architecture)
 
-Você fornece o guia de regras de review da Clean Architecture. O guia é **agnóstico à
-linguagem**: os princípios (Regra da Dependência e os anéis) valem em qualquer stack; as
-regras de ferramenta vêm do perfil da linguagem, na fonte transversal.
+Output language: {{MGR_USER_LANGUAGE}} — all user-facing interaction and generated artifacts
+use this language; generated file names and rule IDs stay in English.
 
-## Objetivo
+You provide the Clean Architecture review rules guide. The guide is **language-agnostic**:
+the principles (the Dependency Rule and the rings) hold in any stack; the tool rules come
+from the language profile, in the cross-cutting source.
 
-Organizar o sistema para que as regras de negócio permaneçam independentes de frameworks, UI,
-banco e serviços externos, com as dependências de código-fonte sempre apontando para dentro.
-A arquitetura existe para preservar as **políticas** (decisões de negócio) dos **detalhes**
-(mecanismos de implementação).
+## Goal
 
-## Como montar o guia (instrução ao invocador — geralmente o `spec-init`)
+Organize the system so the business rules remain independent of frameworks, UI, database
+and external services, with source-code dependencies always pointing inward. The
+architecture exists to preserve the **policies** (business decisions) from the **details**
+(implementation mechanisms).
 
-Você recebe a **linguagem do projeto**. Gere `docs/sdd/09-review-rules.md` **concatenando**, na
-ordem:
+## How to assemble the guide (instruction to the invoker — usually `spec-init`)
 
-1. **Fundamentação Teórica** e **Princípios** (deste arquivo — verbatim).
-2. **Regras Obrigatórias**, **Boas Práticas**, **Anti-patterns transversais** e **Checklist**
-   da fonte única `{{MGR_ARCH_RULES}}`, gravando **apenas o perfil da linguagem**
-   do projeto.
-3. **Anti-patterns específicos de Clean** (deste arquivo) e **Referências** (deste arquivo).
+You receive the **project's language**. Generate `docs/sdd/09-review-rules.md` by
+**concatenating**, in order:
 
-Regras de gravação: preserve os IDs (`INV-n`, `DES-n`, etc.) e nomes de seção — o
-`code-analyzer` cita "seção — Regra N" textualmente. Não altere as regras transversais aqui;
-elas são mantidas em um único lugar.
+1. **Theoretical Foundations** and **Principles** (from this file — verbatim).
+2. **Mandatory rules**, **Good Practices**, **Cross-cutting anti-patterns** and
+   **Checklist** from the single source `{{MGR_ARCH_RULES}}`, recording **only the
+   project's language profile**.
+3. **Clean-specific anti-patterns** (from this file) and **References** (from this file).
 
-## Fundamentação Teórica
+Recording rules: preserve the IDs (`INV-n`, `DES-n`, etc.) and section names — the
+`code-analyzer` cites "section — Rule N" textually. Do not alter the cross-cutting rules
+here; they are maintained in a single place.
 
-Baseada exclusivamente nas obras de **Robert C. Martin** (*Clean Architecture*, 2017; artigo
-*The Clean Architecture*, 2012), com raízes nas arquiteturas que a originaram: Hexagonal
-(Cockburn), Onion (Palermo) e Screaming Architecture (Martin). Toda arquitetura busca:
-independência de frameworks, da UI, do banco, de serviços externos, e facilidade de testes.
-Ideia central — separar **Policies** (decisões de negócio: cálculo de imposto/desconto/frete,
-validações) de **Details** (Spring, PostgreSQL, Kafka, REST, Redis…): os detalhes servem às
-políticas, nunca o contrário. A Clean Architecture **não** determina número de camadas,
-estrutura de diretórios, framework, ORM ou linguagem — isso pertence à implementação.
+## Theoretical Foundations
 
-## Princípios (invariantes da Clean Architecture)
+Based exclusively on the works of **Robert C. Martin** (*Clean Architecture*, 2017; the
+article *The Clean Architecture*, 2012), rooted in the architectures that originated it:
+Hexagonal (Cockburn), Onion (Palermo) and Screaming Architecture (Martin). Every one of
+these architectures seeks: independence from frameworks, the UI, the database, external
+services, and ease of testing. Central idea — separate **Policies** (business decisions:
+tax/discount/freight calculation, validations) from **Details** (Spring, PostgreSQL, Kafka,
+REST, Redis…): the details serve the policies, never the other way around. Clean
+Architecture does **not** determine the number of layers, directory structure, framework,
+ORM or language — that belongs to the implementation.
 
-1. (INV-1) **Regra da Dependência**: dependências de código-fonte só apontam para dentro
-   ("Source code dependencies can only point inward"). Camadas internas nunca conhecem as
-   externas; nenhum nome declarado num anel externo é mencionado por um interno.
-2. (INV-2) Os anéis, do mais interno ao mais externo: **Entities** (Enterprise Business Rules)
+## Principles (Clean Architecture invariants)
+
+1. (INV-1) **The Dependency Rule**: source-code dependencies only point inward
+   ("Source code dependencies can only point inward"). Inner layers never know the outer
+   ones; no name declared in an outer ring is mentioned by an inner one.
+2. (INV-2) The rings, innermost to outermost: **Entities** (Enterprise Business Rules)
    → **Use Cases** (Application Business Rules) → **Interface Adapters** (Controllers,
-   Presenters, Gateways, Mappers) → **Frameworks & Drivers** (banco, web, UI, mensageria). O
-   número de anéis pode variar; o que não muda é a Regra da Dependência.
-3. (INV-3) **Entities** encapsulam as regras de negócio corporativas, as mais estáveis; não
-   conhecem banco, REST, Spring, Kafka, JPA nem JSON — apenas regra de negócio.
-4. (INV-4) **Use Cases** contêm as regras específicas da aplicação: orquestram o fluxo,
-   coordenam entities e usam abstrações; não conhecem infraestrutura.
-5. (INV-5) **Interface Adapters** convertem formatos entre o mundo externo e o núcleo
-   (Controllers, Presenters, Gateways, Mappers); não contêm regra de negócio.
-6. (INV-6) **Frameworks & Drivers** ficam no anel externo como detalhe substituível
-   ("frameworks são ferramentas, não devem definir sua arquitetura").
-7. (INV-7) **Fronteiras (Boundaries) e Ports**: a comunicação entre anéis passa por contratos
-   definidos no núcleo — **Input Boundary**, **Output Boundary** e **Gateway** (repositórios,
-   clientes HTTP, mensageria). O fluxo de controle pode sair do centro, mas a dependência de
-   código continua apontando para dentro (inversão de dependência).
-8. (INV-8) **Dados que cruzam fronteiras** são estruturas simples e isoladas (DTOs, records,
-   structs, objetos imutáveis, primitivos). Nunca transporte Entities, linhas de banco ou
-   tipos que carreguem dependência arquitetural através de uma fronteira.
+   Presenters, Gateways, Mappers) → **Frameworks & Drivers** (database, web, UI,
+   messaging). The number of rings may vary; what never changes is the Dependency Rule.
+3. (INV-3) **Entities** encapsulate the enterprise business rules, the most stable ones;
+   they know no database, REST, Spring, Kafka, JPA or JSON — only business rules.
+4. (INV-4) **Use Cases** contain the application-specific rules: they orchestrate the flow,
+   coordinate entities and use abstractions; they know no infrastructure.
+5. (INV-5) **Interface Adapters** convert formats between the external world and the core
+   (Controllers, Presenters, Gateways, Mappers); they contain no business rules.
+6. (INV-6) **Frameworks & Drivers** stay in the outer ring as a replaceable detail
+   ("frameworks are tools, they must not define your architecture").
+7. (INV-7) **Boundaries and Ports**: communication between rings goes through contracts
+   defined in the core — **Input Boundary**, **Output Boundary** and **Gateway**
+   (repositories, HTTP clients, messaging). The flow of control may leave the center, but
+   the code dependency keeps pointing inward (dependency inversion).
+8. (INV-8) **Data crossing boundaries** is simple, isolated structures (DTOs, records,
+   structs, immutable objects, primitives). Never carry Entities, database rows or types
+   bearing an architectural dependency across a boundary.
 
-## Anti-patterns específicos de Clean
+## Clean-specific anti-patterns
 
-Além dos anti-patterns transversais, reprovam nesta arquitetura:
+Beyond the cross-cutting anti-patterns, these reprove in this architecture:
 
-- Entities utilizando Spring ou JPA.
-- Controllers contendo regras de negócio.
-- Use Cases utilizando `JpaRepository` ou `EntityManager`.
-- Domínio retornando `ResponseEntity` (ou tipo equivalente de framework web).
-- Framework sendo importado pelo domínio.
-- Estrutura de diretórios que revela tecnologia (`controller`/`service`/`repository`) em vez
-  do negócio (ver Screaming Architecture nas Boas Práticas).
+- Entities using Spring or JPA.
+- Controllers containing business rules.
+- Use Cases using `JpaRepository` or `EntityManager`.
+- The domain returning `ResponseEntity` (or an equivalent web-framework type).
+- A framework imported by the domain.
+- A directory structure that reveals technology (`controller`/`service`/`repository`)
+  instead of the business (see Screaming Architecture in the Good Practices).
 
 ## Enforcement
 
-Codifique os `INV` acima na ferramenta de arch-lint do perfil da linguagem (ArchUnit/Java,
-NetArchTest/C#, import-linter/Python, go-arch-lint/Go, dependency-cruiser/TS), seguindo a
-"Governança do enforcement" das Boas Práticas transversais (guard-rail; nunca enfraquecer;
-mudança de regra só via `adr-create`). Ruleset concreto `[ADAPTADO — validar com o time]`;
-referência validada de estilo: Hexagonal + Java + ArchUnit (na `arch-hexagonal`).
+Encode the `INV` above in the language profile's arch-lint tool (ArchUnit/Java,
+NetArchTest/C#, import-linter/Python, go-arch-lint/Go, dependency-cruiser/TS), following
+the cross-cutting Good Practices' "Enforcement governance" (a guard-rail; never weaken;
+rule changes only via `adr-create`). Concrete ruleset
+`[ADAPTED — validate with the team]`; validated style reference: Hexagonal + Java +
+ArchUnit (in `arch-hexagonal`).
 
-## Referências Oficiais
+## Official References
 
-- Martin, Robert C. *Clean Architecture: A Craftsman's Guide to Software Structure and Design*.
-  Prentice Hall, 2017.
-- Martin, Robert C. *The Clean Architecture* (artigo), 2012.
-- Arquiteturas relacionadas: *Hexagonal Architecture* (Alistair Cockburn); *Onion
+- Martin, Robert C. *Clean Architecture: A Craftsman's Guide to Software Structure and
+  Design*. Prentice Hall, 2017.
+- Martin, Robert C. *The Clean Architecture* (article), 2012.
+- Related architectures: *Hexagonal Architecture* (Alistair Cockburn); *Onion
   Architecture* (Jeffrey Palermo); *Screaming Architecture* (Robert C. Martin).

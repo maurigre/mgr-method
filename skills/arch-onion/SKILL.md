@@ -1,88 +1,93 @@
 ---
 name: arch-onion
-description: Provedora do guia de regras de review para projetos com Onion Architecture (Jeffrey Palermo), AGNÓSTICA À LINGUAGEM. Invocada pelo spec-init com a linguagem do projeto; monta docs/sdd/09-review-rules.md combinando os princípios da Onion (modelo de objeto no centro, interfaces no núcleo, acoplamento em direção ao centro) com as regras transversais compartilhadas (design, testes, logs, mutation e o perfil da linguagem). Regras numeradas com IDs estáveis e citáveis textualmente pelo code-analyzer. Use quando a arquitetura do projeto for Onion.
+description: Provider of the review rules guide for projects with Onion Architecture (Jeffrey Palermo), LANGUAGE-AGNOSTIC. Invoked by spec-init with the project's language; assembles docs/sdd/09-review-rules.md combining the Onion principles (object model at the center, interfaces in the core, coupling toward the center) with the shared cross-cutting rules (design, tests, logs, mutation and the language profile). Rules numbered with stable IDs, textually citable by the code-analyzer. Use when the project's architecture is Onion.
 ---
 
-# arch-onion — Guia de regras (Onion Architecture)
+# arch-onion — Rules guide (Onion Architecture)
 
-Você fornece o guia de regras de review da Onion Architecture. O guia é **agnóstico à
-linguagem**: os princípios valem em qualquer stack; as regras de ferramenta vêm do perfil da
-linguagem, na fonte transversal.
+Output language: {{MGR_USER_LANGUAGE}} — all user-facing interaction and generated artifacts
+use this language; generated file names and rule IDs stay in English.
 
-## Objetivo
+You provide the Onion Architecture review rules guide. The guide is **language-agnostic**:
+the principles hold in any stack; the tool rules come from the language profile, in the
+cross-cutting source.
 
-Organizar o sistema em camadas concêntricas com um **modelo de objeto de domínio independente
-no centro**, empurrando infraestrutura, UI e persistência para a borda externa, de modo que o
-acoplamento aponte sempre para o centro e o núcleo permaneça testável sem infraestrutura.
+## Goal
 
-## Como montar o guia (instrução ao invocador — geralmente o `spec-init`)
+Organize the system in concentric layers with an **independent domain object model at the
+center**, pushing infrastructure, UI and persistence to the outer edge, so that coupling
+always points toward the center and the core remains testable without infrastructure.
 
-Você recebe a **linguagem do projeto**. Gere `docs/sdd/09-review-rules.md` **concatenando**, na
-ordem:
+## How to assemble the guide (instruction to the invoker — usually `spec-init`)
 
-1. **Fundamentação Teórica** e **Princípios** (deste arquivo — verbatim).
-2. **Regras Obrigatórias**, **Boas Práticas**, **Anti-patterns transversais** e **Checklist**
-   da fonte única `{{MGR_ARCH_RULES}}`, gravando **apenas o perfil da linguagem**
-   do projeto.
-3. **Anti-patterns específicos de Onion** (deste arquivo) e **Referências** (deste arquivo).
+You receive the **project's language**. Generate `docs/sdd/09-review-rules.md` by
+**concatenating**, in order:
 
-Regras de gravação: preserve os IDs (`INV-n`, `DES-n`, etc.) e nomes de seção — o
-`code-analyzer` cita "seção — Regra N" textualmente. Não altere as regras transversais aqui;
-elas são mantidas em um único lugar.
+1. **Theoretical Foundations** and **Principles** (from this file — verbatim).
+2. **Mandatory rules**, **Good Practices**, **Cross-cutting anti-patterns** and
+   **Checklist** from the single source `{{MGR_ARCH_RULES}}`, recording **only the
+   project's language profile**.
+3. **Onion-specific anti-patterns** (from this file) and **References** (from this file).
 
-## Fundamentação Teórica
+Recording rules: preserve the IDs (`INV-n`, `DES-n`, etc.) and section names — the
+`code-analyzer` cites "section — Rule N" textually. Do not alter the cross-cutting rules
+here; they are maintained in a single place.
 
-Baseada na série original de **Jeffrey Palermo** (*The Onion Architecture*, 2008). A ideia
-central é inverter o acoplamento do **layered/N-tier tradicional**: em vez de tudo depender do
-banco na base, o **modelo de domínio** fica no centro e a infraestrutura (banco, UI,
-persistência) é empurrada para a borda externa, como detalhe substituível. As interfaces são
-declaradas nas camadas internas e implementadas pelas externas, garantindo que o núcleo não
-dependa de nenhum mecanismo de infraestrutura.
+## Theoretical Foundations
 
-## Princípios (invariantes da Onion Architecture)
+Based on **Jeffrey Palermo's** original series (*The Onion Architecture*, 2008). The
+central idea is to invert the coupling of the **traditional layered/N-tier**: instead of
+everything depending on the database at the base, the **domain model** sits at the center
+and the infrastructure (database, UI, persistence) is pushed to the outer edge, as a
+replaceable detail. Interfaces are declared in the inner layers and implemented by the
+outer ones, guaranteeing the core depends on no infrastructure mechanism.
 
-Os quatro tenets de Palermo (INV-3 a INV-6) são o núcleo citável.
+## Principles (Onion Architecture invariants)
 
-1. (INV-1) **Regra da dependência**: o acoplamento aponta sempre para o centro. Camadas
-   externas dependem das internas; as internas não têm conhecimento das externas.
-2. (INV-2) Camadas concêntricas, do centro para a borda: **Domain Model** (modelo de
-   objeto/entidades) → **Domain Services** → **Application Services** → borda externa (UI,
-   Infraestrutura, Persistência, Testes). O número de camadas pode variar; a borda externa é
-   reservada à infraestrutura.
-3. (INV-3) A aplicação é construída em torno de um **modelo de objeto independente** (Domain
-   Model no centro), sem dependência de infraestrutura. (tenet 1)
-4. (INV-4) **Interfaces são definidas nas camadas internas e implementadas pelas externas**
-   (inversão de dependência): contratos (repositórios, gateways) pertencem ao núcleo; as
-   implementações vivem na borda. (tenet 2)
-5. (INV-5) Cada camada depende apenas das camadas **mais centrais** que ela; nunca de uma mais
-   externa. (tenet 3)
-6. (INV-6) O núcleo (Domain Model + Domain/Application Services) **compila e roda separado da
-   infraestrutura** — testável isoladamente. (tenet 4)
-7. (INV-7) Infraestrutura, UI, persistência e testes ficam na **borda externa** como detalhe
-   substituível; o banco é detalhe de borda, não o centro.
+Palermo's four tenets (INV-3 to INV-6) are the citable core.
 
-## Anti-patterns específicos de Onion
+1. (INV-1) **Dependency rule**: coupling always points toward the center. Outer layers
+   depend on inner ones; inner layers have no knowledge of the outer ones.
+2. (INV-2) Concentric layers, center to edge: **Domain Model** (object model/entities) →
+   **Domain Services** → **Application Services** → outer edge (UI, Infrastructure,
+   Persistence, Tests). The number of layers may vary; the outer edge is reserved for
+   infrastructure.
+3. (INV-3) The application is built around an **independent object model** (Domain Model
+   at the center), with no infrastructure dependency. (tenet 1)
+4. (INV-4) **Interfaces are defined in the inner layers and implemented by the outer ones**
+   (dependency inversion): contracts (repositories, gateways) belong to the core; the
+   implementations live at the edge. (tenet 2)
+5. (INV-5) Each layer depends only on layers **more central** than itself; never on a more
+   outer one. (tenet 3)
+6. (INV-6) The core (Domain Model + Domain/Application Services) **compiles and runs
+   separately from the infrastructure** — testable in isolation. (tenet 4)
+7. (INV-7) Infrastructure, UI, persistence and tests stay on the **outer edge** as a
+   replaceable detail; the database is an edge detail, not the center.
 
-Além dos anti-patterns transversais, reprovam nesta arquitetura:
+## Onion-specific anti-patterns
 
-- Domain Model dependendo de infraestrutura, ORM ou framework.
-- Interface de repositório/gateway declarada na borda em vez de no núcleo (viola INV-4).
-- Camada interna referenciando/importando uma camada mais externa (viola INV-5).
-- Application Service acessando banco ou HTTP diretamente em vez de via interface do núcleo.
-- Persistência tratada como camada central/base em vez de borda externa (recaída no
-  layered/N-tier tradicional).
+Beyond the cross-cutting anti-patterns, these reprove in this architecture:
+
+- The Domain Model depending on infrastructure, an ORM or a framework.
+- A repository/gateway interface declared at the edge instead of the core (violates INV-4).
+- An inner layer referencing/importing a more outer layer (violates INV-5).
+- An Application Service accessing the database or HTTP directly instead of via a core
+  interface.
+- Persistence treated as the central/base layer instead of the outer edge (a relapse into
+  traditional layered/N-tier).
 
 ## Enforcement
 
-Codifique os `INV` acima na ferramenta de arch-lint do perfil da linguagem (ArchUnit/Java,
-NetArchTest/C#, import-linter/Python, go-arch-lint/Go, dependency-cruiser/TS), seguindo a
-"Governança do enforcement" das Boas Práticas transversais (guard-rail; nunca enfraquecer;
-mudança de regra só via `adr-create`). Ruleset concreto `[ADAPTADO — validar com o time]`;
-referência validada de estilo: Hexagonal + Java + ArchUnit (na `arch-hexagonal`).
+Encode the `INV` above in the language profile's arch-lint tool (ArchUnit/Java,
+NetArchTest/C#, import-linter/Python, go-arch-lint/Go, dependency-cruiser/TS), following
+the cross-cutting Good Practices' "Enforcement governance" (a guard-rail; never weaken;
+rule changes only via `adr-create`). Concrete ruleset
+`[ADAPTED — validate with the team]`; validated style reference: Hexagonal + Java +
+ArchUnit (in `arch-hexagonal`).
 
-## Referências Oficiais
+## Official References
 
-- Palermo, Jeffrey. *The Onion Architecture* (série, partes 1–4), 2008 —
+- Palermo, Jeffrey. *The Onion Architecture* (series, parts 1–4), 2008 —
   https://jeffreypalermo.com/2008/07/the-onion-architecture-part-1/
-- Arquiteturas relacionadas: *Hexagonal Architecture* (Alistair Cockburn); *Clean
+- Related architectures: *Hexagonal Architecture* (Alistair Cockburn); *Clean
   Architecture* (Robert C. Martin).

@@ -1,9 +1,9 @@
-# Execução — <feature>
+# Execution — <feature>
 
-<!-- Log em tempo real. Um bloco por task concluída (formato do arquivamento tier E): -->
+<!-- Real-time log. One block per completed task (tier E archiving format): -->
 
-## Task <id> — <título> ✔
-**Arquivos:** <lista>
-**Decisões tomadas:** <lista>
-**Testes:** <resultado>
-**Observações:** <se houver>
+## Task <id> — <title> ✔
+**Files:** <list>
+**Decisions taken:** <list>
+**Tests:** <result>
+**Notes:** <if any>

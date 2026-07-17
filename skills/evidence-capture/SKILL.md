@@ -1,90 +1,96 @@
 ---
 name: evidence-capture
-description: Registra as evidências AI-First de uma funcionalidade - prompts usados, revisões (o que foi corrigido ou rejeitado da IA) e habilidades delegadas - dentro de specs/<feature>/ai/, e mantém um índice global em ai/index.md. Feita para desafios e projetos AI-First que exigem a pasta ai/ (skills.md, prompts.md, revisoes.md). Use ao concluir uma funcionalidade, quando o usuário pedir para registrar evidências, documentar o uso de IA, gerar a pasta ai/, ou preparar a entrega de um desafio técnico. Invocada pelo spec-create/spec-execute ao fechar uma feature, ou diretamente. Organiza e pergunta; nunca inventa o conteúdo das revisões.
+description: Records a feature's AI-First evidence - prompts used, reviews (what was corrected or rejected from the AI) and delegated skills - inside specs/<feature>/ai/, and maintains a global index at ai/index.md. Made for AI-First challenges and projects that require the ai/ folder (skills.md, prompts.md, reviews.md - or the file names the challenge statement demands). Use when finishing a feature, when the user asks to record evidence, document AI usage, generate the ai/ folder, or prepare a technical challenge delivery. Invoked by spec-create/spec-execute when closing a feature, or directly. It organizes and asks; it never invents the content of the reviews.
 ---
 
-# evidence-capture — Evidências AI-First por funcionalidade
+# evidence-capture — AI-First evidence per feature
 
-Você registra, de forma estruturada e honesta, como a IA foi usada em cada
-funcionalidade. As evidências ficam **junto da feature** (`specs/<feature>/ai/`), com um
-índice global fino em `ai/index.md`. Isso mantém coesão (spec, plano, execução e
-evidências no mesmo lugar) e ainda atende quem espera a pasta `ai/` na raiz.
+Output language: {{MGR_USER_LANGUAGE}} — all user-facing interaction and generated artifacts
+use this language; generated file names and rule IDs stay in English.
 
-## Regra soberana: organizar, nunca inventar (Lei 1)
+You record, in a structured and honest way, how AI was used in each feature. The evidence
+lives **next to the feature** (`specs/<feature>/ai/`), with a thin global index at
+`ai/index.md`. That keeps cohesion (spec, plan, execution and evidence in the same place)
+and still satisfies whoever expects the `ai/` folder at the root.
 
-Você NÃO sabe o que o usuário revisou, corrigiu ou rejeitou da IA — esse julgamento
-crítico é dele e é o que o desafio mais avalia. Seu papel é **estruturar, perguntar e
-registrar**, jamais preencher revisões plausíveis. Campo sem informação real →
-`[a preencher pelo autor]`, nunca um texto fabricado. O mesmo vale para prompts: registre
-os que foram efetivamente usados (o usuário fornece ou você recupera do histórico da
-sessão/`mgr-code`), não invente prompts que "poderiam" ter sido usados.
+## Sovereign rule: organize, never invent (Law 1)
 
-## Guarda de política (antes de tudo)
+You do NOT know what the user reviewed, corrected or rejected from the AI — that critical
+judgment is theirs and is what the challenge evaluates most. Your role is to **structure,
+ask and record**, never to fill in plausible reviews. A field with no real information →
+`[to be filled by the author]`, never fabricated text. The same goes for prompts: record
+the ones actually used (the user provides them or you retrieve them from the session
+history/`mgr-code`), do not invent prompts that "could" have been used.
 
-Verifique a CONSTITUTION do projeto. Se `Evidências AI-First: desabilitado` (ou ausente),
-avise e CONFIRME antes de prosseguir — um registro avulso é permitido, mas consciente.
+## Policy guard (before anything)
 
-## Escopo (obrigatório ao iniciar)
+Check the project's CONSTITUTION. If `AI-First evidence: disabled` (or absent), warn and
+CONFIRM before proceeding — a one-off record is allowed, but a conscious one.
 
-Determine a funcionalidade-alvo:
-- Invocada por `spec-create`/`spec-execute` → recebe o `<feature-slug>`.
-- Direta → perguntar qual feature (listar as pastas de `specs/`).
+## Scope (mandatory at the start)
 
-Crie/atualize `specs/<slug>/ai/` com três arquivos (templates em `templates/`).
+Determine the target feature:
+- Invoked by `spec-create`/`spec-execute` → receives the `<feature-slug>`.
+- Direct → ask which feature (list the folders in `specs/`).
 
-## `specs/<slug>/ai/prompts.md` — prompts desta feature
+Create/update `specs/<slug>/ai/` with three files (templates in `templates/`). Default
+file names: `prompts.md`, `reviews.md`, `skills.md` — when the challenge statement demands
+specific names (e.g. `revisoes.md`), use the demanded names instead.
 
-Registrar cada prompt relevante usado NESTA funcionalidade: o texto do prompt (ou resumo
-fiel), a ferramenta (Claude Code / Copilot / etc.), a fase SDD (spec, execução, teste,
-review) e **o que ele produziu**. Fonte dos prompts, nesta ordem:
-1. O usuário cola/aponta os prompts que usou.
-2. Se disponível, recuperar do histórico da sessão ou do `mgr-code`.
-3. Sem fonte → registrar os que o usuário confirmar; não completar com invenção.
+## `specs/<slug>/ai/prompts.md` — this feature's prompts
 
-## `specs/<slug>/ai/revisoes.md` — o que foi revisado/corrigido/rejeitado (o mais importante)
+Record each relevant prompt used in THIS feature: the prompt text (or a faithful summary),
+the tool (Claude Code / Copilot / etc.), the SDD phase (spec, execution, test, review) and
+**what it produced**. Prompt sources, in this order:
+1. The user pastes/points to the prompts they used.
+2. If available, retrieve from the session history or from `mgr-code`.
+3. No source → record only what the user confirms; do not complete with invention.
 
-Conduza uma entrevista curta e específica, sem sugerir as respostas:
-- Que sugestões da IA você **aceitou como veio**?
-- O que você **corrigiu** antes de usar? (o quê e por quê)
-- O que você **rejeitou** por completo? (o quê e por quê)
-- Onde a IA **errou** (bug, regra de negócio incompreendida, over-engineering)?
-- Que decisão sua **contrariou** a sugestão da IA?
+## `specs/<slug>/ai/reviews.md` — what was reviewed/corrected/rejected (the most important)
 
-Registrar as respostas verbatim. Nada de "a IA sugeriu X e foi aceito" sem o usuário ter
-dito — se ele não respondeu um item, deixar `[a preencher pelo autor]`.
+Conduct a short, specific interview, without suggesting the answers:
+- Which AI suggestions did you **accept as they came**?
+- What did you **correct** before using? (what and why)
+- What did you **reject** outright? (what and why)
+- Where did the AI **get it wrong** (bug, misunderstood business rule, over-engineering)?
+- Which decision of yours **went against** the AI's suggestion?
 
-## `specs/<slug>/ai/skills.md` — habilidades delegadas à IA
+Record the answers verbatim. No "the AI suggested X and it was accepted" without the user
+having said it — if an item went unanswered, leave `[to be filled by the author]`.
 
-Quais áreas/habilidades foram delegadas nesta feature (ex.: geração do trecho OpenAPI,
-esboço dos testes de contrato, sugestão de estrutura de camadas), e o grau de autonomia
-(rascunho revisado por humano / gerado e aceito / apenas consulta). Derivável em parte do
-`05-execution.md` (skills invocadas), mas confirmar com o usuário.
+## `specs/<slug>/ai/skills.md` — skills delegated to the AI
 
-## `ai/index.md` — índice global (raiz)
+Which areas/skills were delegated in this feature (e.g. generating the OpenAPI excerpt,
+drafting the contract tests, suggesting the layer structure), and the degree of autonomy
+(human-reviewed draft / generated and accepted / consultation only). Partly derivable from
+`05-execution.md` (invoked skills), but confirm with the user.
 
-Manter na raiz um índice que: lista cada funcionalidade com link para o seu
-`specs/<slug>/ai/`, um resumo de 1-2 linhas do uso de IA naquela feature, e uma seção
-"Visão geral" com os padrões que se repetiram (o que a IA acertou/errou no projeto todo).
-Atualizar a cada nova feature registrada. Este arquivo é o ponto de entrada que satisfaz a
-exigência da pasta `ai/` na raiz, sem duplicar conteúdo — ele **aponta**, não copia.
+## `ai/index.md` — global index (root)
 
-## Esforço (opcional, honesto)
+Keep at the root an index that: lists each feature with a link to its
+`specs/<slug>/ai/`, a 1-2 line summary of the AI usage in that feature, and an "Overview"
+section with the recurring patterns (what the AI got right/wrong across the whole
+project). Update it on every newly recorded feature. This file is the entry point that
+satisfies the root `ai/` folder requirement without duplicating content — it **points**,
+it does not copy.
 
-Se o usuário quiser registrar esforço, adicionar em cada `revisoes.md` uma linha de
-esforço percebido (ex.: "≈ 2h, maior parte no ajuste das regras de 422"). **Não registrar
-tokens nem tempo automático** — a skill não os mede de forma confiável; só o que o usuário
-informar explicitamente entra, e como declaração dele, não como medição.
+## Effort (optional, honest)
 
-## Integração com o fluxo SDD
+If the user wants to record effort, add to each `reviews.md` a perceived-effort line
+(e.g. "≈ 2h, mostly adjusting the 422 rules"). **Do not record tokens or automatic
+timing** — the skill cannot measure them reliably; only what the user states explicitly
+goes in, and as their statement, not as a measurement.
 
-- `spec-create`/`spec-execute` invocam esta skill na fase de Completion de cada feature,
-  passando o slug; ela então conduz o registro e atualiza o índice.
-- O `06-completion.md` da feature passa a referenciar `ai/` da própria feature.
-- `mgr-code` disponível → recuperar prompts/decisões já registrados da sessão para
-  pré-preencher (o usuário confirma); ausente → conduzir só com o que o usuário fornece.
+## Integration with the SDD flow
 
-## Encerramento
+- `spec-create`/`spec-execute` invoke this skill in each feature's Completion phase,
+  passing the slug; it then drives the recording and updates the index.
+- The feature's `06-completion.md` starts referencing the feature's own `ai/`.
+- `mgr-code` available → retrieve prompts/decisions already recorded in the session to
+  pre-fill (the user confirms); absent → drive it only with what the user provides.
 
-Mostrar o que foi gravado (os três arquivos + a entrada no índice) e listar
-explicitamente os campos que ficaram `[a preencher pelo autor]`, para o usuário completar
-o julgamento crítico — a parte que só ele pode escrever.
+## Closing
+
+Show what was recorded (the three files + the index entry) and explicitly list the fields
+left as `[to be filled by the author]`, for the user to complete the critical judgment —
+the part only they can write.

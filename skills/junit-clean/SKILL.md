@@ -1,130 +1,132 @@
 ---
 name: junit-clean
-description: Padroniza testes unitários Java com JUnit 5 seguindo 13 regras estritas de qualidade, performance e clareza (sem herança, naming should+camelCase, sem comentários, ParameterizedTest, escopo próprio, AAA, profundidade boundary+MC/DC, assertThatThrownBy Sonar-safe). Opera em modo CRIAÇÃO (gerar testes novos), REFATORAÇÃO (limpar testes existentes) ou MISTO. Use quando o usuário pedir para criar, gerar, padronizar, limpar ou refatorar testes unitários Java, transformar em parametrizado, ou remover DisplayName e comentários. Também invocada pelo spec-create em tasks de teste de projetos Java.
+description: Standardizes Java unit tests with JUnit 5 following 13 strict rules of quality, performance and clarity (no inheritance, should+camelCase naming, no comments, ParameterizedTest, self-contained scope, AAA, boundary+MC/DC depth, Sonar-safe assertThatThrownBy). Operates in CREATION mode (generate new tests), REFACTOR mode (clean existing tests) or MIXED. Use when the user asks to create, generate, standardize, clean or refactor Java unit tests, convert to parameterized, or remove DisplayName and comments. Also invoked by spec-create on test tasks of Java projects.
 ---
 
-# junit-clean — Testes Java padronizados (13 regras)
+# junit-clean — Standardized Java tests (13 rules)
 
-Stack alvo: Java 8+ com JUnit 5 (Jupiter); AssertJ/Mockito/Hamcrest se detectados.
+Output language: {{MGR_USER_LANGUAGE}} — all user-facing interaction and generated artifacts
+use this language; generated file names and rule IDs stay in English.
 
-## Interação inicial (pular se invocada por outra skill com escopo definido)
+Target stack: Java 8+ with JUnit 5 (Jupiter); AssertJ/Mockito/Hamcrest if detected.
 
-1. **Modo:** criar testes novos · refatorar existentes · misto (refatorar adjacentes +
-   criar novos, com checkpoint entre os dois).
-2. **Origem do escopo:** classe/método específico (path) · spec
-   (`/specs/<feature>/03-spec.md`) · lista de comportamentos no chat · invocada.
-3. **Localização dos testes:** Maven/Gradle (`src/test/java/...`) · custom (perguntar).
+## Initial interaction (skip if invoked by another skill with a defined scope)
 
-Antes de gerar: detectar stack (versão do JUnit, presença de AssertJ, Mockito) e o
-estilo do projeto — se usa AssertJ, usar AssertJ; se só JUnit assertions, manter. Não
-forçar troca sem perguntar.
+1. **Mode:** create new tests · refactor existing ones · mixed (refactor adjacent +
+   create new, with a checkpoint between the two).
+2. **Scope source:** specific class/method (path) · spec
+   (`/specs/<feature>/03-spec.md`) · list of behaviors in the chat · invoked.
+3. **Test location:** Maven/Gradle (`src/test/java/...`) · custom (ask).
 
-## AS 13 REGRAS (não-negociáveis; violação exige override explícito do usuário)
+Before generating: detect the stack (JUnit version, presence of AssertJ, Mockito) and the
+project style — if it uses AssertJ, use AssertJ; if only JUnit assertions, keep them. Do
+not force a switch without asking.
 
-| # | Regra | Verificação |
+## THE 13 RULES (non-negotiable; a violation requires an explicit user override)
+
+| # | Rule | Verification |
 |---|-------|-------------|
-| 1 | Sem subclasses | `extends` não aparece em classes de teste |
-| 2 | Naming `should...When...` camelCase | Sem `@DisplayName`, sem underscores |
-| 3 | Sem comentários | Nenhum `//` dentro de métodos de teste |
-| 4 | `@ParameterizedTest` quando aplicável | Casos similares consolidados |
-| 5 | Escopo próprio + sem `@TestInstance(PER_CLASS)` | Lifecycle PER_METHOD |
-| 6 | Sem constantes globais | Sem `private static final` de dados de teste |
-| 7 | Limpos, claros, performáticos | Sem `Thread.sleep`, sem `SpringBootTest` desnecessário |
-| 8 | Métodos ≤ 25 linhas | Testes grandes quebrados ou refatorados |
-| 9 | Sem métodos estáticos | Exceto `@MethodSource` quando necessário |
-| 10 | Mockito flexível | `@Mock`/`@InjectMocks` OU `mock()`, ambos OK |
-| 11 | AAA com linhas em branco | 3 blocos visualmente separados |
-| 12 | Profundidade: branches + edges + exceptions + interações | 4 dimensões cobertas |
-| 13 | `assertThatThrownBy` Sonar-safe | Apenas 1 invocação no lambda |
+| 1 | No subclasses | `extends` does not appear in test classes |
+| 2 | `should...When...` camelCase naming | No `@DisplayName`, no underscores |
+| 3 | No comments | No `//` inside test methods |
+| 4 | `@ParameterizedTest` when applicable | Similar cases consolidated |
+| 5 | Self-contained scope + no `@TestInstance(PER_CLASS)` | PER_METHOD lifecycle |
+| 6 | No global constants | No `private static final` of test data |
+| 7 | Clean, clear, performant | No `Thread.sleep`, no unnecessary `SpringBootTest` |
+| 8 | Methods ≤ 25 lines | Big tests split or refactored |
+| 9 | No static methods | Except `@MethodSource` when needed |
+| 10 | Flexible Mockito | `@Mock`/`@InjectMocks` OR `mock()`, both OK |
+| 11 | AAA with blank lines | 3 visually separated blocks |
+| 12 | Depth: branches + edges + exceptions + interactions | 4 dimensions covered |
+| 13 | Sonar-safe `assertThatThrownBy` | Only 1 invocation in the lambda |
 
-### Detalhamento essencial
+### Essential details
 
-**1. Sem subclasses:** nada de `extends AbstractTest/BaseTest` nem superclasse abstrata
-de setup. Alternativas: `@BeforeEach` na própria classe, métodos privados de instância,
+**1. No subclasses:** no `extends AbstractTest/BaseTest` nor an abstract setup
+superclass. Alternatives: `@BeforeEach` in the class itself, private instance methods,
 fixtures via `@ParameterizedTest` + `@MethodSource`.
 
-**2. Naming:** `should<Resultado>When<Condicao>()` (ou `should<Resultado>()` se a
-condição é óbvia). SEMPRE camelCase, NUNCA underscores, verbo no infinitivo após should.
-Válidos: `shouldReturnEmptyWhenInputIsNull`, `shouldThrowProcessingExceptionWhenServiceClassificationFails`.
-Inválidos (refatorar): `should_returnEmpty_when_inputIsNull`, `testReturnEmpty`,
-`shouldReturnEmpty_whenInputIsNull`. Em parametrizado, o caso descritivo vai no atributo
-`name` do `@ParameterizedTest` — `@DisplayName` continua proibido.
+**2. Naming:** `should<Result>When<Condition>()` (or `should<Result>()` when the
+condition is obvious). ALWAYS camelCase, NEVER underscores, infinitive verb after should.
+Valid: `shouldReturnEmptyWhenInputIsNull`, `shouldThrowProcessingExceptionWhenServiceClassificationFails`.
+Invalid (refactor): `should_returnEmpty_when_inputIsNull`, `testReturnEmpty`,
+`shouldReturnEmpty_whenInputIsNull`. In parameterized tests, the descriptive case goes in
+the `@ParameterizedTest` `name` attribute — `@DisplayName` remains forbidden.
 
-**3. Sem comentários** em métodos de teste (nem `// arrange` / `// given`). Estrutura
-visual via linhas em branco (Regra 11). Exceção única: Javadoc de CLASSE para domínio
-complexo (ex.: regra de negócio CTe/GRIS) — em método, NUNCA.
+**3. No comments** in test methods (not even `// arrange` / `// given`). Visual structure
+via blank lines (Rule 11). Single exception: CLASS-level Javadoc for a complex domain
+(e.g. a CTe/GRIS business rule) — on a method, NEVER.
 
-**4. Parametrizar:** dois+ testes que diferem SÓ em entrada/saída → `@ParameterizedTest`.
-Fontes por preferência: `@ValueSource` → `@CsvSource` → `@CsvFileSource` →
-`@MethodSource` (objetos complexos) → `@EnumSource` → `@ArgumentsSource` (último caso).
+**4. Parameterize:** two+ tests differing ONLY in input/output → `@ParameterizedTest`.
+Sources by preference: `@ValueSource` → `@CsvSource` → `@CsvFileSource` →
+`@MethodSource` (complex objects) → `@EnumSource` → `@ArgumentsSource` (last resort).
 
-**5. Escopo próprio:** cada teste cria/recebe suas dependências; sem campo mutável
-compartilhado; `@BeforeEach` só para inicialização limpa; sem `@BeforeAll` com estado
-mutado; **proibido `@TestInstance(Lifecycle.PER_CLASS)`** — PER_METHOD padrão. Ordem de
-execução não importa; testes podem rodar em paralelo.
+**5. Self-contained scope:** each test creates/receives its dependencies; no shared
+mutable field; `@BeforeEach` only for clean initialization; no `@BeforeAll` with mutated
+state; **`@TestInstance(Lifecycle.PER_CLASS)` is forbidden** — PER_METHOD by default.
+Execution order must not matter; tests can run in parallel.
 
-**6. Sem constantes globais** de dados de teste — valores inline em cada teste.
-Exceções: configuração técnica imutável (`TIMEOUT_MS = 5000`) ou valor que TODO teste
-exige idêntico (raro). Compromisso aceitável para objeto usado em muitos testes: método
-helper de instância (`validAddress()`), nunca constante.
+**6. No global constants** of test data — inline values in each test.
+Exceptions: immutable technical configuration (`TIMEOUT_MS = 5000`) or a value EVERY test
+requires identically (rare). Acceptable compromise for an object used in many tests: an
+instance helper method (`validAddress()`), never a constant.
 
-**7. Performáticos:** sem código morto/imports não usados/mocks não chamados/assertions
-redundantes; sem `Thread.sleep` (usar Awaitility); sem `@SpringBootTest` quando teste
-unitário puro basta.
+**7. Performant:** no dead code/unused imports/uncalled mocks/redundant assertions; no
+`Thread.sleep` (use Awaitility); no `@SpringBootTest` when a pure unit test suffices.
 
-**8. ≤ 25 linhas** por método de teste.
+**8. ≤ 25 lines** per test method.
 
-**9. Sem métodos estáticos** (auxiliares ou de teste), exceto `@MethodSource`.
+**9. No static methods** (helpers or tests), except `@MethodSource`.
 
-**10. Mockito:** `@Mock`/`@InjectMocks` E `mock()` inline — ambos aceitos.
+**10. Mockito:** `@Mock`/`@InjectMocks` AND inline `mock()` — both accepted.
 
-**11. AAA:** Arrange, Act, Assert como 3 blocos separados por linha em branco (sem
-comentários marcando).
+**11. AAA:** Arrange, Act, Assert as 3 blocks separated by a blank line (no comments
+marking them).
 
-**12. Profundidade (critério objetivo):** cobrir as 4 dimensões — branches (MC/DC),
-edge cases (boundary), exceptions, e interações com colaboradores (verify com parâmetros
-reais). Cobertura como métrica, não meta: sem inflar com getters triviais.
+**12. Depth (objective criterion):** cover the 4 dimensions — branches (MC/DC),
+edge cases (boundary), exceptions, and interactions with collaborators (verify with real
+arguments). Coverage as a metric, not a goal: no inflating with trivial getters.
 
-**13. `assertThatThrownBy` Sonar-safe:** apenas UMA invocação dentro do lambda —
-preparar tudo antes, invocar só o método sob teste no lambda.
+**13. Sonar-safe `assertThatThrownBy`:** only ONE invocation inside the lambda —
+prepare everything before, invoke only the method under test in the lambda.
 
-## Modo REFATORAÇÃO — fluxo
+## REFACTOR mode — flow
 
-1. Ler os testes do escopo e produzir **relatório de violações** (tabela regra ×
-   ocorrências × severidade) + mudanças propostas por teste (antes/depois) + mudanças
-   estruturais (remoção de herança, constantes inlined).
-2. **CHECKPOINT (bloqueante):** aplicar todas · aplicar algumas (quais) · revisar uma ·
-   abortar.
-3. Aplicar arquivo por arquivo, rodando os testes após cada um. **Se um teste verde
-   quebrar após refatoração → REVERTER esse arquivo e reportar a causa** (refatoração
-   nunca quebra teste verde).
-4. Relatório final: arquivos modificados, testes verdes?, métricas (linhas removidas,
-   consolidações em parametrizado, constantes inlined).
+1. Read the tests in scope and produce a **violations report** (table of rule ×
+   occurrences × severity) + proposed changes per test (before/after) + structural
+   changes (inheritance removal, inlined constants).
+2. **CHECKPOINT (blocking):** apply all · apply some (which) · review one ·
+   abort.
+3. Apply file by file, running the tests after each. **If a green test breaks after the
+   refactor → REVERT that file and report the cause** (a refactor never breaks a green
+   test).
+4. Final report: modified files, tests green?, metrics (lines removed, parameterized
+   consolidations, inlined constants).
 
-## Modo CRIAÇÃO — fluxo
+## CREATION mode — flow
 
-Gerar testes cobrindo as 4 dimensões da Regra 12, seguindo as 13 regras, no estilo de
-assertion do projeto. **Não inventar comportamento:** testar o que o código FAZ, não o
-que deveria fazer; bug detectado no código sob teste → reportar, nunca corrigir em
-silêncio. Rodar os testes ao final e apresentar resultado.
+Generate tests covering Rule 12's 4 dimensions, following the 13 rules, in the project's
+assertion style. **Do not invent behavior:** test what the code DOES, not what it should
+do; a bug detected in the code under test → report it, never fix it silently. Run the
+tests at the end and present the result.
 
-## Invocação por outra skill (ex.: spec-create)
+## Invocation by another skill (e.g. spec-create)
 
-Recebe escopo + modo + localização; pula a interação inicial; aplica as 13 regras com o
-mesmo rigor. Em refatoração, o checkpoint de confirmação CONTINUA obrigatório (sobrepõe
-a invocação automática). Retorna: arquivos criados/modificados, resultado dos testes,
-cobertura.
+Receives scope + mode + location; skips the initial interaction; applies the 13 rules
+with the same rigor. In refactoring, the confirmation checkpoint REMAINS mandatory (it
+overrides the automatic invocation). Returns: files created/modified, test results,
+coverage.
 
-## Integração mgr-code
+## mgr-code integration
 
-Disponível → recuperar padrões de teste e overrides já registrados do projeto; gravar
-decisões de override ao final. Indisponível → prosseguir normalmente.
+Available → retrieve the project's recorded test patterns and overrides; record override
+decisions at the end. Unavailable → proceed normally.
 
-## Regras de comportamento
+## Behavior rules
 
-1. As 13 regras são lei; override só explícito e documentado.
-2. Detectar estilo do projeto antes de impor.
-3. Refatoração nunca quebra teste verde (reverter + reportar).
-4. Confirmação com diff antes de modificar; nada implícito.
-5. Performance importa: teste rápido roda mais vezes.
-6. Idioma do projeto (nomes em inglês → inglês).
+1. The 13 rules are law; overrides only explicit and documented.
+2. Detect the project style before imposing one.
+3. A refactor never breaks a green test (revert + report).
+4. Confirmation with a diff before modifying; nothing implicit.
+5. Performance matters: a fast test runs more often.
+6. The project's language (English names → English).

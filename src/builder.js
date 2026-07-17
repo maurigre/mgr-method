@@ -36,20 +36,40 @@ export function buildRuntime(runtimeDir, names) {
   return names;
 }
 
+// Resolve a linha-ponteiro de idioma de uma SKILL.md para o idioma de saída do usuário.
+export function resolveUserLanguage(text, userLanguage) {
+  return text.replaceAll(catalog.USER_LANGUAGE_TOKEN, userLanguage || catalog.USER_LANGUAGE_FALLBACK);
+}
+
 // Instala o conjunto de skills DIRETO na pasta do motor (modelo autossuficiente).
-// Copia a fonte transversal (_shared/arch) quando há skill de arquitetura e resolve o token
-// {{MGR_ARCH_RULES}} para o caminho passado em archRulesRef.
-export function installEngine(engineSkillsDir, skills, { archRulesRef } = {}) {
+// Copia a fonte transversal (_shared/arch) quando há skill de arquitetura, resolve o token
+// {{MGR_ARCH_RULES}} para o caminho passado em archRulesRef e o {{MGR_USER_LANGUAGE}} de
+// todas as skills para userLanguage.
+export function installEngine(engineSkillsDir, skills, { archRulesRef, userLanguage } = {}) {
   mkdirSync(engineSkillsDir, { recursive: true });
   const dirs = skills.map((name) => buildSkill(name, engineSkillsDir));
+
+  for (const name of skills) {
+    const md = path.join(engineSkillsDir, name, "SKILL.md");
+    const text = readFileSync(md, "utf8");
+    if (text.includes(catalog.USER_LANGUAGE_TOKEN)) {
+      writeFileSync(md, resolveUserLanguage(text, userLanguage), "utf8");
+    }
+  }
+
+  // Migração (CONSTITUTION §2.7): instalações ≤ 0.4.x têm a fonte co-locada com os nomes
+  // pt antigos; sem esta limpeza o update deixaria o arquivo órfão ao lado do novo.
+  for (const legacy of ["arch/regras-transversais.md", "quality/regras-qualidade.md"]) {
+    rmSync(path.join(engineSkillsDir, "_shared", legacy), { force: true });
+  }
 
   if (catalog.needsArchShared(skills)) {
     const dst = path.join(engineSkillsDir, "_shared", "arch");
     mkdirSync(dst, { recursive: true });
-    const shared = path.join(bundle.pkgDir("shared"), "arch", "regras-transversais.md");
-    cpSync(shared, path.join(dst, "regras-transversais.md"));
+    const shared = path.join(bundle.pkgDir("shared"), "arch", "cross-cutting-rules.md");
+    cpSync(shared, path.join(dst, "cross-cutting-rules.md"));
 
-    const ref = archRulesRef || path.join("_shared", "arch", "regras-transversais.md");
+    const ref = archRulesRef || path.join("_shared", "arch", "cross-cutting-rules.md");
     const archSkills = Object.values(catalog.ARCHITECTURES);
     for (const name of skills) {
       if (!archSkills.includes(name)) continue;
@@ -63,8 +83,8 @@ export function installEngine(engineSkillsDir, skills, { archRulesRef } = {}) {
   if (skills.includes("spec-init")) {
     const qdst = path.join(engineSkillsDir, "_shared", "quality");
     mkdirSync(qdst, { recursive: true });
-    cpSync(path.join(bundle.pkgDir("shared"), "quality", "regras-qualidade.md"),
-      path.join(qdst, "regras-qualidade.md"));
+    cpSync(path.join(bundle.pkgDir("shared"), "quality", "quality-rules.md"),
+      path.join(qdst, "quality-rules.md"));
   }
   return dirs;
 }

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Verifica os pré-requisitos do fluxo SDD num projeto (dependência do spec-create).
-# Uso: sdd-check.sh [raiz-do-projeto]     RC 0 = pronto; RC 1 = falta algo (motivo no stderr)
+# Checks the SDD flow prerequisites in a project (spec-create dependency).
+# Usage: sdd-check.sh [project-root]     RC 0 = ready; RC 1 = something missing (reason on stderr)
 set -eu
 ROOT="${1:-.}"
-fail() { echo "SDD INCOMPLETO: $1" >&2; exit 1; }
-[ -d "$ROOT/docs/sdd" ] || fail "docs/sdd/ não existe — rode a skill spec-init primeiro"
-[ -f "$ROOT/docs/sdd/CONSTITUTION.md" ] || fail "docs/sdd/CONSTITUTION.md ausente — rode spec-init e revise a constituição"
-ls "$ROOT"/docs/sdd/*.md >/dev/null 2>&1 || fail "docs/sdd/ vazio"
+fail() { echo "SDD INCOMPLETE: $1" >&2; exit 1; }
+[ -d "$ROOT/docs/sdd" ] || fail "docs/sdd/ does not exist — run the spec-init skill first"
+[ -f "$ROOT/docs/sdd/CONSTITUTION.md" ] || fail "docs/sdd/CONSTITUTION.md missing — run spec-init and review the constitution"
+ls "$ROOT"/docs/sdd/*.md >/dev/null 2>&1 || fail "docs/sdd/ is empty"
 if [ ! -f "$ROOT/docs/sdd/09-review-rules.md" ]; then
-  echo "aviso: docs/sdd/09-review-rules.md ausente — code-analyzer operará sem guia do projeto" >&2
+  echo "warning: docs/sdd/09-review-rules.md missing — code-analyzer will operate without the project guide" >&2
 fi
-echo "SDD OK: projeto inicializado ($ROOT/docs/sdd)"
+echo "SDD OK: project initialized ($ROOT/docs/sdd)"

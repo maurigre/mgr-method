@@ -6,14 +6,25 @@ import * as catalog from "./catalog.js";
 
 export const CANCELLED = Symbol("cancelled");
 
+// Sugere o idioma do usuário a partir do locale do ambiente (LC_ALL > LC_MESSAGES > LANG).
+// `xx_YY.enc` vira `xx-YY`; ausente, `C` ou `POSIX` viram "en". Recebe o env por parâmetro
+// (o núcleo não lê ambiente global; a borda passa process.env).
+export function detectUserLanguage(env = {}) {
+  const raw = env.LC_ALL || env.LC_MESSAGES || env.LANG || "";
+  const base = raw.split(/[.@]/)[0].trim();
+  if (!base || base === "C" || base === "POSIX") return "en";
+  return base.replaceAll("_", "-");
+}
+
 // ask: { multiselect, select, confirm, text, isCancel }
 // current: valores já vindos das flags (não perguntamos o que já foi informado)
-export async function collectInstallAnswers(ask, current = {}, { repo = ".", allSkills = false } = {}) {
+export async function collectInstallAnswers(ask, current = {}, { repo = ".", allSkills = false, env = {} } = {}) {
   const out = {
     engines: current.engines?.length ? current.engines : [],
     scope: current.scope || null,
     language: current.language || null,
     architecture: current.architecture || null,
+    userLanguage: current.userLanguage || null,
     projectId: current.projectId || null,
     optional: [],
   };
@@ -65,6 +76,35 @@ export async function collectInstallAnswers(ask, current = {}, { repo = ".", all
     });
     if (ask.isCancel(l)) return CANCELLED;
     out.language = l === "outra" ? null : l;
+  }
+
+  // Idioma da EXPERIÊNCIA (conversa e artefatos das skills) — não é a linguagem de
+  // programação acima. Perguntado mesmo com --all-skills: é sobre o usuário, não sobre
+  // o conjunto de skills.
+  if (!out.userLanguage) {
+    const detected = detectUserLanguage(env);
+    const initial = detected.startsWith("en") ? "en" : detected.startsWith("pt") ? "pt-BR" : "outro";
+    const ul = await ask.select({
+      message: "Idioma de saída? (conversa e artefatos gerados pelas skills)",
+      options: [
+        { value: "en", label: "en", hint: "inglês" },
+        { value: "pt-BR", label: "pt-BR", hint: "português do Brasil" },
+        { value: "outro", label: "outro", hint: "informar qual" },
+      ],
+      initialValue: initial,
+    });
+    if (ask.isCancel(ul)) return CANCELLED;
+    if (ul === "outro") {
+      const t = await ask.text({
+        message: "Qual idioma? (ex.: es-ES, fr-FR)",
+        initialValue: detected,
+        placeholder: detected,
+      });
+      if (ask.isCancel(t)) return CANCELLED;
+      out.userLanguage = (t || detected).trim();
+    } else {
+      out.userLanguage = ul;
+    }
   }
 
   if (!allSkills) {

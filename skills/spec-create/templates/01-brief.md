@@ -1,8 +1,8 @@
 # Brief — <feature>
 
-**Data:** <YYYY-MM-DD> · **Tipo:** <feature | modificação | bugfix | refactor | breaking>
-**Solicitante:** <nome>
+**Date:** <YYYY-MM-DD> · **Type:** <feature | behavior change | bugfix | refactor | breaking>
+**Requested by:** <name>
 
-## Pedido (literal)
+## Request (literal)
 
-<texto exato do que foi pedido, sem interpretação>
+<exact text of what was asked, no interpretation>

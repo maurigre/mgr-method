@@ -1,172 +1,178 @@
 ---
 name: spec-create
-description: Implementa o fluxo SDD completo para EVOLUIR um projeto já inicializado pelo spec-init - recebe um brief de feature, bugfix ou refactor, gera PRD, spec técnica e plano de tasks com checkpoints humanos bloqueantes, e após aprovação delega a implementação à skill spec-execute e, no fechamento, registra as evidências AI-First via evidence-capture quando a política do projeto habilitar (sem commit automático). Use sempre que o usuário pedir para adicionar ou implementar uma feature, corrigir bug com SDD, refatorar mantendo comportamento, criar spec e implementar, ou retomar uma feature em andamento. Exige /docs/sdd/ e CONSTITUTION.md existentes.
+description: Implements the full SDD flow to EVOLVE a project already initialized by spec-init - receives a feature, bugfix or refactor brief, generates the PRD, technical spec and task plan with blocking human checkpoints, and after approval delegates the implementation to the spec-execute skill and, on closing, records the AI-First evidence via evidence-capture when the project policy enables it (no automatic commit). Use whenever the user asks to add or implement a feature, fix a bug with SDD, refactor preserving behavior, create a spec and implement it, or resume a feature in progress. Requires /docs/sdd/ and CONSTITUTION.md to exist.
 ---
 
-# spec-create — Evolução do projeto via SDD
+# spec-create — Evolving the project via SDD
 
-Você conduz uma mudança do brief à entrega em 6 fases com checkpoints bloqueantes,
-gravando artefatos em `/specs/<feature-slug>/` na raiz do projeto.
+Output language: {{MGR_USER_LANGUAGE}} — all user-facing interaction and generated artifacts
+use this language; generated file names and rule IDs stay in English.
 
-## Integração mgr-code (obrigatória no início de cada fase)
+You drive a change from brief to delivery in 6 phases with blocking checkpoints,
+writing artifacts to `/specs/<feature-slug>/` at the project root.
 
-Sonde o `mgr-mcp`. **ON** → recupere specs/features similares, decisões e padrões já
-registrados ("já decidimos isso em X"); ao concluir fases, grave PRD/spec/decisões na
-memória. **OFF** → alerte visivelmente (modo degradado, sem memória de longo prazo) e
-prossiga só com os artefatos em disco. Nunca silencie; nunca trave por causa disso.
+## mgr-code integration (mandatory at the start of each phase)
 
-## Dependências (verificação obrigatória ao iniciar)
+Probe the `mgr-mcp`. **ON** → retrieve similar specs/features, decisions and patterns
+already recorded ("we already decided this in X"); when phases complete, record the
+PRD/spec/decisions in memory. **OFF** → warn visibly (degraded mode, no long-term memory)
+and proceed with the on-disk artifacts only. Never silence it; never block because of it.
 
-Verifique `/docs/sdd/CONSTITUTION.md` e ao menos um arquivo em `/docs/sdd/` (o script
-`.mgr-core/shared/scripts/sdd-check.sh` faz isso). Se ausentes, INTERROMPA:
-"Este projeto não foi inicializado para SDD. Execute primeiro a skill `spec-init`."
-NUNCA infira constitution ou SDD em tempo de execução — a constituição é fruto de
-análise profunda + revisão humana, não improviso.
+## Dependencies (mandatory check at the start)
 
-## Interação inicial (obrigatória)
+Check `/docs/sdd/CONSTITUTION.md` and at least one file in `/docs/sdd/` (the script
+`.mgr-core/shared/scripts/sdd-check.sh` does this). If missing, STOP:
+"This project has not been initialized for SDD. Run the `spec-init` skill first."
+NEVER infer a constitution or SDD at run time — the constitution is the product of deep
+analysis + human review, not improvisation.
 
-1. **Tipo de mudança:** feature nova · modificação de comportamento · bugfix ·
-   refatoração (sem mudança de comportamento) · breaking change.
-2. **Brief:** descrição em linguagem natural (registrada LITERAL em `01-brief.md`).
-3. **Constituição:** mostrar os princípios da CONSTITUTION.md relevantes ao brief e
-   perguntar: "Estes se aplicam? Algum override necessário?"
+## Initial interaction (mandatory)
 
-Slug da feature: kebab-case do brief, sem acentos, ≤ 50 chars — confirmar com o usuário.
+1. **Change type:** new feature · behavior change · bugfix ·
+   refactor (no behavior change) · breaking change.
+2. **Brief:** natural-language description (recorded LITERALLY in `01-brief.md`).
+3. **Constitution:** show the CONSTITUTION.md principles relevant to the brief and
+   ask: "Do these apply? Any override needed?"
 
-## Estrutura de artefatos
+Feature slug: kebab-case of the brief, no accents, ≤ 50 chars — confirm with the user.
+
+## Artifact structure
 
 ```
 /specs/<feature-slug>/
-├── 01-brief.md       # o que foi pedido (literal)
-├── 02-prd.md         # Product Requirements (gerado, revisado)
-├── 03-spec.md        # spec técnica (gerado, revisado)
-├── 04-plan.md        # plano de tasks (gerado, revisado, aprovado)
-├── 05-execution.md   # log da execução (tempo real)
-└── 06-completion.md  # resumo final + diff da SDD atualizada
+├── 01-brief.md       # what was asked (literal)
+├── 02-prd.md         # Product Requirements (generated, reviewed)
+├── 03-spec.md        # technical spec (generated, reviewed)
+├── 04-plan.md        # task plan (generated, reviewed, approved)
+├── 05-execution.md   # execution log (real time)
+└── 06-completion.md  # final summary + diff of the updated SDD
 ```
-(Templates em `templates/` desta skill.)
+(Templates in this skill's `templates/`.)
 
-## Fluxo — 6 fases com checkpoints
+## Flow — 6 phases with checkpoints
 
-### Fase 0 — Versionamento (se a política estiver habilitada na CONSTITUTION)
-Antes de abrir a spec: existem branches de specs anteriores CONCLUÍDOS sem merge?
-Sugerir o merge em ordem de abertura. Conflitos MECÂNICOS (imports, formatação, linhas
-sem interseção semântica) → resolver, EXIBIR o diff da resolução e confirmar. Conflitos
-SEMÂNTICOS (a mesma regra alterada de formas diferentes) → HALT obrigatório: apresentar
-os dois lados e perguntar — decidir qual regra vence é decisão de negócio, não de merge.
-Spec com execução pendente não entra na fila. Em seguida, criar a branch desta spec
-(convenção da CONSTITUTION; default `feat/<slug>`), com confirmação. Sem git no projeto
-→ pular esta fase inteira, sem perguntas.
+### Phase 0 — Versioning (if the policy is enabled in the CONSTITUTION)
+Before opening the spec: are there COMPLETED spec branches not yet merged?
+Suggest merging them in opening order. MECHANICAL conflicts (imports, formatting, lines
+with no semantic intersection) → resolve, DISPLAY the resolution diff and confirm.
+SEMANTIC conflicts (the same rule changed in different ways) → mandatory HALT: present
+both sides and ask — deciding which rule wins is a business decision, not a merge one.
+A spec with pending execution does not enter the queue. Then create this spec's branch
+(CONSTITUTION convention; default `feat/<slug>`), with confirmation. No git in the
+project → skip this whole phase, no questions.
 
-### Fase 1 — Contextualização (sem interação)
-**1a. Retomada:** se existe `/specs/<slug>/.handoff.md`, carregar APENAS o estado salvo
-(tiers S/A/B + decisões), pular fases já aprovadas e tasks concluídas, e avisar:
-"Retomando <slug> a partir da task <id>." Caso contrário, carga normal:
-CONSTITUTION → 01-architecture → 02-domain → 03-contracts → 08-glossary → inventário de
-skills disponíveis (built-in + customizadas em `.claude/skills/` e `~/.claude/skills/`;
-para cada uma, ler o SKILL.md e anotar quando seria útil). Salvar em
+### Phase 1 — Contextualization (no interaction)
+**1a. Resumption:** if `/specs/<slug>/.handoff.md` exists, load ONLY the saved state
+(tiers S/A/B + decisions), skip already-approved phases and completed tasks, and warn:
+"Resuming <slug> from task <id>." Otherwise, normal load:
+CONSTITUTION → 01-architecture → 02-domain → 03-contracts → 08-glossary → inventory of
+available skills (built-in + custom in `.claude/skills/` and `~/.claude/skills/`;
+for each one, read the SKILL.md and note when it would be useful). Save to
 `/specs/<slug>/.context.json` (gitignored).
 
-### Fase 2 — PRD (`02-prd.md`)
-Contexto e motivação · objetivo · casos de uso (atores + fluxo) · regras de negócio ·
-restrições · fora de escopo (explícito) · métricas de sucesso · stakeholders.
-Regra crítica: PRD só tem o "o quê/por quê" — ZERO decisão técnica.
-**CHECKPOINT 1 (bloqueante):** aprovar / ajustar / abortar.
+### Phase 2 — PRD (`02-prd.md`)
+Context and motivation · goal · use cases (actors + flow) · business rules ·
+constraints · out of scope (explicit) · success metrics · stakeholders.
+Critical rule: the PRD holds only the "what/why" — ZERO technical decisions.
+**CHECKPOINT 1 (blocking):** approve / adjust / abort.
 
-### Fase 3 — Spec técnica (`03-spec.md`)
-Visão da solução · decisões e trade-offs · mudanças no domínio (schema) · banco (DDL) ·
-contratos (request/response completos) · eventos · integrações · configuração · impacto
-em testes · critérios de aceitação testáveis. Toda decisão técnica DEVE respeitar a
-constituição OU declarar override justificado, citar o padrão do projeto que segue, e
-indicar breaking change.
+### Phase 3 — Technical spec (`03-spec.md`)
+Solution overview · decisions and trade-offs · domain changes (schema) · database (DDL) ·
+contracts (full request/response) · events · integrations · configuration · test impact ·
+testable acceptance criteria. Every technical decision MUST respect the constitution OR
+declare a justified override, cite the project pattern it follows, and flag breaking
+changes.
 
-**Detecção de mudança arquitetural (obrigatória):** se a spec introduz novo estilo de
-comunicação, nova tecnologia de persistência/mensageria, novo padrão de camadas, quebra
-de contrato público, ou dependência externa nova → proponha ADR e invoque `adr-create`
-em modo invocado, passando context/decision/alternatives/consequences pré-preenchidos da
-spec. O ADR referencia a spec e o `06-completion.md` referencia o ADR de volta.
-**CHECKPOINT 2 (bloqueante):** aprovar / ajustar / abortar.
+**Architectural change detection (mandatory):** if the spec introduces a new communication
+style, new persistence/messaging technology, new layering pattern, a public contract
+break, or a new external dependency → propose an ADR and invoke `adr-create` in invoked
+mode, passing context/decision/alternatives/consequences pre-filled from the spec. The ADR
+references the spec and `06-completion.md` references the ADR back.
+**CHECKPOINT 2 (blocking):** approve / adjust / abort.
 
-### Fase 4 — Plano (`04-plan.md`)
-Tasks organizadas por **prioridade P0 (bloqueante) / P1 (core) / P2 (complementar)** —
-NUNCA por camadas arquiteturais fixas. A ordem dentro de cada prioridade vem do **DAG de
-dependências**: toda task declara `depends_on` explícito.
-**Granularidade:** task ≤ 30 min (alvo), ≤ 60 min (duro), ≤ 3 arquivos; maior que isso,
-quebrar ANTES do checkpoint. Cada task lista: objetivo, arquivos, dependências, skill
-auxiliar sugerida (`junit-clean` para tasks de teste Java, `code-analyzer` para review),
-e critério de done.
-**CHECKPOINT 3 (bloqueante):** aprovar plano / ajustar / abortar.
+### Phase 4 — Plan (`04-plan.md`)
+Tasks organized by **priority P0 (blocking) / P1 (core) / P2 (complementary)** —
+NEVER by fixed architectural layers. The order within each priority comes from the
+**dependency DAG**: every task declares an explicit `depends_on`.
+**Granularity:** task ≤ 30 min (target), ≤ 60 min (hard), ≤ 3 files; anything bigger,
+split BEFORE the checkpoint. Each task lists: goal, files, dependencies, suggested helper
+skill (`junit-clean` for Java test tasks, `code-analyzer` for review), and a done
+criterion.
+**CHECKPOINT 3 (blocking):** approve plan / adjust / abort.
 
-### Fase 5 — Execução (delegada à skill `spec-execute`)
-Com o plano aprovado, invoque a skill `spec-execute` informando o slug. Ela carrega os
-tiers do disco (constituição, brief, spec, tasks pendentes), executa o DAG P0→P1→P2 com
-as premissas de desenvolvimento (segurança, performance, recursos, clareza — vocabulário,
-não checklist), registra `05-execution.md`, aplica os checkpoints por bloco de prioridade
-e o controle de contexto/hand-off. **Nada de git automático** — commit/push só com confirmação explícita (Fase 6).
-Retomada de execução interrompida: acionar `spec-execute` direto, sem repassar pelo
-planejamento.
+### Phase 5 — Execution (delegated to the `spec-execute` skill)
+With the plan approved, invoke the `spec-execute` skill passing the slug. It loads the
+tiers from disk (constitution, brief, spec, pending tasks), executes the DAG P0→P1→P2
+with the development premises (security, performance, resources, clarity — vocabulary,
+not a checklist), records `05-execution.md`, applies the checkpoints per priority block
+and the context/hand-off control. **No automatic git** — commit/push only with explicit
+confirmation (Phase 6).
+Resuming an interrupted execution: invoke `spec-execute` directly, without going through
+planning again.
 
-### Fase 6 — Completion (`06-completion.md`)
-Resumo do que mudou · testes (verdes?) · atualização INCREMENTAL da `/docs/sdd/` (diff)
-· links para ADRs criados · pendências. **Commit (com confirmação, nunca automático):** se a política estiver habilitada,
-PREPARE o commit na convenção da CONSTITUTION (prefixo, idioma, ≤72 no imperativo, o quê
-e não o como), EXIBA mensagem + arquivos e PERGUNTE; execute só com "sim" explícito.
-**Push (com confirmação e guardas):** só a branch da spec; nunca force-push; exiba antes
-o checklist (gates verdes, convenção ok, `git log origin/<branch>..<branch>` do que
-sobe) e pergunte; remoto divergente → halt; fluxo PR → sugerir abrir o PR. **Review final:** sugira rodar o `code-analyzer`
-sobre os arquivos tocados antes do commit humano.
-**Evidências AI-First (condicional pela CONSTITUTION):** verifique a política do
-projeto. `habilitado` → invocar `evidence-capture` passando o slug (OBRIGATÓRIO em toda
-feature — política não é escolha pontual); registra `specs/<slug>/ai/` e atualiza o
-`ai/index.md`, e o `06-completion.md` referencia o `ai/` da feature. `desabilitado` ou
-ausente → pular, sem perguntar de novo (mudar a política = editar a CONSTITUTION).
+### Phase 6 — Completion (`06-completion.md`)
+Summary of what changed · tests (green?) · INCREMENTAL update of `/docs/sdd/` (diff)
+· links to created ADRs · pending items. **Commit (with confirmation, never automatic):**
+if the policy is enabled, PREPARE the commit per the CONSTITUTION convention (prefix,
+language, ≤72 imperative, the what not the how), DISPLAY message + files and ASK; execute
+only on an explicit "yes".
+**Push (with confirmation and guards):** only the spec's branch; never force-push; first
+display the checklist (gates green, convention ok, `git log origin/<branch>..<branch>` of
+what goes up) and ask; diverged remote → halt; PR flow → suggest opening the PR.
+**Final review:** suggest running the `code-analyzer` over the touched files before the
+human commit.
+**AI-First evidence (conditional on the CONSTITUTION):** check the project policy.
+`enabled` → invoke `evidence-capture` passing the slug (MANDATORY on every feature —
+policy is not a per-case choice); it records `specs/<slug>/ai/`, updates `ai/index.md`,
+and `06-completion.md` references the feature's `ai/`. `disabled` or absent → skip,
+without asking again (changing the policy = editing the CONSTITUTION).
 
-## Controle ativo de contexto (Lei do fluxo — NUNCA compactar)
-(Durante a Fase 5, o controle detalhado — arquivamento a 75%, hand-off, anti-
-compactação — é conduzido pelo `spec-execute`; as regras abaixo valem também no
-planejamento.)
+## Active context control (Law of the flow — NEVER compact)
+(During Phase 5, the detailed control — archiving at 75%, hand-off, anti-compaction — is
+driven by `spec-execute`; the rules below also apply while planning.)
 
 
-Classifique tudo que entra no contexto em tiers:
-- **S** (sagrado): CONSTITUTION + brief — nunca sai.
-- **A**: PRD + spec aprovados. **B**: tasks pendentes do plano.
-- **C**: arquivos de código da task ATUAL. **D**: decisões tomadas (resumo estruturado).
-- **E**: tasks concluídas (detalhes). **F**: logs/output bruto.
+Classify everything that enters the context into tiers:
+- **S** (sacred): CONSTITUTION + brief — never leaves.
+- **A**: approved PRD + spec. **B**: pending plan tasks.
+- **C**: code files of the CURRENT task. **D**: decisions taken (structured summary).
+- **E**: completed tasks (details). **F**: logs/raw output.
 
-Ao atingir **75% da janela**: arquivar E→`05-execution.md` (bloco estruturado por task:
-o que foi feito, arquivos, decisões) e F→`.specs-cache/<feature>/logs/`, substituindo no
-contexto por referência curta ("Tasks P0.1–P1.1 concluídas — detalhes em 05-execution").
-Validar que S/A/B seguem intactos.
+At **75% of the window**: archive E→`05-execution.md` (structured block per task:
+what was done, files, decisions) and F→`.specs-cache/<feature>/logs/`, replacing them in
+context with a short reference ("Tasks P0.1–P1.1 done — details in 05-execution").
+Validate that S/A/B remain intact.
 
-**Hand-off de sessão** (se ainda >75% ou ~95% do limite duro): gerar
-`/specs/<slug>/.handoff.md` com estado (feito/faltando), tasks pendentes, decisões,
-arquivos modificados não-commitados, próxima task e instruções de retomada; encerrar a
-sessão. Na retomada, carregar só S/A/B(pendentes)/D — nunca E/F arquivados.
+**Session hand-off** (if still >75% or ~95% of the hard limit): generate
+`/specs/<slug>/.handoff.md` with the state (done/missing), pending tasks, decisions,
+modified uncommitted files, next task and resumption instructions; end the session. On
+resumption, load only S/A/B(pending)/D — never archived E/F.
 
-**Anti-compactação (regra dura):** NUNCA pedir "resuma a conversa", NUNCA aceitar
-compactação automática da ferramenta, NUNCA trocar contexto estruturado por prosa.
-SEMPRE arquivar fatos brutos em arquivos e manter referência cruzada.
+**Anti-compaction (hard rule):** NEVER ask to "summarize the conversation", NEVER accept
+the tool's automatic compaction, NEVER trade structured context for prose.
+ALWAYS archive raw facts to files and keep a cross-reference.
 
-Estimativa de tamanho: 1 caractere ≈ 0,25 token + 20% de buffer; se a ferramenta expõe
-contagem real, use-a. Imprecisão é aceitável — o threshold de 75% tem margem.
+Size estimate: 1 character ≈ 0.25 token + 20% buffer; if the tool exposes a real count,
+use it. Imprecision is acceptable — the 75% threshold has margin.
 
-## Regras de comportamento
+## Behavior rules
 
-1. **Constitution é lei.** Violação exige override explícito documentado.
-2. **Checkpoints são bloqueantes.** Nunca pular; aguardar resposta é obrigatório.
-3. **Segurança primeiro** em toda task: validação de input, authn/authz, erro sem vazar
-   info, sanitização contra injection, secrets nunca hardcoded.
-4. **Boas práticas como default:** SOLID, DRY sem exagero, null safety, imutabilidade
-   onde fizer sentido, error handling consistente.
-5. **Patterns por necessidade** — cada uso justificado pelo problema concreto.
-6. **Skills customizadas têm prioridade** quando cobrem a task.
-7. **Nenhuma ação de git automática.** Commit e push existem SÓ via o fluxo de
-   confirmação da política de versionamento (Fase 0/6); force-push e push em branch
-   protegida, nunca.
-8. **Falha cedo:** ambiguidade no brief → perguntar antes do PRD; buraco no PRD →
-   perguntar antes da spec. Perguntar custa menos que refazer.
-9. **Não inventar:** não-derivável da spec/código → `[A DEFINIR]` + pergunta no checkpoint.
-10. **Idioma** da CONSTITUTION/SDD existentes.
-11. **Prioridades + DAG, nunca camadas fixas.**
-12. **Granularidade obrigatória** (≤30/60 min, ≤3 arquivos).
-13. **Controle ativo de contexto, nunca compactação** (seção acima).
+1. **The constitution is law.** A violation requires an explicit documented override.
+2. **Checkpoints are blocking.** Never skip; waiting for the answer is mandatory.
+3. **Security first** in every task: input validation, authn/authz, errors that leak no
+   info, sanitization against injection, secrets never hardcoded.
+4. **Good practices as the default:** SOLID, DRY without excess, null safety, immutability
+   where it makes sense, consistent error handling.
+5. **Patterns by necessity** — every use justified by the concrete problem.
+6. **Custom skills take priority** when they cover the task.
+7. **No automatic git action.** Commit and push exist ONLY via the versioning policy's
+   confirmation flow (Phase 0/6); force-push and pushing to a protected branch, never.
+8. **Fail early:** ambiguity in the brief → ask before the PRD; a hole in the PRD →
+   ask before the spec. Asking costs less than redoing.
+9. **Do not invent:** not derivable from the spec/code → `[TO DEFINE]` + a question at the
+   checkpoint.
+10. **Language:** the configured output language (the `Output language:` line above); if
+    unresolved, the language of the existing CONSTITUTION/SDD.
+11. **Priorities + DAG, never fixed layers.**
+12. **Mandatory granularity** (≤30/60 min, ≤3 files).
+13. **Active context control, never compaction** (section above).

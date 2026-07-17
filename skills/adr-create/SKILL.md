@@ -1,60 +1,63 @@
 ---
 name: adr-create
-description: Cria Architecture Decision Records (ADRs) no formato canônico de Michael Nygard. Auto-detecta o diretório de ADRs do projeto a cada execução (sem persistir configuração), gera numeração sequencial, e opera em modo AVULSO (perguntas ao usuário) ou INVOCADO (recebe contexto pré-preenchido de outra skill como spec-create ou spec-init e pergunta apenas os Deciders). Use quando o usuário pedir para criar ADR, documentar ou registrar uma decisão arquitetural, ou novo architecture decision record. Agnóstica à linguagem e stack.
+description: Creates Architecture Decision Records (ADRs) in Michael Nygard's canonical format. Auto-detects the project's ADR directory on every run (no persisted configuration), generates sequential numbering, and operates in STANDALONE mode (questions to the user) or INVOKED mode (receives pre-filled context from another skill such as spec-create or spec-init and asks only for the Deciders). Use when the user asks to create an ADR, document or record an architectural decision, or a new architecture decision record. Agnostic to language and stack.
 ---
 
 # adr-create — Architecture Decision Records
 
-## Detecção do diretório (executa TODA vez, antes de tudo)
+Output language: {{MGR_USER_LANGUAGE}} — all user-facing interaction and generated artifacts
+use this language; generated file names and rule IDs stay in English.
 
-**Etapa 1 — Procurar ADRs existentes** em: `/docs/adrs/`, `/docs/adr/`,
+## Directory detection (runs EVERY time, before anything)
+
+**Step 1 — Look for existing ADRs** in: `/docs/adrs/`, `/docs/adr/`,
 `/docs/decisions/`, `/docs/architecture/decisions/`, `/adrs/`, `/adr/`,
-`/architecture/decisions/`. Critério de "parece ADR": nome começa com 3-4 dígitos +
-hífen (`0001-`), OU primeira linha é heading `# ADR-NNN:`.
+`/architecture/decisions/`. "Looks like an ADR" criterion: name starts with 3-4 digits +
+hyphen (`0001-`), OR the first line is a heading `# ADR-NNN:`.
 
-**Etapa 2 — Decidir:**
-- Nenhum encontrado → usar `/docs/adrs/` (criar; avisar "Criando diretório padrão").
-- Um único diretório → usá-lo (avisar path + contagem).
-- Múltiplos → listar todos com contagem e PERGUNTAR qual usar NESTA execução. NÃO
-  persistir a escolha (decisão de design: auto-detecta toda vez, sem cache/config).
+**Step 2 — Decide:**
+- None found → use `/docs/adrs/` (create it; warn "Creating default directory").
+- A single directory → use it (announce path + count).
+- Multiple → list them all with counts and ASK which one to use for THIS run. Do NOT
+  persist the choice (design decision: auto-detect every time, no cache/config).
 
-**Etapa 3 — Próximo número:** maior `NNNN-*.md` + 1, formato 4 dígitos com zeros
-(`0001`, `0042`). Nunca pular, nunca reutilizar (mesmo com ADR deletado).
+**Step 3 — Next number:** highest `NNNN-*.md` + 1, 4-digit zero-padded format
+(`0001`, `0042`). Never skip, never reuse (even with a deleted ADR).
 
-## Modo AVULSO — perguntas (nesta ordem)
+## STANDALONE mode — questions (in this order)
 
-1. **Título:** frase curta com verbo de ação (Adoção de..., Migração de...,
-   Padronização de...), sem prefixo "ADR:", ≤ 80 chars. Vira slug kebab-case sem
-   acentos, ≤ 60 chars, truncando em palavra inteira.
+1. **Title:** short phrase with an action verb (Adoption of..., Migration of...,
+   Standardization of...), no "ADR:" prefix, ≤ 80 chars. Becomes a kebab-case slug without
+   accents, ≤ 60 chars, truncated at a whole word.
 2. **Status:** Proposed · **Accepted (default)** · Deprecated · Superseded by ADR-XXXX
-   (perguntar qual).
-3. **Deciders:** ≥ 1 nome; aceitar lista por vírgula/linha; "sozinho" → nome do usuário.
-   Registrar EXATAMENTE como informado (não normalizar).
-4. **Context:** problema técnico/negócio, restrições, por que agora. Mínimo 2-3 frases —
-   se vago, pedir mais ANTES de gerar (não preencher com generalidades).
-5. **Decision:** o que foi decidido, como será implementado em alto nível, tecnologias.
-6. **Alternatives considered** (opcional, recomendado): cada uma com motivo de rejeição
-   em 1-2 frases. Se "não considerei": avisar que ADR sem alternativas tem valor
-   reduzido, mas permitir.
-7. **Consequences:** o que fica mais fácil · mais difícil · riscos · mitigações.
-8. **Confirmação:** mostrar preview completo → criar / ajustar campo / abortar.
+   (ask which one).
+3. **Deciders:** ≥ 1 name; accept a comma/line-separated list; "just me" → the user's name.
+   Record EXACTLY as given (do not normalize).
+4. **Context:** the technical/business problem, constraints, why now. Minimum 2-3
+   sentences — if vague, ask for more BEFORE generating (do not fill with generalities).
+5. **Decision:** what was decided, how it will be implemented at a high level, technologies.
+6. **Alternatives considered** (optional, recommended): each with its rejection reason in
+   1-2 sentences. If "I did not consider any": warn that an ADR without alternatives has
+   reduced value, but allow it.
+7. **Consequences:** what becomes easier · harder · risks · mitigations.
+8. **Confirmation:** show the full preview → create / adjust a field / abort.
 
-## Modo INVOCADO (por spec-create, spec-init ou outra skill)
+## INVOKED mode (by spec-create, spec-init or another skill)
 
-Recebe objeto com `title, status, context, decision, alternatives[], consequences{},
-source_spec`. Comportamento: pular perguntas 1-7; executar a detecção de diretório
-normalmente; mostrar preview pré-preenchido; **perguntar APENAS Deciders + confirmação**;
-retornar à chamadora: path, número e status do ADR. Quando `source_spec` presente,
-acrescentar ao fim do Context: `**Reference:** Spec técnica em <source_spec>.` (e a
-chamadora registra o link inverso no `06-completion.md`).
+Receives an object with `title, status, context, decision, alternatives[], consequences{},
+source_spec`. Behavior: skip questions 1-7; run the directory detection normally; show the
+pre-filled preview; **ask ONLY for Deciders + confirmation**; return to the caller: the
+ADR's path, number and status. When `source_spec` is present, append to the end of the
+Context: `**Reference:** Technical spec at <source_spec>.` (and the caller records the
+reverse link in `06-completion.md`).
 
-## Template do arquivo gerado
+## Generated file template
 
 ```markdown
-# ADR-<NNNN>: <Título>
+# ADR-<NNNN>: <Title>
 
 Date: <YYYY-MM-DD>
-Deciders: <Nome1>, <Nome2>
+Deciders: <Name1>, <Name2>
 
 ## Status
 
@@ -62,45 +65,45 @@ Deciders: <Nome1>, <Nome2>
 
 ## Context
 
-<problema, restrições, por que a decisão é necessária agora>
+<problem, constraints, why the decision is needed now>
 
 ## Decision
 
-<o que será feito, tecnologias/padrões, implementação em alto nível>
+<what will be done, technologies/patterns, high-level implementation>
 
 ## Alternatives Considered
 
-- **<Alternativa>:** <motivo da rejeição>
+- **<Alternative>:** <rejection reason>
 
 ## Consequences
 
 ### Positive
-- <o que fica mais fácil>
+- <what becomes easier>
 
 ### Negative
-- <o que fica mais difícil>
+- <what becomes harder>
 
 ### Risks and Mitigations
-- **Risco:** <descrição> — **Mitigação:** <ação>
+- **Risk:** <description> — **Mitigation:** <action>
 ```
 
-Formatação: data ISO; sem comentários HTML; sem placeholders `<...>` no arquivo final;
-linha em branco entre seções. Seção Alternatives só se houver alternativas.
+Formatting: ISO date; no HTML comments; no `<...>` placeholders in the final file;
+blank line between sections. Alternatives section only when there are alternatives.
 
-## Regras de comportamento
+## Behavior rules
 
-1. **Auto-detecção sempre** — nunca assumir diretório, mesmo se rodou há 5 minutos.
-2. **Numeração sequencial obrigatória.**
-3. **Imutabilidade:** ADR `Accepted` NÃO é editado. Mudança de direção → novo ADR com
-   `Superseded by`, e o antigo muda APENAS o status. (Typo trivial pode ser corrigido;
-   mudança semântica exige novo ADR.)
-4. **Confirmação antes de escrever**, em ambos os modos.
-5. **Idioma:** o dos ADRs existentes; sem ADRs, perguntar (default português). Modo
-   invocado herda da chamadora.
-6. **Não inventar contexto** — Context vago → perguntar mais.
+1. **Always auto-detect** — never assume the directory, even if it ran 5 minutes ago.
+2. **Sequential numbering is mandatory.**
+3. **Immutability:** an `Accepted` ADR is NOT edited. A change of direction → a new ADR
+   with `Superseded by`, and the old one changes ONLY its status. (A trivial typo may be
+   fixed; a semantic change requires a new ADR.)
+4. **Confirmation before writing**, in both modes.
+5. **Language:** that of the existing ADRs; without ADRs, the configured output language
+   (the `Output language:` line above). Invoked mode inherits from the caller.
+6. **Do not invent context** — vague Context → ask for more.
 
-## Integração mgr-code
+## mgr-code integration
 
-Se o `mgr-mcp` estiver disponível, consulte ADRs relacionados já registrados na memória
-antes de criar ("existe decisão anterior sobre isto?") e grave o novo ADR ao concluir.
-Indisponível → siga normalmente (a auto-detecção em disco é a fonte primária).
+If the `mgr-mcp` is available, consult related ADRs already recorded in memory before
+creating ("is there a previous decision about this?") and record the new ADR when done.
+Unavailable → proceed normally (on-disk auto-detection is the primary source).

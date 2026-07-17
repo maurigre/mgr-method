@@ -1,181 +1,191 @@
 ---
 name: arch-hexagonal
-description: Provedora do guia de regras de review para projetos com arquitetura Hexagonal (Ports & Adapters, Alistair Cockburn), AGNÓSTICA À LINGUAGEM. Invocada pelo spec-init com a linguagem do projeto; monta docs/sdd/09-review-rules.md combinando os princípios da hexagonal (regra de dependência, ports inbound/outbound, adapters) com as regras transversais compartilhadas (design, testes, logs, mutation e o perfil da linguagem). Regras numeradas com IDs estáveis e citáveis textualmente pelo code-analyzer. Use quando a arquitetura do projeto for hexagonal.
+description: Provider of the review rules guide for projects with Hexagonal architecture (Ports & Adapters, Alistair Cockburn), LANGUAGE-AGNOSTIC. Invoked by spec-init with the project's language; assembles docs/sdd/09-review-rules.md combining the hexagonal principles (dependency rule, inbound/outbound ports, adapters) with the shared cross-cutting rules (design, tests, logs, mutation and the language profile). Rules numbered with stable IDs, textually citable by the code-analyzer. Use when the project's architecture is hexagonal.
 ---
 
-# arch-hexagonal — Guia de regras (Ports & Adapters)
+# arch-hexagonal — Rules guide (Ports & Adapters)
 
-Você fornece o guia de regras de review da arquitetura hexagonal. O guia é **agnóstico à
-linguagem**: os princípios valem em qualquer stack; as regras de ferramenta vêm do perfil da
-linguagem, na fonte transversal.
+Output language: {{MGR_USER_LANGUAGE}} — all user-facing interaction and generated artifacts
+use this language; generated file names and rule IDs stay in English.
 
-## Objetivo
+You provide the hexagonal architecture's review rules guide. The guide is
+**language-agnostic**: the principles hold in any stack; the tool rules come from the
+language profile, in the cross-cutting source.
 
-Permitir que o domínio da aplicação permaneça completamente independente de qualquer
-tecnologia externa (banco, UI, APIs, frameworks), comunicando-se com o mundo através de
-**Portas (Ports)** e **Adaptadores (Adapters)**. Assim, banco, UI, protocolos e frameworks são
-substituíveis sem impacto nas regras de negócio.
+## Goal
 
-## Como montar o guia (instrução ao invocador — geralmente o `spec-init`)
+Allow the application's domain to remain completely independent of any external technology
+(database, UI, APIs, frameworks), talking to the world through **Ports** and **Adapters**.
+That way database, UI, protocols and frameworks are replaceable with no impact on the
+business rules.
 
-Você recebe a **linguagem do projeto**. Gere `docs/sdd/09-review-rules.md` **concatenando**, na
-ordem:
+## How to assemble the guide (instruction to the invoker — usually `spec-init`)
 
-1. **Fundamentação Teórica** e **Princípios** (deste arquivo — verbatim).
-2. **Regras Obrigatórias**, **Boas Práticas**, **Anti-patterns transversais** e **Checklist**
-   da fonte única `{{MGR_ARCH_RULES}}`, gravando **apenas o perfil da linguagem**
-   do projeto.
-3. **Anti-patterns específicos de Hexagonal** (deste arquivo) e **Referências** (deste arquivo).
+You receive the **project's language**. Generate `docs/sdd/09-review-rules.md` by
+**concatenating**, in order:
 
-Regras de gravação: preserve os IDs (`INV-n`, `DES-n`, etc.) e nomes de seção — o
-`code-analyzer` cita "seção — Regra N" textualmente. Não altere as regras transversais aqui;
-elas são mantidas em um único lugar.
+1. **Theoretical Foundations** and **Principles** (from this file — verbatim).
+2. **Mandatory rules**, **Good Practices**, **Cross-cutting anti-patterns** and
+   **Checklist** from the single source `{{MGR_ARCH_RULES}}`, recording **only the
+   project's language profile**.
+3. **Hexagonal-specific anti-patterns** (from this file) and **References** (from this
+   file).
 
-## Fundamentação Teórica
+Recording rules: preserve the IDs (`INV-n`, `DES-n`, etc.) and section names — the
+`code-analyzer` cites "section — Rule N" textually. Do not alter the cross-cutting rules
+here; they are maintained in a single place.
 
-Baseada nos princípios originais de **Alistair Cockburn** (*Hexagonal Architecture / Ports &
-Adapters*, 2005). O hexágono é apenas uma representação visual — **não** representa camadas, e
-sim que a aplicação tem várias formas de comunicação com o mundo externo via ports e adapters.
-Segundo Cockburn: *"Create your application to work without either a UI or a database so that
-it can be tested automatically, and so that either can be replaced without impacting the
-business logic."* O objetivo real não é usar interfaces por si, mas garantir a inversão de
-dependência que mantém as regras de negócio isoladas de qualquer detalhe tecnológico.
+## Theoretical Foundations
 
-## Princípios (invariantes de Ports & Adapters)
+Based on the original principles of **Alistair Cockburn** (*Hexagonal Architecture / Ports
+& Adapters*, 2005). The hexagon is only a visual representation — it does **not** depict
+layers, but that the application has several ways of talking to the external world via
+ports and adapters. In Cockburn's words: *"Create your application to work without either a
+UI or a database so that it can be tested automatically, and so that either can be replaced
+without impacting the business logic."* The real goal is not to use interfaces for their
+own sake, but to guarantee the dependency inversion that keeps the business rules isolated
+from any technological detail.
 
-1. (INV-1) O núcleo (domínio + casos de uso) não depende de tecnologia externa: não conhece
-   framework, banco de dados, ORM, HTTP, mensageria, cache nem SO.
-2. (INV-2) Tipos de domínio dependem apenas de outros tipos de domínio.
-3. (INV-3) Os ports são definidos pelo domínio. **Inbound ports** (primary/driving) = casos de
-   uso oferecidos; **outbound ports** (secondary/driven) = dependências que o domínio precisa
-   (repositório, gateway de pagamento, relógio, gerador de id).
-4. (INV-4) Adapters nunca contêm regra de negócio — só traduzem entre tecnologia externa e
-   domínio. **Driving adapters** (REST, CLI, messaging, scheduler) chamam inbound ports;
-   **driven adapters** (persistência, cliente HTTP, cache) implementam outbound ports.
-5. (INV-5) Toda dependência aponta para dentro. Nenhuma referência do núcleo para adapter/infra.
-6. (INV-6) DTOs, entidades de ORM e mappers pertencem aos adapters. O domínio nunca conhece
-   DTO, anotação de persistência nem tipo de framework.
-7. (INV-7) Métodos de borda (endpoints/handlers/consumers) não recebem nem retornam tipos de
-   domínio — apenas tipos de payload (request/response) criados para isso.
+## Principles (Ports & Adapters invariants)
 
-## Anti-patterns específicos de Hexagonal
+1. (INV-1) The core (domain + use cases) does not depend on external technology: it knows
+   no framework, database, ORM, HTTP, messaging, cache or OS.
+2. (INV-2) Domain types depend only on other domain types.
+3. (INV-3) Ports are defined by the domain. **Inbound ports** (primary/driving) = the use
+   cases offered; **outbound ports** (secondary/driven) = the dependencies the domain needs
+   (repository, payment gateway, clock, id generator).
+4. (INV-4) Adapters never contain business rules — they only translate between external
+   technology and the domain. **Driving adapters** (REST, CLI, messaging, scheduler) call
+   inbound ports; **driven adapters** (persistence, HTTP client, cache) implement outbound
+   ports.
+5. (INV-5) Every dependency points inward. No reference from the core to adapter/infra.
+6. (INV-6) DTOs, ORM entities and mappers belong to the adapters. The domain never knows a
+   DTO, a persistence annotation or a framework type.
+7. (INV-7) Edge methods (endpoints/handlers/consumers) neither receive nor return domain
+   types — only payload types (request/response) created for that purpose.
 
-Além dos anti-patterns transversais, reprovam nesta arquitetura:
+## Hexagonal-specific anti-patterns
 
-- Port (interface) declarado no adapter em vez de no domínio (viola INV-3).
-- Núcleo acessando tecnologia diretamente em vez de através de um outbound port.
-- Entidade de ORM usada como modelo de domínio, sem mapeamento no adapter de persistência.
-- Driving adapter que executa regra de negócio em vez de apenas chamar um inbound port.
+Beyond the cross-cutting anti-patterns, these reprove in this architecture:
 
-## Convenção e enforcement — Java (VALIDADO)
+- A port (interface) declared in the adapter instead of the domain (violates INV-3).
+- The core accessing technology directly instead of through an outbound port.
+- An ORM entity used as the domain model, with no mapping in the persistence adapter.
+- A driving adapter that executes business rules instead of just calling an inbound port.
 
-Convenção de nomes/pacotes e ruleset ArchUnit validados para Hexagonal em Java (é uma **Boa
-Prática opt-in**: o `spec-init` oferece e confirma com o time). Outras linguagens **adaptam** —
-traduza os `INV` para a ferramenta de arch-lint do perfil (ver "Governança do enforcement" nas
-Boas Práticas transversais): `[ADAPTADO — validar com o time]`.
+## Convention and enforcement — Java (VALIDATED)
 
-### Organização de pacotes (escolha do projeto — ADR)
+Name/package convention and ArchUnit ruleset validated for Hexagonal in Java (it is an
+opt-in **Good Practice**: `spec-init` offers it and confirms with the team). Other
+languages **adapt** — translate the `INV` into the profile's arch-lint tool (see
+"Enforcement governance" in the cross-cutting Good Practices):
+`[ADAPTED — validate with the team]`.
 
-O Cockburn **não dita layout de pacotes**; escolha uma e seja consistente (registre no ADR):
-- **Por feature** (recomendado ao crescer): `core.<feature>.{domain,usecase,port.in,port.out,exception}`.
-- **Por camada** (ok em app pequeno): `core.{domain,usecase,port.in,port.out,exception}`.
+### Package organization (project choice — ADR)
 
-Motivar a escolha por "gritar o domínio" é **Screaming Architecture — de Robert C. Martin**
-(prática transversal opt-in), **não** regra do Cockburn. As regras ArchUnit usam `..core..X..`,
-funcionando nas duas organizações.
+Cockburn does **not dictate a package layout**; pick one and be consistent (record it in
+the ADR):
+- **Per feature** (recommended as it grows): `core.<feature>.{domain,usecase,port.in,port.out,exception}`.
+- **Per layer** (fine in a small app): `core.{domain,usecase,port.in,port.out,exception}`.
 
-### Nomes e pacotes
+Motivating the choice by "screaming the domain" is **Screaming Architecture — by Robert C.
+Martin** (an opt-in cross-cutting practice), **not** a Cockburn rule. The ArchUnit rules use
+`..core..X..`, working in both organizations.
 
-| Papel | Sufixo/nome | Pacote (`X` = feature, quando por feature) |
+### Names and packages
+
+| Role | Suffix/name | Package (`X` = feature, when per feature) |
 |---|---|---|
-| Entidade/VO de domínio | `Project` | `..core..domain..` |
-| **Command/Query** (input data) | `CreateProjectCommand` · `GetProjectQuery` | `..core..port.in..` (com o input port) |
+| Domain entity/VO | `Project` | `..core..domain..` |
+| **Command/Query** (input data) | `CreateProjectCommand` · `GetProjectQuery` | `..core..port.in..` (with the input port) |
 | Input port | `CreateProjectUseCasePort` | `..core..port.in..` |
 | Use case (impl, package-private) | `CreateProjectUseCase` | `..core..usecase..` |
 | Output port | `ProjectRepositoryPort` · `ShippingGatewayPort` | `..core..port.out..` |
-| Exceções | `...Exception` | junto do agregado (`..core..exception..`) |
-| VOs/kernel comuns | `Money` · `CNPJ` · `BranchId` | `..core.shared..` |
+| Exceptions | `...Exception` | next to the aggregate (`..core..exception..`) |
+| Common VOs/kernel | `Money` · `CNPJ` · `BranchId` | `..core.shared..` |
 | Inbound web | `...Controller` | `..adapter.in.web.controller.v1..` |
 | Inbound worker | `...Receiver` | `..adapter.in.rabbit..` |
-| Outbound persistência | `...RepositoryAdapter` | `..adapter.out.persistence..` (pacote = nome do banco) |
-| Outbound client | `...ApiAdapter` | `..adapter.out.client.<api>..` (pacote = nome da API) |
-| Spring Data (interno) | `...JpaRepository` | `..adapter.out.persistence.repository..` |
-| ORM entity · mapper · projection · DTO | `ProjectEntity` · `...Mapper` · `...Projection` · `...Request/Response` | subpacotes do próprio adapter |
+| Outbound persistence | `...RepositoryAdapter` | `..adapter.out.persistence..` (package = database name) |
+| Outbound client | `...ApiAdapter` | `..adapter.out.client.<api>..` (package = API name) |
+| Spring Data (internal) | `...JpaRepository` | `..adapter.out.persistence.repository..` |
+| ORM entity · mapper · projection · DTO | `ProjectEntity` · `...Mapper` · `...Projection` · `...Request/Response` | subpackages of the adapter itself |
 
-Todo **`Port`** é interface (entrada e saída). `entity`/`mapper`/`projection`/`dto` idealmente
-package-private (não vazam para o core nem para outro adapter). Distinga: **outbound port** do
-core (`...Port`) ≠ **Spring Data** (`...JpaRepository`, interno) ≠ **adapter** (`...Adapter`).
-Os **DTOs (`...Request`/`...Response`) e mappers da web moram sob a versão do controller**
-(`controller.v1.dto`, `controller.v1.mapper`), não soltos em `adapter.in.web` — isola o contrato
-por versão da API (opt-in; para APIs sem versionamento, dispensável).
+Every **`Port`** is an interface (inbound and outbound). `entity`/`mapper`/`projection`/`dto`
+ideally package-private (they leak neither into the core nor into another adapter).
+Distinguish: the core's **outbound port** (`...Port`) ≠ **Spring Data** (`...JpaRepository`,
+internal) ≠ the **adapter** (`...Adapter`). The web **DTOs (`...Request`/`...Response`) and
+mappers live under the controller's version** (`controller.v1.dto`, `controller.v1.mapper`),
+not loose in `adapter.in.web` — isolating the contract per API version (opt-in; for
+unversioned APIs, dispensable).
 
-### Command/Query e composition root
+### Command/Query and the composition root
 
-- **Command/Query** (o *input data* que cruza a fronteira de entrada) moram no **core**, junto do
-  input port (`..core..port.in..`) — o contrato é do domínio, não do adapter. Os mappers de borda
-  convertem DTO → Command; o use case nunca vê DTO.
-- **`config` é o composition root**: o **único** lugar autorizado a depender das impls
-  package-private de use case (wiring `@Bean`). Fica fora do layering Core/Adapter (vê os dois).
+- **Command/Query** (the *input data* crossing the inbound boundary) live in the **core**,
+  next to the input port (`..core..port.in..`) — the contract belongs to the domain, not
+  the adapter. Edge mappers convert DTO → Command; the use case never sees a DTO.
+- **`config` is the composition root**: the **only** place authorized to depend on the
+  package-private use case impls (`@Bean` wiring). It sits outside the Core/Adapter
+  layering (it sees both).
 
-### Relação entre domínios (DDD — Evans / Vernon)
+### Relations between domains (DDD — Evans / Vernon)
 
-Um `core.<feature>` **nunca importa** outro `core.<feature>` diretamente:
-- **Conceito comum** → `core.shared` (**Shared Kernel**, Evans).
-- **Referência a outro agregado** → por **ID** (VO), não por objeto (Vernon): `Project` guarda
-  `BranchId`, não `Branch`.
-- **Comportamento/dado de outra feature** → **outbound port na própria feature** + adapter/**ACL**
-  que delega à outra (wired no `config`) — nunca dependência de domínio.
-- Acoplamento constante entre duas features → talvez seja **um bounded context só**; reveja a
-  fronteira.
+A `core.<feature>` **never imports** another `core.<feature>` directly:
+- **Common concept** → `core.shared` (**Shared Kernel**, Evans).
+- **Reference to another aggregate** → by **ID** (VO), not by object (Vernon): `Project`
+  holds a `BranchId`, not a `Branch`.
+- **Behavior/data from another feature** → an **outbound port in the feature itself** +
+  adapter/**ACL** delegating to the other (wired in `config`) — never a domain dependency.
+- Constant coupling between two features → maybe it is **a single bounded context**; review
+  the boundary.
 
-### Regras ArchUnit (o "com o quê" do enforcement)
+### ArchUnit rules (the "with what" of enforcement)
 
 ```java
-// Todo Port é interface (entrada e saída)
+// Every Port is an interface (inbound and outbound)
 classes().that().haveSimpleNameEndingWith("Port").should().beInterfaces();
 
-// Input port: sufixo UseCasePort, mora em core..port.in
+// Input port: UseCasePort suffix, lives in core..port.in
 classes().that().haveSimpleNameEndingWith("UseCasePort")
     .should().beInterfaces().andShould().resideInAPackage("..core..port.in..");
 
-// #2 Command/Query moram no core (input boundary), não no adapter
+// #2 Command/Query live in the core (input boundary), not in the adapter
 classes().that().haveSimpleNameEndingWith("Command").or().haveSimpleNameEndingWith("Query")
     .should().resideInAPackage("..core..port.in..");
 
-// Impl de use case: sufixo UseCase (não interface) em core..usecase
+// Use case impl: UseCase suffix (not an interface) in core..usecase
 classes().that().resideInAPackage("..core..usecase..").and().areNotInterfaces()
     .should().haveSimpleNameEndingWith("UseCase");
 
-// Outbound adapter: sufixo Adapter em adapter.out, implementa um Port do core
+// Outbound adapter: Adapter suffix in adapter.out, implements a core Port
 classes().that().resideInAPackage("..adapter.out..").and().areNotInterfaces()
     .and().haveSimpleNameEndingWith("Adapter")
     .should().dependOnClassesThat().resideInAPackage("..core..port.out..");
 
-// Núcleo agnóstico (SLF4J liberado: é facade de log)
+// Agnostic core (SLF4J allowed: it is a logging facade)
 noClasses().that().resideInAPackage("..core..").should().dependOnClassesThat()
     .resideInAnyPackage("org.springframework..", "jakarta.persistence..", "org.hibernate..", "..adapter..");
 
-// Anel interno: domínio não conhece use cases nem ports
+// Inner ring: the domain knows neither use cases nor ports
 noClasses().that().resideInAPackage("..core..domain..")
     .should().dependOnClassesThat().resideInAnyPackage("..core..usecase..", "..core..port..");
 
-// Controller/Receiver dependem do PORT de entrada, não da impl
+// Controller/Receiver depend on the inbound PORT, not the impl
 noClasses().that().resideInAPackage("..adapter.in..")
     .should().dependOnClassesThat().resideInAPackage("..core..usecase..");
 
-// #3 Composition root: só o config acessa as impls de use case
+// #3 Composition root: only config touches the use case impls
 classes().that().resideInAPackage("..core..usecase..").and().areNotInterfaces()
     .should().onlyHaveDependentClassesThat().resideInAnyPackage("..config..", "..core..usecase..");
 
-// Use case não depende de outro use case
+// A use case does not depend on another use case
 noClasses().that().resideInAPackage("..core..usecase..")
     .should().dependOnClassesThat().resideInAPackage("..core..usecase..");
 
-// Entidades JPA só no adapter
+// JPA entities only in the adapter
 classes().that().areAnnotatedWith(jakarta.persistence.Entity.class)
     .should().resideInAPackage("..adapter.out..");
 
-// DTO/mapper da web moram sob a versão do controller (isolamento de versão; opt-in)
+// Web DTO/mapper live under the controller's version (version isolation; opt-in)
 classes().that().resideInAPackage("..adapter.in.web..").and().haveSimpleNameEndingWith("Request")
     .should().resideInAPackage("..adapter.in.web.controller..");
 classes().that().resideInAPackage("..adapter.in.web..").and().haveSimpleNameEndingWith("Response")
@@ -183,12 +193,12 @@ classes().that().resideInAPackage("..adapter.in.web..").and().haveSimpleNameEndi
 classes().that().resideInAPackage("..adapter.in.web..").and().haveSimpleNameEndingWith("Mapper")
     .should().resideInAPackage("..adapter.in.web.controller..");
 
-// Features independentes (SÓ na organização por feature; só compartilham via core.shared)
+// Independent features (ONLY in the per-feature organization; sharing only via core.shared)
 slices().matching("..core.(*)..").should().notDependOnEachOther()
     .ignoreDependency(alwaysTrue(), resideInAPackage("..core.shared.."));
 slices().matching("..core.(*)..").should().beFreeOfCycles();
 
-// Camadas (Core ← Adapter; config é a cola, fora do layering)
+// Layers (Core ← Adapter; config is the glue, outside the layering)
 layeredArchitecture().consideringOnlyDependenciesInLayers()
     .layer("Core").definedBy("..core..")
     .layer("Adapter").definedBy("..adapter..")
@@ -196,7 +206,7 @@ layeredArchitecture().consideringOnlyDependenciesInLayers()
     .whereLayer("Core").mayOnlyBeAccessedByLayers("Adapter");
 ```
 
-## Referências Oficiais
+## Official References
 
 - Cockburn, Alistair. *Hexagonal Architecture (Ports & Adapters)*, 2005 —
   https://alistair.cockburn.us/hexagonal-architecture/

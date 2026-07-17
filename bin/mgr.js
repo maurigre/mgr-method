@@ -33,6 +33,7 @@ function parseArgs(argv) {
     else if (a === "--scope") flags.scope = argv[++i];
     else if (a === "--skills-dir") flags.skillsDir = argv[++i];
     else if (a === "--language") flags.language = argv[++i];
+    else if (a === "--user-language") flags.userLanguage = argv[++i];
     else if (a === "--arch") flags.arch = argv[++i];
     else if (a === "--project-id") flags.projectId = argv[++i];
     else if (a === "--all-skills") flags.allSkills = true;
@@ -63,17 +64,18 @@ async function cmdInstall(flags, positional) {
   let scope = flags.scope;
   let language = flags.language || null;
   let architecture = flags.arch || null;
+  let userLanguage = flags.userLanguage || null;
   let projectId = flags.projectId || null;
   const optional = [];
 
   if (!skillsDir && isTTY && !flags.yes) {
     const answers = await collectInstallAnswers(
       CLACK,
-      { engines, scope, language, architecture, projectId },
-      { repo, allSkills: flags.allSkills }
+      { engines, scope, language, architecture, userLanguage, projectId },
+      { repo, allSkills: flags.allSkills, env: process.env }
     );
     if (answers === CANCELLED) bail();
-    ({ engines, scope, language, architecture, projectId } = answers);
+    ({ engines, scope, language, architecture, userLanguage, projectId } = answers);
     optional.push(...answers.optional);
   }
   if (!engines.length) engines = ["claude-code"];
@@ -86,12 +88,13 @@ async function cmdInstall(flags, positional) {
     else p.log.warn("Instalação MGR existente detectada — será re-sincronizada.");
   }
 
-  const plan = installer.planInstall(engines, scope, repo, { skillsDir, language, architecture, optional, all: flags.allSkills, projectId });
+  const plan = installer.planInstall(engines, scope, repo, { skillsDir, language, architecture, userLanguage, optional, all: flags.allSkills, projectId });
   p.note(
     [
       `projeto:     ${plan.projectId}    escopo: ${plan.scope}`,
       `motor(es):   ${plan.engines.join(", ")}`,
       `linguagem:   ${plan.language || "—"}    arquitetura: ${plan.architecture || "—"}`,
+      `idioma:      ${plan.userLanguage || "—"}  ${pc.dim("(saída das skills: conversa e artefatos)")}`,
       `config   →   ${installer.coreDir(plan.scope, plan.repo)}  ${pc.dim("(manifest.json + .env)")}`,
       ...plan.targets.map((t) => `skills   →   ${t.dir}`),
       `skills (${plan.skills.length}): ${plan.skills.join(", ")}`,
@@ -125,6 +128,7 @@ function cmdStatus(_f, positional) {
       console.log(`  projeto: ${man.projectId || "—"}`);
       console.log(`  config:  ${man.core}`);
       if (man.language || man.architecture) console.log(`  stack:   linguagem=${man.language || "—"} arquitetura=${man.architecture || "—"}`);
+      if (man.userLanguage) console.log(`  idioma:  ${man.userLanguage}`);
       for (const d of man.skillsDirs || [man.skillsDir]) if (d) console.log(`  skills:  ${d}`);
       console.log(`  skills:  ${(man.skills || []).join(", ")}`);
       console.log(`  em:      ${man.installedAt}`);
@@ -185,7 +189,7 @@ Uso: mgr <comando> [opções]
 
   install [repo]   instala as skills (seletivo) direto na pasta do motor
                    (--engine claude-code|copilot|both, --scope, --language, --arch,
-                    --project-id, --all-skills, --skills-dir, --dry-run, -y)
+                    --user-language, --project-id, --all-skills, --skills-dir, --dry-run, -y)
   status [repo]    mostra o que está instalado
   update [repo]    re-sincroniza (--scope)
   uninstall [repo] remove as skills instaladas (--scope, -y)

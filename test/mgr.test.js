@@ -6,10 +6,10 @@ import { fileURLToPath } from "node:url";
 import os from "node:os";
 import path from "node:path";
 import * as bundle from "../src/bundle.js";
-import { buildRuntime, buildSkill } from "../src/builder.js";
+import { buildRuntime, buildSkill, resolveUserLanguage } from "../src/builder.js";
 import * as installer from "../src/installer.js";
 import * as catalog from "../src/catalog.js";
-import { collectInstallAnswers, CANCELLED } from "../src/prompts.js";
+import { collectInstallAnswers, detectUserLanguage, CANCELLED } from "../src/prompts.js";
 import { validateAll, validateSkill, checkSkill } from "../src/validator.js";
 
 const tmp = () => mkdtempSync(path.join(os.tmpdir(), "mgr-"));
@@ -54,11 +54,11 @@ test("install autossuficiente: só o subconjunto na pasta do motor, sem .mgr-cor
   assert.ok(!existsSync(path.join(core, "skills")), ".mgr-core não deve conter skills");
   assert.match(readFileSync(path.join(core, ".env"), "utf8"), /MGR_PROJECT_ID=/);
 
-  assert.ok(existsSync(path.join(sk, "_shared", "arch", "regras-transversais.md")));
-  assert.ok(existsSync(path.join(sk, "_shared", "quality", "regras-qualidade.md")), "fonte de qualidade co-locada (spec-init)");
+  assert.ok(existsSync(path.join(sk, "_shared", "arch", "cross-cutting-rules.md")));
+  assert.ok(existsSync(path.join(sk, "_shared", "quality", "quality-rules.md")), "fonte de qualidade co-locada (spec-init)");
   const archMd = readFileSync(path.join(sk, "arch-hexagonal", "SKILL.md"), "utf8");
   assert.ok(!archMd.includes("{{MGR_ARCH_RULES}}"), "token deve ser resolvido");
-  assert.ok(archMd.includes("_shared/arch/regras-transversais.md"), "deve apontar para a fonte co-locada");
+  assert.ok(archMd.includes("_shared/arch/cross-cutting-rules.md"), "deve apontar para a fonte co-locada");
 
   const man = JSON.parse(readFileSync(path.join(core, "manifest.json"), "utf8"));
   assert.equal(man.model, "self-contained");
@@ -128,6 +128,28 @@ test("update re-sincroniza preservando o conjunto instalado", () => {
   assert.ok(!res.skills.includes("arch-hexagonal"));
 });
 
+test("userLanguage atravessa o plano até o manifesto; update preserva o valor existente", () => {
+  const repo = tmp();
+  installer.execute(installer.planInstall(["claude-code"], "project", repo, { architecture: "clean", userLanguage: "en" }));
+  const manPath = path.join(repo, ".mgr-core", "manifest.json");
+  assert.equal(JSON.parse(readFileSync(manPath, "utf8")).userLanguage, "en");
+  installer.update("project", repo);
+  assert.equal(JSON.parse(readFileSync(manPath, "utf8")).userLanguage, "en");
+});
+
+test("update backfilla userLanguage pt-BR em manifesto da era anterior", () => {
+  const repo = tmp();
+  installer.execute(installer.planInstall(["claude-code"], "project", repo, { architecture: "clean" }));
+  const manPath = path.join(repo, ".mgr-core", "manifest.json");
+  const man = JSON.parse(readFileSync(manPath, "utf8"));
+  assert.equal(man.userLanguage, null, "instalação sem idioma explícito grava null");
+  delete man.userLanguage;
+  writeFileSync(manPath, JSON.stringify(man, null, 2), "utf8");
+
+  installer.update("project", repo);
+  assert.equal(JSON.parse(readFileSync(manPath, "utf8")).userLanguage, "pt-BR");
+});
+
 test("copilot vai para .github/skills sem tocar .claude", () => {
   const repo = tmp();
   installer.execute(installer.planInstall(["copilot"], "project", repo, { architecture: "hexagonal" }));
@@ -142,7 +164,7 @@ test("instalação com --skills-dir (custom) resolve o token do shared", () => {
   assert.deepEqual(plan.engines, ["custom"]);
   installer.execute(plan);
   assert.ok(existsSync(path.join(custom, "spec-init", "SKILL.md")));
-  assert.ok(existsSync(path.join(custom, "_shared", "arch", "regras-transversais.md")));
+  assert.ok(existsSync(path.join(custom, "_shared", "arch", "cross-cutting-rules.md")));
   assert.ok(!readFileSync(path.join(custom, "arch-clean", "SKILL.md"), "utf8").includes("{{MGR_ARCH_RULES}}"));
 });
 
@@ -164,9 +186,43 @@ test("update e uninstall exigem instalação existente", () => {
   assert.throws(() => installer.uninstall("project", repo), /nada a desinstalar/);
 });
 
+test("resolveUserLanguage troca o token pelo idioma ou pelo fallback", () => {
+  const linha = `Output language: ${catalog.USER_LANGUAGE_TOKEN} — always.`;
+  assert.equal(resolveUserLanguage(linha, "pt-BR"), "Output language: pt-BR — always.");
+  assert.equal(resolveUserLanguage(linha, null), `Output language: ${catalog.USER_LANGUAGE_FALLBACK} — always.`);
+  assert.equal(resolveUserLanguage("sem token", "en"), "sem token");
+});
+
+test("install limpa a fonte co-locada legada (nomes pt) e não deixa token de idioma", () => {
+  const repo = tmp();
+  const sk = path.join(repo, ".claude", "skills");
+  mkdirSync(path.join(sk, "_shared", "arch"), { recursive: true });
+  mkdirSync(path.join(sk, "_shared", "quality"), { recursive: true });
+  writeFileSync(path.join(sk, "_shared", "arch", "regras-transversais.md"), "legado", "utf8");
+  writeFileSync(path.join(sk, "_shared", "quality", "regras-qualidade.md"), "legado", "utf8");
+
+  installer.execute(installer.planInstall(["claude-code"], "project", repo, { architecture: "hexagonal", userLanguage: "pt-BR" }));
+  assert.ok(!existsSync(path.join(sk, "_shared", "arch", "regras-transversais.md")), "legado arch removido");
+  assert.ok(!existsSync(path.join(sk, "_shared", "quality", "regras-qualidade.md")), "legado quality removido");
+  assert.ok(existsSync(path.join(sk, "_shared", "arch", "cross-cutting-rules.md")), "fonte nova presente");
+  for (const n of ["spec-init", "arch-hexagonal"]) {
+    assert.ok(!readFileSync(path.join(sk, n, "SKILL.md"), "utf8").includes(catalog.USER_LANGUAGE_TOKEN), n);
+  }
+});
+
 test("catálogo expõe arquiteturas e linguagens", () => {
   assert.ok(catalog.architectures().includes("hexagonal"));
   assert.ok(catalog.languages().includes("java"));
+});
+
+test("detectUserLanguage: parse do locale com precedência LC_ALL > LC_MESSAGES > LANG", () => {
+  assert.equal(detectUserLanguage({ LANG: "pt_BR.UTF-8" }), "pt-BR");
+  assert.equal(detectUserLanguage({ LANG: "en_US.UTF-8" }), "en-US");
+  assert.equal(detectUserLanguage({}), "en");
+  assert.equal(detectUserLanguage({ LANG: "C" }), "en");
+  assert.equal(detectUserLanguage({ LANG: "POSIX" }), "en");
+  assert.equal(detectUserLanguage({ LC_MESSAGES: "es_ES.UTF-8", LANG: "pt_BR.UTF-8" }), "es-ES");
+  assert.equal(detectUserLanguage({ LC_ALL: "fr_FR@euro", LC_MESSAGES: "es_ES", LANG: "pt_BR" }), "fr-FR");
 });
 
 test("collectInstallAnswers: coleta completa via prompter injetado", async () => {
@@ -174,7 +230,7 @@ test("collectInstallAnswers: coleta completa via prompter injetado", async () =>
   const ask = {
     multiselect: async () => ["claude-code"],
     select: async ({ message }) =>
-      /Arquitetura/.test(message) ? "clean" : /Linguagem/.test(message) ? "java" : "project",
+      /Arquitetura/.test(message) ? "clean" : /Linguagem/.test(message) ? "java" : /Idioma/.test(message) ? "pt-BR" : "project",
     confirm: async () => true,
     text: async () => "meu-projeto",
     isCancel: () => false,
@@ -184,6 +240,7 @@ test("collectInstallAnswers: coleta completa via prompter injetado", async () =>
   assert.equal(out.scope, "project");
   assert.equal(out.architecture, "clean");
   assert.equal(out.language, "java");
+  assert.equal(out.userLanguage, "pt-BR");
   assert.deepEqual(out.optional, ["evidence-capture"]);
   assert.equal(out.projectId, "meu-projeto");
 });
@@ -193,13 +250,14 @@ test("collectInstallAnswers: linguagem 'outra' vira null; projectId vazio cai no
   const ask = {
     multiselect: async () => ["copilot"],
     select: async ({ message }) =>
-      /Arquitetura/.test(message) ? "onion" : /Linguagem/.test(message) ? "outra" : "project",
+      /Arquitetura/.test(message) ? "onion" : /Linguagem/.test(message) ? "outra" : /Idioma/.test(message) ? "outro" : "project",
     confirm: async () => false,
     text: async () => "",
     isCancel: () => false,
   };
-  const out = await collectInstallAnswers(ask, {}, { repo });
+  const out = await collectInstallAnswers(ask, {}, { repo, env: { LANG: "es_ES.UTF-8" } });
   assert.equal(out.language, null);
+  assert.equal(out.userLanguage, "es-ES");
   assert.deepEqual(out.optional, []);
   assert.equal(out.projectId, path.basename(repo));
 });
@@ -213,13 +271,15 @@ test("collectInstallAnswers: cancelamento em qualquer prompt retorna CANCELLED",
       if (onde === "scope" && /Escopo/.test(message)) return CANCEL;
       if (onde === "arch" && /Arquitetura/.test(message)) return CANCEL;
       if (onde === "lang" && /Linguagem/.test(message)) return CANCEL;
+      if (onde === "userlang" && /Idioma/.test(message)) return CANCEL;
+      if (/Idioma/.test(message)) return "en";
       return /Arquitetura/.test(message) ? "hexagonal" : /Linguagem/.test(message) ? "java" : "project";
     },
     confirm: async () => (onde === "optional" ? CANCEL : false),
     text: async () => (onde === "pid" ? CANCEL : "x"),
     isCancel: (v) => v === CANCEL,
   });
-  for (const onde of ["engines", "scope", "arch", "lang", "optional", "pid"]) {
+  for (const onde of ["engines", "scope", "arch", "lang", "userlang", "optional", "pid"]) {
     assert.equal(await collectInstallAnswers(cancelando(onde), {}, { repo }), CANCELLED, onde);
   }
 });
@@ -229,13 +289,14 @@ test("collectInstallAnswers: não pergunta o que já veio por flag (--all-skills
   const naoPergunta = { isCancel: () => false };
   const out = await collectInstallAnswers(
     naoPergunta,
-    { engines: ["copilot"], scope: "global", projectId: "x" },
+    { engines: ["copilot"], scope: "global", projectId: "x", userLanguage: "en" },
     { repo, allSkills: true }
   );
   assert.deepEqual(out.engines, ["copilot"]);
   assert.equal(out.scope, "global");
   assert.equal(out.projectId, "x");
   assert.equal(out.architecture, null);
+  assert.equal(out.userLanguage, "en");
   assert.deepEqual(out.optional, []);
 });
 
@@ -292,7 +353,7 @@ test("buildRuntime gera skills + shared num diretório", () => {
   const dir = path.join(tmp(), "rt");
   buildRuntime(dir, ["spec-init"]);
   assert.ok(existsSync(path.join(dir, "skills", "spec-init", "SKILL.md")));
-  assert.ok(existsSync(path.join(dir, "shared", "arch", "regras-transversais.md")));
+  assert.ok(existsSync(path.join(dir, "shared", "arch", "cross-cutting-rules.md")));
 });
 
 test("bundle.pkgDir lança para recurso ausente e readVersion retorna semver", () => {

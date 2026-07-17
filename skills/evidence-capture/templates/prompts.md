@@ -1,13 +1,13 @@
 # Prompts — <feature>
 
-<!-- Um bloco por prompt relevante usado NESTA funcionalidade. Registrar o que foi
-     efetivamente usado; sem invenção. -->
+<!-- One block per relevant prompt used in THIS feature. Record what was actually
+     used; no invention. -->
 
-## Prompt 1 — <objetivo curto>
-**Ferramenta:** <Claude Code | Copilot | ChatGPT | Cursor>
-**Fase SDD:** <spec | execução | teste | review>
+## Prompt 1 — <short goal>
+**Tool:** <Claude Code | Copilot | ChatGPT | Cursor>
+**SDD phase:** <spec | execution | test | review>
 
 **Prompt:**
-> <texto do prompt, ou resumo fiel>
+> <prompt text, or a faithful summary>
 
-**Produziu:** <o que a IA gerou; link para arquivo/spec se aplicável>
+**Produced:** <what the AI generated; link to a file/spec when applicable>

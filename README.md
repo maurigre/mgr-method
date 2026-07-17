@@ -1,4 +1,6 @@
-# MGR — Método Governado por Rastreabilidade
+# MGR — Método Governado por Rastreabilidade (Traceability-Governed Method)
+
+> **Versão em português:** [README.pt-BR.md](README.pt-BR.md)
 
 [![CI](https://img.shields.io/github/actions/workflow/status/maurigre/mgr-method/ci.yml?branch=main&label=CI&logo=github)](https://github.com/maurigre/mgr-method/actions/workflows/ci.yml)
 [![coverage](https://img.shields.io/coveralls/github/maurigre/mgr-method?branch=main&logo=coveralls)](https://coveralls.io/github/maurigre/mgr-method?branch=main)
@@ -6,123 +8,128 @@
 [![node](https://img.shields.io/node/v/mgr-method?logo=node.js&logoColor=white)](https://www.npmjs.com/package/mgr-method)
 [![license](https://img.shields.io/badge/license-Source--Available-blue)](LICENSE)
 
-Framework de **Specification-Driven Development (SDD)** para agentes de código:
-um CLI instala um conjunto de Agent Skills que conduzem o
-projeto do brief à entrega com checkpoints humanos, decisões rastreáveis (ADRs) e
-review governado por regras do próprio projeto. Portável entre **Claude Code** e
-**GitHub Copilot** (padrão aberto de Agent Skills), com integração opcional à memória
-de longo prazo **mgr-code**.
+A **Specification-Driven Development (SDD)** framework for coding agents:
+a CLI installs a set of Agent Skills that drive a project from brief to delivery with
+human checkpoints, traceable decisions (ADRs) and review governed by the project's own
+rules. Portable between **Claude Code** and **GitHub Copilot** (the open Agent Skills
+standard), with optional integration with the **mgr-code** long-term memory.
 
-## Instalação
+## Installation
 
 ```bash
-npx mgr-method@latest install   # TUI: motores + escopo + linguagem + arquitetura
+npx mgr-method@latest install   # TUI: engines + scope + language + architecture + output language
 ```
 
-> Use `@latest` para o `npx` sempre pegar a versão publicada mais recente (sem tag, ele
-> pode reusar uma versão em cache). Para fixar uma versão: `npx mgr-method@0.3.0 install`.
+> Use `@latest` so `npx` always grabs the latest published version (without the tag it may
+> reuse a cached one). To pin a version: `npx mgr-method@0.3.0 install`.
 
-A instalação é **seletiva**: o TUI pergunta os motores, o escopo, a **linguagem** e a
-**arquitetura** do projeto, e um `MGR_PROJECT_ID`. Só as skills que o projeto usa são
-copiadas — o núcleo (`spec-init`, `spec-create`, `spec-execute`, `adr-create`,
-`code-analyzer`, `diagnosing-bugs`), a skill da arquitetura escolhida (ex.: `arch-hexagonal`) e os
-helpers da linguagem (ex.: `junit-clean` em Java).
+Installation is **selective**: the TUI asks for the engines, the scope, the project's
+**programming language** and **architecture**, the **output language** (the language the
+skills use to talk to you and to generate artifacts — suggested from your locale), and an
+`MGR_PROJECT_ID`. Only the skills the project uses are copied — the core (`spec-init`,
+`spec-create`, `spec-execute`, `adr-create`, `code-analyzer`, `diagnosing-bugs`), the
+chosen architecture's skill (e.g. `arch-hexagonal`) and the language helpers (e.g.
+`junit-clean` for Java).
 
-Não-interativo / ciclo de vida:
+Non-interactive / lifecycle:
 
 ```bash
 npx mgr-method install --engine claude-code --language java --arch hexagonal .
 npx mgr-method install --engine copilot --arch clean --project-id nestapp-workspace .
-npx mgr-method install --all-skills .        # instala todas as skills (sem seleção)
+npx mgr-method install --user-language pt-BR .   # skills talk and generate artifacts in pt-BR
+npx mgr-method install --all-skills .            # installs every skill (no selection)
 npx mgr-method install --dry-run
 npx mgr-method status | update | uninstall
 ```
 
-### Layout instalado
+### Installed layout
 
-Cada motor é **autossuficiente**: o conteúdo completo das skills vai direto para a pasta do
-motor (`.claude/skills/` ou `.github/skills/`), sem duplicação e sem apontadores. O
-`.mgr-core/` guarda apenas **config do projeto** (versione-o):
+Each engine is **self-contained**: the full content of the skills goes straight into the
+engine's folder (`.claude/skills/` or `.github/skills/`), no duplication and no pointers.
+`.mgr-core/` holds only **project config** (version it):
 
 ```
 .mgr-core/
-├── manifest.json     # o que foi instalado (motores, skills, linguagem, arquitetura)
-└── .env              # MGR_PROJECT_ID=<id>, usado pela memória estendida (mgr-code)
-.claude/skills/       # as skills (única árvore de skills)
+├── manifest.json     # what was installed (engines, skills, language, architecture, userLanguage)
+└── .env              # MGR_PROJECT_ID=<id>, used by the extended memory (mgr-code)
+.claude/skills/       # the skills (single skills tree)
 ```
 
-Instalar para dois motores gera duas árvores independentes — apagar uma **não** afeta a
-outra. Instalações no modelo antigo (runtime + `.mgr-core/skills` + lançadores) são
-**migradas automaticamente** no `install`/`update`. Use `--skills-dir` para forçar um
-diretório específico. O `uninstall` remove só o que o MGR criou; `docs/`, `specs/` e código
-ficam intactos.
+Installing for two engines produces two independent trees — deleting one does **not**
+affect the other. Installations in the old model (runtime + `.mgr-core/skills` +
+launchers) are **migrated automatically** on `install`/`update`. Use `--skills-dir` to
+force a specific directory. `uninstall` removes only what MGR created; `docs/`, `specs/`
+and code stay intact.
 
-## O fluxo
+## The flow
 
 ```
-spec-init  ─── uma vez ───►  docs/sdd/ + CONSTITUTION.md + 09-review-rules.md
-                                  │   (constituição: revisão humana obrigatória)
-spec-create ── por feature ──►  specs/<feature>/ 01-brief → 02-prd → 03-spec
+spec-init  ─── once ───►  docs/sdd/ + CONSTITUTION.md + 09-review-rules.md
+                                  │   (constitution: human review required)
+spec-create ── per feature ──►  specs/<feature>/ 01-brief → 02-prd → 03-spec
                                   → 04-plan (P0/P1/P2 + DAG) → 05-execution → 06-completion
-                                  │   checkpoints bloqueantes; sem commit automático
-adr-create  ── quando há decisão arquitetural (invocada automaticamente)
-diagnosing-bugs ─ bug difícil: loop de reprodução vermelho antes de qualquer hipótese
-junit-clean ── tasks de teste Java (13 regras)
-code-analyzer ─ review final de 2 eixos: Standards (guia DO projeto) + Spec (cumpriu o pedido?)
+                                  │   blocking checkpoints; no automatic commit
+adr-create  ── whenever there is an architectural decision (invoked automatically)
+diagnosing-bugs ─ hard bug: a red reproduction loop before any hypothesis
+junit-clean ── Java test tasks (13 rules)
+code-analyzer ─ final 2-axis review: Standards (THE project's guide) + Spec (did it do what was asked?)
 ```
 
-### As skills
+### The skills
 
-| Skill | Papel |
+| Skill | Role |
 |---|---|
-| `spec-init` | Inicializa a SDD: analisa projeto existente (chunking em fases) **ou** entrevista guiada em projeto vazio (greenfield). Gera `docs/sdd/`, a `CONSTITUTION.md` do projeto e o guia de review. |
-| `spec-create` | Evolui o projeto por feature: brief → PRD → spec → plano (P0/P1/P2 + DAG), com checkpoints bloqueantes; após a aprovação do plano, delega a implementação ao `spec-execute` e fecha com o completion. |
-| `spec-execute` | Executa o plano aprovado task a task (DAG), aplicando as premissas de desenvolvimento (segurança, performance, recursos, clareza — "vocabulário, não checklist") e o controle ativo de contexto (tiers S–F, arquivamento a 75%, hand-off, anti-compactação). Retomada direta de execução interrompida. |
-| `adr-create` | ADRs formato Nygard: auto-detecta diretório, numeração sequencial, imutabilidade de aceitos, modo avulso ou invocado. |
-| `code-analyzer` | Revisor rigoroso de **dois eixos**, reportados lado a lado: **Standards** (o código segue `docs/sdd/09-review-rules.md`?) e **Spec** (o código cumpriu a spec de origem?). **Restrição Crítica** nos dois: toda reprovação cita textualmente — a regra do guia ou a linha da spec; sem citação, não reprova (§3.1). Modelo de dois eixos adaptado de `code-review` de Matt Pocock ([MIT](https://github.com/mattpocock/skills)). |
-| `diagnosing-bugs` | Disciplina de diagnóstico de bug difícil: exige um loop de reprodução **vermelho** antes de qualquer hipótese (*sinal antes de teoria*), 3–5 hipóteses falsificáveis, teste de regressão antes do fix. Acha a causa e para (entrega o conserto ao `spec-create`). Adaptada de `diagnosing-bugs` de Matt Pocock ([MIT](https://github.com/mattpocock/skills)). |
-| `evidence-capture` | Registra evidências AI-First por funcionalidade (prompts, revisões, habilidades) em `specs/<feature>/ai/` + índice global; organiza e pergunta, nunca inventa. |
-| `junit-clean` | Testes Java padronizados por 13 regras (naming should+camelCase, sem herança, ParameterizedTest, AAA, boundary + MC/DC, Sonar-safe). |
-| `arch-hexagonal` | Guia de regras para Ports & Adapters (Cockburn), agnóstico à linguagem (perfis Java/Go/Python/C#/TS + genérico). |
-| `arch-clean` · `arch-onion` · `arch-layered` | Guias canônicos de Clean (Martin), Onion (Palermo) e Layered (Fowler), no mesmo template agnóstico, com regras transversais compartilhadas. |
+| `spec-init` | Initializes the SDD: analyzes an existing project (phased chunking) **or** runs a guided interview on an empty project (greenfield). Generates `docs/sdd/`, the project's `CONSTITUTION.md` and the review guide. |
+| `spec-create` | Evolves the project per feature: brief → PRD → spec → plan (P0/P1/P2 + DAG), with blocking checkpoints; after plan approval, delegates the implementation to `spec-execute` and closes with the completion. |
+| `spec-execute` | Executes the approved plan task by task (DAG), applying the development premises (security, performance, resources, clarity — "vocabulary, not a checklist") and active context control (S–F tiers, archiving at 75%, hand-off, anti-compaction). Direct resumption of an interrupted execution. |
+| `adr-create` | Nygard-format ADRs: auto-detects the directory, sequential numbering, immutability of accepted ones, standalone or invoked mode. |
+| `code-analyzer` | Rigorous **two-axis** reviewer, reported side by side: **Standards** (does the code follow `docs/sdd/09-review-rules.md`?) and **Spec** (did the code fulfill its originating spec?). **Critical Restriction** on both: every reproval quotes textually — the guide rule or the spec line; no citation, no reproval (§3.1). Two-axis model adapted from Matt Pocock's `code-review` ([MIT](https://github.com/mattpocock/skills)). |
+| `diagnosing-bugs` | Discipline for diagnosing hard bugs: requires a **red** reproduction loop before any hypothesis (*signal before theory*), 3–5 falsifiable hypotheses, a regression test before the fix. Finds the cause and stops (hands the repair to `spec-create`). Adapted from Matt Pocock's `diagnosing-bugs` ([MIT](https://github.com/mattpocock/skills)). |
+| `evidence-capture` | Records AI-First evidence per feature (prompts, reviews, skills) in `specs/<feature>/ai/` + a global index; organizes and asks, never invents. |
+| `junit-clean` | Java tests standardized by 13 rules (should+camelCase naming, no inheritance, ParameterizedTest, AAA, boundary + MC/DC, Sonar-safe). |
+| `arch-hexagonal` | Rules guide for Ports & Adapters (Cockburn), language-agnostic (Java/Go/Python/C#/TS profiles + generic). |
+| `arch-clean` · `arch-onion` · `arch-layered` | Canonical guides for Clean (Martin), Onion (Palermo) and Layered (Fowler), on the same agnostic template, with shared cross-cutting rules. |
 
-### Princípios que governam tudo
+### Principles that govern everything
 
-- **Constituição é lei** — gerada por projeto pelo `spec-init`, revisada por humano;
-  toda spec/task a respeita ou declara override documentado.
-- **Evidência, nunca invenção** — o que não deriva de código, spec ou entrevista vira
-  `[A CONFIRMAR]`/`[A DEFINIR]` + pergunta; reprovação sem regra textual não existe.
-- **Checkpoints bloqueantes** — o humano aprova PRD, spec e plano; commit é humano.
-- **Contexto sob controle** — tiers S/A/B/C/D/E/F, arquivamento a 75%, hand-off de
-  sessão, proibição de compactação. Projetado para caber no menor orçamento de contexto
-  entre os motores suportados (limites variam por ferramenta/versão — não presuma janela grande).
-- **mgr-code se disponível** — cada skill sonda o `mgr-mcp` no início; usa a memória
-  quando presente e **alerta visivelmente** quando ausente. Nunca é dependência crítica.
+- **The constitution is law** — generated per project by `spec-init`, human-reviewed;
+  every spec/task respects it or declares a documented override.
+- **Evidence, never invention** — whatever does not derive from code, spec or interview
+  becomes `[TO CONFIRM]`/`[TO DEFINE]` + a question; a reproval without a textual rule
+  does not exist.
+- **Blocking checkpoints** — a human approves the PRD, the spec and the plan; the commit
+  is human.
+- **Context under control** — S/A/B/C/D/E/F tiers, archiving at 75%, session hand-off,
+  compaction forbidden. Designed to fit the smallest context budget among the supported
+  engines (limits vary per tool/version — do not assume a large window).
+- **mgr-code when available** — every skill probes the `mgr-mcp` at the start; uses the
+  memory when present and **warns visibly** when absent. Never a hard dependency.
 
-## Projeto do zero (greenfield)
+## From scratch (greenfield)
 
-`spec-init` detecta o projeto vazio e entra em modo entrevista: stack, arquitetura
-(hexagonal default / clean / onion / layered), domínio, persistência, contratos, testes,
-logs e não-negociáveis — com defaults agressivos e ramificação. Cada decisão estrutural
-gera um ADR automaticamente. Sai a mesma SDD do brownfield; depois é `spec-create` por
-feature, idêntico.
+`spec-init` detects the empty project and enters interview mode: stack, architecture
+(hexagonal default / clean / onion / layered), domain, persistence, contracts, tests,
+logs and non-negotiables — with aggressive defaults and branching. Every structural
+decision automatically generates an ADR. Out comes the same SDD as brownfield; then it is
+`spec-create` per feature, identical.
 
-## Estrutura do repositório
+## Repository structure
 
 ```
 bin/mgr.js          # CLI (install · status · update · uninstall · build · validate · list)
-src/                # bundle · builder (runtime+lançadores) · installer (2 fases) · manifest · validator
-skills/             # as 12 skills (fonte)
-shared/scripts/     # sdd-check.sh (verifica pré-requisitos do spec-create)
+src/                # bundle · builder (runtime+launchers) · installer (2 phases) · manifest · validator
+skills/             # the 12 skills (source)
+shared/scripts/     # sdd-check.sh (checks the spec-create prerequisites)
 test/               # node:test
 ```
 
-Dependências mínimas (@clack/prompts e picocolors na TUI; esbuild só em dev — o pacote
-publicado é um bundle minificado). Node ≥ 22. Release: `git tag vX.Y.Z && git push --tags`
-dispara o workflow de publish (valida, testa e publica no npm com provenance). Desenvolvimento: `npm test`,
-`node bin/mgr.js validate`.
+Minimal dependencies (@clack/prompts and picocolors in the TUI; esbuild dev-only — the
+published package is a minified bundle). Node ≥ 22. Release: `git tag vX.Y.Z && git push
+--tags` triggers the publish workflow (validates, tests and publishes to npm with
+provenance). Development: `npm test`, `node bin/mgr.js validate`.
 
-## Licença
+## License
 
-Source-available — código aberto para leitura e uso pessoal/interno; redistribuição,
-revenda ou derivados distribuídos exigem autorização do autor. Veja [LICENSE](LICENSE).
+Source-available — code open for reading and personal/internal use; redistribution,
+resale or distributed derivatives require the author's permission. See
+[LICENSE](LICENSE).

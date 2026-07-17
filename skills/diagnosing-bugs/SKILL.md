@@ -1,234 +1,246 @@
 ---
 name: diagnosing-bugs
-description: Disciplina de diagnóstico de bug difícil e regressão de performance — exige um loop de reprodução que fica VERMELHO no bug ANTES de qualquer hipótese (sinal antes de teoria). Acha a causa-raiz e para; o conserto não-trivial é entregue ao spec-create. Use quando o usuário pedir para diagnosticar ou debugar algo, ou reportar algo quebrado, lançando exceção, falhando ou lento.
+description: Discipline for diagnosing hard bugs and performance regressions — requires a reproduction loop that goes RED on the bug BEFORE any hypothesis (signal before theory). Finds the root cause and stops; the non-trivial fix is handed to spec-create. Use when the user asks to diagnose or debug something, or reports something broken, throwing, failing or slow.
 ---
 
-# diagnosing-bugs — Diagnóstico disciplinado
+# diagnosing-bugs — Disciplined diagnosis
 
-Disciplina para bug difícil. **Pule uma fase apenas com justificativa explícita.**
+Output language: {{MGR_USER_LANGUAGE}} — all user-facing interaction and generated artifacts
+use this language; generated file names and rule IDs stay in English.
 
-A regra que governa tudo: **sinal antes de teoria.** Enquanto você não tiver um comando que
-reproduz o bug e fica **vermelho** nele, nenhuma hipótese vale — ler código para adivinhar a
-causa é exatamente o improviso que esta skill existe para impedir.
+Discipline for hard bugs. **Skip a phase only with an explicit justification.**
 
-**Escopo (só diagnóstico):** esta skill acha a **causa-raiz** e **para**. O conserto não-trivial
-é entregue ao `spec-create` (tipo bugfix) — ela **não** é um segundo motor de execução. Ver a
-Fase 6.
+The rule that governs everything: **signal before theory.** Until you have a command that
+reproduces the bug and goes **red** on it, no hypothesis counts — reading code to guess the
+cause is exactly the improvisation this skill exists to prevent.
 
-**Antes de explorar:** carregue o modelo mental do domínio — `docs/sdd/04-domain.md` e
-`08-glossary.md` (se existirem) e os ADRs em `docs/adr/` da área que você vai tocar. Se a memória
-`mgr-code` estiver disponível, consulte `mgr_recall` (`have_i_seen_this`) — talvez este bug, ou um
-parecido, já tenha sido diagnosticado.
+**Scope (diagnosis only):** this skill finds the **root cause** and **stops**. The
+non-trivial fix is handed to `spec-create` (bugfix type) — it is **not** a second execution
+engine. See Phase 6.
 
----
-
-## Fase 1 — Construir o loop de feedback
-
-**Esta é a skill.** Todo o resto é mecânico. Se você tem um sinal **tight** (apertado) de
-pass/fail que fica vermelho _neste_ bug, você vai achar a causa — bisection, teste de hipótese e
-instrumentação apenas consomem esse sinal. Sem ele, olhar para o código não salva ninguém.
-
-Gaste esforço desproporcional aqui. **Seja agressivo. Seja criativo. Não desista.**
-
-### Formas de construir o loop — tente nesta ordem aproximada
-
-1. **Teste que falha** no seam que alcança o bug — unitário, integração, e2e.
-2. **Script curl / HTTP** contra um servidor rodando.
-3. **Invocação de CLI** com uma entrada fixture, comparando a saída com um resultado conhecido-bom.
-4. **Script headless** que dirige a interface e asserta no estado observável (saída, log, rede).
-5. **Replay de trace capturado.** Salve um payload / log de evento real em disco; reproduza-o
-   pelo caminho de código isolado.
-6. **Harness descartável.** Suba um subconjunto mínimo do sistema (um serviço, deps falsas) que
-   exercita o caminho do bug com uma única chamada.
-7. **Loop property / fuzz.** Se o bug é "às vezes a saída sai errada", rode 1000 entradas
-   aleatórias e procure o modo de falha.
-8. **Harness de bisection.** Se o bug surgiu entre dois estados conhecidos (commit, versão,
-   dataset), automatize "iniciar no estado X, checar, repetir" para rodar sob bisection.
-9. **Loop diferencial.** Rode a mesma entrada na versão antiga vs. nova (ou dois configs) e
-   compare as saídas.
-10. **Roteiro HITL (último recurso).** Se um humano precisa mesmo agir na mão, **dirija-o** por um
-    roteiro estruturado no terminal — um passo por vez, capturando a resposta de cada um — em vez
-    de um bate-papo solto. A resposta capturada realimenta o loop. (A técnica; sem arquivo pronto.)
-
-Construa o loop certo e o bug está 90% resolvido.
-
-### Aperte o loop (mantenha-o *tight*)
-
-Trate o loop como um produto. Uma vez que tenha _um_ loop, **aperte-o**:
-
-- Mais rápido? (Cachear o setup, pular init irrelevante, estreitar o escopo do teste.)
-- Sinal mais afiado? (Assertar no sintoma específico, não em "não quebrou".)
-- Mais determinístico? (Fixar o tempo, semear o RNG, isolar o filesystem, congelar a rede.)
-
-Um loop instável de 30s mal supera nenhum loop; um determinístico de 2s é *tight* — um superpoder.
-
-### Bugs não-determinísticos
-
-A meta não é um repro limpo, e sim uma **taxa de reprodução maior**. Rode o gatilho 100×,
-paralelize, adicione stress, estreite janelas de timing, injete sleeps. Um bug que falha 50% das
-vezes é debugável; 1% não é — eleve a taxa até ficar debugável.
-
-### Quando você genuinamente não consegue construir o loop
-
-**Pare e diga isso explicitamente.** Liste o que tentou. Peça ao usuário: (a) acesso ao ambiente
-que reproduz, (b) um artefato capturado (log, dump, gravação com timestamps), ou (c) permissão
-para instrumentação temporária. **Não** prossiga para hipótese sem um loop.
-
-### Critério de conclusão — um loop *tight* que fica vermelho
-
-A Fase 1 termina quando o loop é **tight** e **capaz de ficar vermelho**: você consegue nomear
-**um comando** — um caminho de script, uma invocação de teste, um curl — que você **já rodou pelo
-menos uma vez** (cole a invocação e a saída dela), e que é:
-
-- [ ] **Capaz de ficar vermelho** — dirige o caminho real do bug e asserta o **sintoma exato do
-  usuário**, então fica vermelho neste bug e verde quando corrigido. Não "roda sem erro" — tem de
-  _pegar este bug específico_.
-- [ ] **Determinístico** — mesmo veredito todo run (bug instável: taxa de repro alta e fixada).
-- [ ] **Rápido** — segundos, não minutos.
-- [ ] **Executável pelo agente** — você roda sozinho; humano no loop só pelo roteiro HITL.
-
-Se você se pegar lendo código para montar uma teoria antes deste comando existir, **PARE — pular
-direto para a hipótese é exatamente a falha que esta skill previne.** Sem comando vermelho, sem
-Fase 2.
+**Before exploring:** load the domain mental model — `docs/sdd/04-domain.md` and
+`08-glossary.md` (if they exist) and the ADRs in `docs/adr/` for the area you will touch. If
+the `mgr-code` memory is available, consult `mgr_recall` (`have_i_seen_this`) — maybe this
+bug, or a similar one, was already diagnosed.
 
 ---
 
-## Fase 2 — Reproduzir + minimizar
+## Phase 1 — Build the feedback loop
 
-Rode o loop. Veja-o ficar vermelho — o bug aparece.
+**This is the skill.** Everything else is mechanical. If you have a **tight** pass/fail
+signal that goes red on _this_ bug, you will find the cause — bisection, hypothesis testing
+and instrumentation merely consume that signal. Without it, staring at the code saves no one.
 
-Confirme:
+Spend disproportionate effort here. **Be aggressive. Be creative. Do not give up.**
 
-- [ ] O loop produz o modo de falha que o **usuário** descreveu — não uma falha vizinha que por
-  acaso está perto. Bug errado = fix errado.
-- [ ] A falha é reprodutível em múltiplos runs (ou, para bug não-determinístico, a uma taxa alta o
-  bastante para debugar).
-- [ ] Você capturou o sintoma exato (mensagem de erro, saída errada, timing lento) para as fases
-  seguintes verificarem que o fix de fato o resolve.
+### Ways to build the loop — try in roughly this order
 
-### Minimizar
+1. **A failing test** at the seam that reaches the bug — unit, integration, e2e.
+2. **A curl / HTTP script** against a running server.
+3. **A CLI invocation** with a fixture input, comparing the output to a known-good result.
+4. **A headless script** that drives the interface and asserts on observable state (output,
+   logs, network).
+5. **Replay of a captured trace.** Save a real payload / event log to disk; replay it
+   through the isolated code path.
+6. **A disposable harness.** Bring up a minimal subset of the system (one service, fake
+   deps) that exercises the bug's path with a single call.
+7. **A property / fuzz loop.** If the bug is "sometimes the output comes out wrong", run
+   1000 random inputs and look for the failure mode.
+8. **A bisection harness.** If the bug appeared between two known states (commit, version,
+   dataset), automate "start at state X, check, repeat" so it can run under bisection.
+9. **A differential loop.** Run the same input on the old vs. new version (or two configs)
+   and compare outputs.
+10. **An HITL script (last resort).** If a human really must act by hand, **drive them**
+    through a structured terminal script — one step at a time, capturing each response —
+    instead of a loose chat. The captured response feeds the loop. (The technique; no
+    ready-made file.)
 
-Uma vez vermelho, encolha o repro para o **menor cenário que ainda fica vermelho**. Corte
-entradas, chamadores, config, dados e passos **um de cada vez**, re-rodando o loop após cada
-corte — mantenha só o que é load-bearing para a falha.
+Build the right loop and the bug is 90% solved.
 
-Por que fazer isso: um repro mínimo encolhe o espaço de hipóteses na Fase 3 (menos peças
-suspeitas) e vira o teste de regressão limpo na Fase 5.
+### Tighten the loop (keep it *tight*)
 
-Pronto quando **todo elemento restante é load-bearing** — remover qualquer um deixa o loop verde.
+Treat the loop as a product. Once you have _a_ loop, **tighten it**:
 
-Não prossiga sem ter reproduzido **e** minimizado.
+- Faster? (Cache the setup, skip irrelevant init, narrow the test scope.)
+- Sharper signal? (Assert on the specific symptom, not on "didn't crash".)
+- More deterministic? (Pin time, seed the RNG, isolate the filesystem, freeze the network.)
 
----
+An unstable 30s loop barely beats no loop; a deterministic 2s one is *tight* — a superpower.
 
-## Fase 3 — Hipotetizar
+### Non-deterministic bugs
 
-Gere **3–5 hipóteses ranqueadas** antes de testar qualquer uma. Gerar uma só ancora na primeira
-ideia plausível.
+The goal is not a clean repro, but a **higher reproduction rate**. Run the trigger 100×,
+parallelize, add stress, narrow timing windows, inject sleeps. A bug failing 50% of the time
+is debuggable; 1% is not — raise the rate until it becomes debuggable.
 
-Cada hipótese deve ser **falsificável**: enuncie a predição que ela faz.
+### When you genuinely cannot build the loop
 
-> Formato: "Se `<X>` é a causa, então `<mudar Y>` faz o bug sumir / `<mudar Z>` o piora."
+**Stop and say so explicitly.** List what you tried. Ask the user for: (a) access to the
+environment that reproduces it, (b) a captured artifact (log, dump, recording with
+timestamps), or (c) permission for temporary instrumentation. Do **not** proceed to a
+hypothesis without a loop.
 
-Se você não consegue enunciar a predição, a hipótese é um palpite vago — descarte ou afie.
+### Completion criterion — a *tight* loop that goes red
 
-**Mostre a lista ranqueada ao usuário antes de testar.** Ele costuma ter conhecimento de domínio
-que re-ranqueia na hora ("acabamos de mexer no #3"), ou hipóteses já descartadas. Checkpoint
-barato, economia grande. Não bloqueie: se o usuário está ausente, siga com o seu ranking.
+Phase 1 ends when the loop is **tight** and **red-capable**: you can name **one command** —
+a script path, a test invocation, a curl — that you have **already run at least once**
+(paste the invocation and its output), and that is:
 
----
+- [ ] **Red-capable** — drives the bug's real path and asserts the **user's exact symptom**,
+  so it goes red on this bug and green when fixed. Not "runs without error" — it has to
+  _catch this specific bug_.
+- [ ] **Deterministic** — same verdict every run (unstable bug: a high, pinned repro rate).
+- [ ] **Fast** — seconds, not minutes.
+- [ ] **Agent-runnable** — you run it yourself; a human in the loop only via the HITL script.
 
-## Fase 4 — Instrumentar
-
-Cada probe mapeia a uma predição específica da Fase 3. **Mude uma variável por vez.**
-
-Preferência de ferramenta:
-
-1. **Debugger / inspeção em REPL** se o ambiente suporta. Um breakpoint vale dez logs.
-2. **Logs alvo** nas fronteiras que distinguem as hipóteses.
-3. Nunca "logar tudo e dar grep".
-
-**Marque todo log de debug** com um prefixo único, ex. `[DEBUG-a4f2]`. A limpeza no fim vira um
-único grep. Log sem tag sobrevive; log com tag morre.
-
-**Ramo de performance.** Para regressão de perf, log costuma enganar. Em vez disso: estabeleça uma
-medição de baseline (harness de timing, profiler, plano de query), depois bisecte. Meça primeiro,
-corrija depois.
-
----
-
-## Fase 5 — Corrigir + teste de regressão
-
-Escreva o teste de regressão **antes do fix** — mas só se houver um **seam correto** para ele.
-
-Um seam correto é aquele em que o teste exercita o **padrão real do bug** como ele ocorre no call
-site. Se o único seam disponível é raso demais (teste de um chamador quando o bug precisa de
-vários; teste unitário que não replica a cadeia que disparou o bug), um teste ali dá falsa
-confiança.
-
-**Se não existe seam correto, isso em si é o achado.** Anote. A arquitetura do código está
-impedindo travar o bug. Sinalize para a Fase 6. — Isto **alinha com a anti-inflação** (`§4` da
-CONSTITUTION): não se cria um teste raso só para "ter cobertura"; a ausência de seam é informação,
-não motivo para um teste sem valor.
-
-Se existe seam correto:
-
-1. Transforme o repro minimizado num teste que falha nesse seam.
-2. Veja-o falhar.
-3. Aplique o fix.
-4. Veja-o passar.
-5. Re-rode o loop da Fase 1 no cenário **original** (não-minimizado).
+If you catch yourself reading code to build a theory before this command exists, **STOP —
+jumping straight to the hypothesis is exactly the failure this skill prevents.** No red
+command, no Phase 2.
 
 ---
 
-## Fase 6 — Limpeza, post-mortem e aterrissagem do fix
+## Phase 2 — Reproduce + minimize
 
-### Checklist de limpeza (obrigatório antes de declarar pronto)
+Run the loop. Watch it go red — the bug shows up.
 
-- [ ] O repro original não reproduz mais (re-rode o loop da Fase 1).
-- [ ] O teste de regressão passa (ou a ausência de seam está documentada).
-- [ ] Toda instrumentação `[DEBUG-...]` removida (dê `grep` no prefixo).
-- [ ] Protótipos descartáveis apagados (ou movidos para um local claramente marcado).
-- [ ] A hipótese que se confirmou está registrada no **texto do post-mortem** — para o próximo
-  aprender.
+Confirm:
 
-### Post-mortem (a skill produz o texto; o commit é humano)
+- [ ] The loop produces the failure mode the **user** described — not a neighboring failure
+  that happens to be nearby. Wrong bug = wrong fix.
+- [ ] The failure reproduces across multiple runs (or, for a non-deterministic bug, at a
+  rate high enough to debug).
+- [ ] You captured the exact symptom (error message, wrong output, slow timing) so the later
+  phases can verify the fix actually resolves it.
 
-Esta skill **produz** o texto do post-mortem (o que era o bug, como o loop o pegou, qual hipótese
-venceu). Ela **não** commita: registrar isso em mensagem de commit ou PR é passo **confirmado por
-humano** (`§5` da CONSTITUTION — nenhuma ação de git automática).
+### Minimize
 
-### Aterrissagem do fix (a skill NÃO cria branch)
+Once red, shrink the repro to the **smallest scenario that still goes red**. Cut inputs,
+callers, config, data and steps **one at a time**, re-running the loop after each cut — keep
+only what is load-bearing for the failure.
 
-O diagnóstico é **branch-agnostic**. A skill **não cria branch** e **não decide sozinha** onde o
-fix aterrissa — ela aplica esta regra e **recomenda**, o humano confirma:
+Why do this: a minimal repro shrinks the hypothesis space in Phase 3 (fewer suspect parts)
+and becomes the clean regression test in Phase 5.
 
-- **A causa está no código novo da feature em que você já está trabalhando?** → o fix pertence a
-  **essa branch** (é parte de terminar a feature).
-- **O bug é pré-existente?** → **nunca** dobre o fix dentro da branch da feature atual: isso
-  acopla um conserto a uma feature inacabada. Então:
-  - **Não bloqueia a feature atual?** → **adie** (default seguro): registre o diagnóstico, conclua
-    a feature, conserte depois em **branch própria** a partir da `main`.
-  - **Bloqueia a feature atual?** → **branch própria a partir da `main`** (que sobe sozinha via
-    merge) e a feature atual faz **rebase** na `main` para herdar o fix.
-- **Invariante:** nenhum caminho commita direto na `main` — todo trabalho vive em branch e a
-  `main` só recebe merge. **Adiar é o default.**
+Done when **every remaining element is load-bearing** — removing any one turns the loop
+green.
 
-### Entrega do conserto (Opção A)
-
-Conserto **não-trivial** é entregue ao `spec-create` (tipo bugfix), que o planeja e executa sob
-governança. Esta skill fez o diagnóstico; ela para aqui.
-
-### O que teria evitado este bug?
-
-Pergunte isso **depois** do fix (você sabe mais agora do que no começo). Se a resposta envolve
-mudança arquitetural (sem seam bom, chamadores emaranhados, acoplamento oculto), **sinalize o
-achado arquitetural** com as especificidades — candidato a um `refactor` via `spec-create`. Faça a
-recomendação com o fix já no lugar, não antes.
+Do not proceed without having reproduced **and** minimized.
 
 ---
 
-> **Origem e crédito.** Esta skill é uma **adaptação** de `diagnosing-bugs`, de Matt Pocock
-> (github.com/mattpocock/skills), sob licença MIT, reescrita para o vocabulário e a CONSTITUTION do
-> MGR (pt-BR, escopo só-diagnóstico, aterrissagem de fix sob a política de git do projeto,
-> exemplos agnósticos à linguagem). A disciplina central — *sinal antes de teoria* — é dele.
+## Phase 3 — Hypothesize
+
+Generate **3–5 ranked hypotheses** before testing any. Generating just one anchors you to
+the first plausible idea.
+
+Each hypothesis must be **falsifiable**: state the prediction it makes.
+
+> Format: "If `<X>` is the cause, then `<changing Y>` makes the bug disappear /
+> `<changing Z>` makes it worse."
+
+If you cannot state the prediction, the hypothesis is a vague hunch — discard or sharpen it.
+
+**Show the ranked list to the user before testing.** They often have domain knowledge that
+re-ranks it on the spot ("we just touched #3"), or hypotheses already ruled out. A cheap
+checkpoint, big savings. Do not block: if the user is away, proceed with your ranking.
+
+---
+
+## Phase 4 — Instrument
+
+Each probe maps to a specific prediction from Phase 3. **Change one variable at a time.**
+
+Tool preference:
+
+1. **Debugger / REPL inspection** if the environment supports it. One breakpoint is worth
+   ten logs.
+2. **Targeted logs** at the boundaries that distinguish the hypotheses.
+3. Never "log everything and grep".
+
+**Tag every debug log** with a unique prefix, e.g. `[DEBUG-a4f2]`. Cleanup at the end
+becomes a single grep. An untagged log survives; a tagged one dies.
+
+**Performance branch.** For a perf regression, logs tend to mislead. Instead: establish a
+baseline measurement (timing harness, profiler, query plan), then bisect. Measure first,
+fix later.
+
+---
+
+## Phase 5 — Fix + regression test
+
+Write the regression test **before the fix** — but only if there is a **correct seam** for
+it.
+
+A correct seam is one where the test exercises the **bug's real pattern** as it occurs at
+the call site. If the only available seam is too shallow (testing one caller when the bug
+needs several; a unit test that does not replicate the chain that triggered the bug), a test
+there gives false confidence.
+
+**If no correct seam exists, that in itself is the finding.** Write it down. The code's
+architecture is preventing the bug from being pinned. Flag it for Phase 6. — This **aligns
+with anti-inflation** (CONSTITUTION `§4`): you do not create a shallow test just to "have
+coverage"; the absence of a seam is information, not a reason for a worthless test.
+
+If a correct seam exists:
+
+1. Turn the minimized repro into a failing test at that seam.
+2. Watch it fail.
+3. Apply the fix.
+4. Watch it pass.
+5. Re-run the Phase 1 loop on the **original** (non-minimized) scenario.
+
+---
+
+## Phase 6 — Cleanup, post-mortem and landing the fix
+
+### Cleanup checklist (mandatory before declaring done)
+
+- [ ] The original repro no longer reproduces (re-run the Phase 1 loop).
+- [ ] The regression test passes (or the seam absence is documented).
+- [ ] All `[DEBUG-...]` instrumentation removed (grep the prefix).
+- [ ] Disposable prototypes deleted (or moved to a clearly marked location).
+- [ ] The hypothesis that won is recorded in the **post-mortem text** — for the next person
+  to learn from.
+
+### Post-mortem (the skill produces the text; the commit is human)
+
+This skill **produces** the post-mortem text (what the bug was, how the loop caught it,
+which hypothesis won). It does **not** commit: recording it in a commit message or PR is a
+**human-confirmed** step (CONSTITUTION `§5` — no automatic git action).
+
+### Landing the fix (the skill does NOT create branches)
+
+The diagnosis is **branch-agnostic**. The skill **does not create a branch** and **does not
+decide on its own** where the fix lands — it applies this rule and **recommends**; the human
+confirms:
+
+- **Is the cause in the new code of the feature you are already working on?** → the fix
+  belongs to **that branch** (it is part of finishing the feature).
+- **Is the bug pre-existing?** → **never** fold the fix into the current feature's branch:
+  that couples a repair to an unfinished feature. Then:
+  - **Does not block the current feature?** → **defer** (safe default): record the
+    diagnosis, finish the feature, fix later on its **own branch** off `main`.
+  - **Blocks the current feature?** → **own branch off `main`** (which lands on its own via
+    merge) and the current feature **rebases** onto `main` to inherit the fix.
+- **Invariant:** no path commits directly to `main` — all work lives on a branch and `main`
+  only receives merges. **Deferring is the default.**
+
+### Delivering the repair (Option A)
+
+A **non-trivial** repair is handed to `spec-create` (bugfix type), which plans and executes
+it under governance. This skill did the diagnosis; it stops here.
+
+### What would have prevented this bug?
+
+Ask this **after** the fix (you know more now than at the start). If the answer involves an
+architectural change (no good seam, tangled callers, hidden coupling), **flag the
+architectural finding** with the specifics — a candidate for a `refactor` via `spec-create`.
+Make the recommendation with the fix already in place, not before.
+
+---
+
+> **Origin and credit.** This skill is an **adaptation** of `diagnosing-bugs`, by Matt
+> Pocock (github.com/mattpocock/skills), under the MIT license, rewritten for the MGR
+> vocabulary and CONSTITUTION (diagnosis-only scope, fix landing under the project's git
+> policy, language-agnostic examples). The central discipline — *signal before theory* — is
+> his.

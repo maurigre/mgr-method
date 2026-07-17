@@ -1,19 +1,19 @@
-# Hand-off de sessão — <feature>
+# Session hand-off — <feature>
 
-**Gerado em:** <timestamp> · **Motivo:** contexto > 75% após arquivamento
+**Generated at:** <timestamp> · **Reason:** context > 75% after archiving
 
-## Estado
-**Feito:** <resumo>
-**Falta:** <resumo>
+## State
+**Done:** <summary>
+**Missing:** <summary>
 
-## Tasks pendentes
-- <id> — <título>
+## Pending tasks
+- <id> — <title>
 
-## Decisões importantes até aqui
-## Arquivos modificados (não commitados)
-## Próxima task
+## Important decisions so far
+## Modified files (not committed)
+## Next task
 <id>
 
-## Como retomar
-Em nova sessão, acione `spec-create` informando que está retomando a feature `<slug>`.
-A skill detectará este arquivo e carregará apenas o essencial (tiers S/A/B/D).
+## How to resume
+In a new session, invoke `spec-create` saying you are resuming the feature `<slug>`.
+The skill will detect this file and load only the essentials (tiers S/A/B/D).

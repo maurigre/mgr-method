@@ -60,18 +60,18 @@ const absDir = (d, scope, repo) => (path.isAbsolute(d) ? d : (scope === "project
 
 // Referência (string) que substitui o token {{MGR_ARCH_RULES}} nas skills arch-*.
 function archRulesRef(engineDir, scope, repo) {
-  const shared = path.join(engineDir, "_shared", "arch", "regras-transversais.md");
+  const shared = path.join(engineDir, "_shared", "arch", "cross-cutting-rules.md");
   return scope === "project" ? path.relative(repo, shared) : shared;
 }
 
 export function planInstall(engines, scope, repo, opts = {}) {
-  const { skillsDir = null, language = null, architecture = null, optional = [], all = false, names = null, projectId = null } = opts;
+  const { skillsDir = null, language = null, architecture = null, userLanguage = null, optional = [], all = false, names = null, projectId = null } = opts;
   const skills = names || (all ? bundle.skillNames() : catalog.selectSkills({ language, architecture, optional }));
   const targets = skillsDir
     ? [{ engine: "custom", dir: skillsDir }]
     : engines.map((e) => ({ engine: e, dir: engineSkillsDir(e, scope, repo) }));
   const pid = projectId || path.basename(path.resolve(repo));
-  return { engines: skillsDir ? ["custom"] : engines, scope, repo, targets, skills, language, architecture, projectId: pid };
+  return { engines: skillsDir ? ["custom"] : engines, scope, repo, targets, skills, language, architecture, userLanguage, projectId: pid };
 }
 
 // Migra do modelo antigo (runtime-launcher): remove lançadores e o conteúdo de skills/shared
@@ -100,7 +100,7 @@ export function execute(plan) {
   const migrated = migrateOld(plan.scope, plan.repo);
   for (const t of plan.targets) {
     const ref = t.engine === "custom" ? undefined : archRulesRef(t.dir, plan.scope, plan.repo);
-    installEngine(t.dir, plan.skills, { archRulesRef: ref });
+    installEngine(t.dir, plan.skills, { archRulesRef: ref, userLanguage: plan.userLanguage });
   }
   const core = coreDir(plan.scope, plan.repo);
   const rel = (p) => (plan.scope === "project" ? path.relative(plan.repo, p) : p);
@@ -110,6 +110,7 @@ export function execute(plan) {
     engines: plan.engines,
     language: plan.language,
     architecture: plan.architecture,
+    userLanguage: plan.userLanguage,
     projectId: plan.projectId,
     skillsDirs: plan.targets.map((t) => rel(t.dir)),
     skills: plan.skills,
@@ -156,6 +157,9 @@ export function update(scope, repo) {
   const engines = (man.engines || [man.engine]).filter((x) => x && x !== "custom");
   const plan = planInstall(engines.length ? engines : ["claude-code"], scope, repo, {
     names: man.skills, language: man.language, architecture: man.architecture, projectId: man.projectId,
+    // Manifesto anterior a esta versão não tem userLanguage: toda instalação dessa era é
+    // pt-BR — herdar preserva a experiência sem pergunta nova (decisão do CHECKPOINT 1).
+    userLanguage: man.userLanguage || "pt-BR",
   });
   return execute(plan);
 }

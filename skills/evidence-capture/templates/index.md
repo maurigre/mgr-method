@@ -1,16 +1,16 @@
-# Registro de uso de IA (AI-First)
+# AI usage record (AI-First)
 
-Índice das evidências por funcionalidade. Cada feature mantém suas evidências em
-`specs/<feature>/ai/`; este arquivo aponta para elas (não duplica conteúdo).
+Index of the evidence per feature. Each feature keeps its evidence in
+`specs/<feature>/ai/`; this file points to it (no duplicated content).
 
-## Funcionalidades
+## Features
 
-| Funcionalidade | Evidências | Resumo do uso de IA |
+| Feature | Evidence | Summary of AI usage |
 |---|---|---|
-| <feature-slug> | [specs/<feature-slug>/ai/](../specs/<feature-slug>/ai/) | <1-2 linhas> |
+| <feature-slug> | [specs/<feature-slug>/ai/](../specs/<feature-slug>/ai/) | <1-2 lines> |
 
-## Visão geral do projeto
+## Project overview
 
-**Onde a IA mais ajudou:** <padrões que se repetiram>
-**Onde a IA mais errou / exigiu correção:** <padrões>
-**Postura de uso:** <como a IA foi dirigida com intenção ao longo do projeto>
+**Where the AI helped the most:** <recurring patterns>
+**Where the AI failed the most / required correction:** <patterns>
+**Usage posture:** <how the AI was intentionally directed throughout the project>

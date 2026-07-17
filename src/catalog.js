@@ -30,9 +30,14 @@ export const LANGUAGE = {
 export const OPTIONAL = ["evidence-capture"];
 
 // Dependência das skills arch-*: a fonte transversal única, copiada junto.
-export const ARCH_SHARED = "shared/arch/regras-transversais.md";
+export const ARCH_SHARED = "shared/arch/cross-cutting-rules.md";
 // Token nas SKILL.md das arch-*, substituído no install pelo caminho real da fonte no motor.
 export const ARCH_RULES_TOKEN = "{{MGR_ARCH_RULES}}";
+// Token da linha-ponteiro de idioma presente em TODAS as SKILL.md, substituído no install
+// pelo idioma de saída do usuário (manifest.userLanguage). Sem valor (ex.: `mgr build`),
+// cai no fallback textual — a linha continua legível.
+export const USER_LANGUAGE_TOKEN = "{{MGR_USER_LANGUAGE}}";
+export const USER_LANGUAGE_FALLBACK = "the language the user writes in";
 
 export const architectures = () => Object.keys(ARCHITECTURES);
 export const languages = () => Object.keys(LANGUAGE);

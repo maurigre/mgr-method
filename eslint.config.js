@@ -62,6 +62,16 @@ export default [
     },
   },
 
+  // Ferramentas de desenvolvimento do repo (fora do tarball npm).
+  {
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      ecmaVersion: 2024,
+      sourceType: "module",
+      globals: globaisNode,
+    },
+  },
+
   {
     files: ["test/**/*.js"],
     languageOptions: {

@@ -1,8 +1,8 @@
-# Habilidades delegadas à IA — <feature>
+# Skills delegated to the AI — <feature>
 
-<!-- Áreas delegadas nesta funcionalidade + grau de autonomia. -->
+<!-- Areas delegated in this feature + degree of autonomy. -->
 
-| Área / habilidade | Grau de autonomia | Observação |
+| Area / skill | Degree of autonomy | Note |
 |---|---|---|
-| <ex.: geração do trecho OpenAPI> | <rascunho revisado / gerado e aceito / consulta> | |
-| <ex.: esboço dos testes de contrato> | | |
+| <e.g.: generating the OpenAPI excerpt> | <reviewed draft / generated and accepted / consultation> | |
+| <e.g.: drafting the contract tests> | | |

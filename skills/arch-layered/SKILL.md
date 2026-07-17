@@ -1,97 +1,103 @@
 ---
 name: arch-layered
-description: Provedora do guia de regras de review para projetos com arquitetura em camadas (Layered / N-tier, Martin Fowler), AGNÓSTICA À LINGUAGEM. Invocada pelo spec-init com a linguagem do projeto; monta docs/sdd/09-review-rules.md combinando os princípios do layered (camadas Presentation/Domain/Data Source, dependência top-down) com as regras transversais UNIVERSAIS compartilhadas (design, testes, logs, mutation e o perfil da linguagem). Diferente das arquiteturas de inversão (hexagonal/clean/onion): o layered não empurra a infraestrutura para o centro. Regras numeradas com IDs citáveis pelo code-analyzer. Use quando a arquitetura do projeto for em camadas.
+description: Provider of the review rules guide for projects with layered architecture (Layered / N-tier, Martin Fowler), LANGUAGE-AGNOSTIC. Invoked by spec-init with the project's language; assembles docs/sdd/09-review-rules.md combining the layered principles (Presentation/Domain/Data Source layers, top-down dependency) with the shared UNIVERSAL cross-cutting rules (design, tests, logs, mutation and the language profile). Unlike the inversion architectures (hexagonal/clean/onion): layered does not push infrastructure toward the center. Rules numbered with IDs citable by the code-analyzer. Use when the project's architecture is layered.
 ---
 
-# arch-layered — Guia de regras (Layered / N-tier)
+# arch-layered — Rules guide (Layered / N-tier)
 
-Você fornece o guia de regras de review da arquitetura em camadas. O guia é **agnóstico à
-linguagem**: os princípios valem em qualquer stack; as regras de ferramenta vêm do perfil da
-linguagem, na fonte transversal.
+Output language: {{MGR_USER_LANGUAGE}} — all user-facing interaction and generated artifacts
+use this language; generated file names and rule IDs stay in English.
 
-## Objetivo
+You provide the layered architecture review rules guide. The guide is
+**language-agnostic**: the principles hold in any stack; the tool rules come from the
+language profile, in the cross-cutting source.
 
-Organizar o sistema em camadas horizontais com responsabilidades distintas (apresentação,
-domínio, dados), onde cada camada usa os serviços da camada imediatamente inferior, mantendo a
-lógica de negócio concentrada na camada de domínio.
+## Goal
 
-## Como montar o guia (instrução ao invocador — geralmente o `spec-init`)
+Organize the system in horizontal layers with distinct responsibilities (presentation,
+domain, data), where each layer uses the services of the layer immediately below it,
+keeping the business logic concentrated in the domain layer.
 
-Você recebe a **linguagem do projeto**. Gere `docs/sdd/09-review-rules.md` **concatenando**, na
-ordem:
+## How to assemble the guide (instruction to the invoker — usually `spec-init`)
 
-1. **Fundamentação Teórica** e **Princípios** (deste arquivo — verbatim).
-2. Da fonte única `{{MGR_ARCH_RULES}}`, inclua **apenas** as seções **UNIVERSAIS**:
-   **Regras Obrigatórias** (design, testes, logs, mutation) + o **perfil da linguagem** do
-   projeto + as **Boas Práticas** de nomenclatura e Screaming Architecture. **NÃO** inclua os
-   "Anti-patterns transversais" nem o "Checklist" da fonte (assumem inversão de dependência) —
-   use os **deste arquivo** (top-down).
-3. **Anti-patterns específicos de Layered**, **Checklist** e **Referências** (deste arquivo).
+You receive the **project's language**. Generate `docs/sdd/09-review-rules.md` by
+**concatenating**, in order:
 
-Regras de gravação: preserve os IDs (`INV-n`, `DES-n`, etc.) e nomes de seção — o
-`code-analyzer` cita "seção — Regra N" textualmente.
+1. **Theoretical Foundations** and **Principles** (from this file — verbatim).
+2. From the single source `{{MGR_ARCH_RULES}}`, include **only** the **UNIVERSAL**
+   sections: **Mandatory rules** (design, tests, logs, mutation) + the project's
+   **language profile** + the **Good Practices** of naming and Screaming Architecture.
+   Do **NOT** include the source's "Cross-cutting anti-patterns" nor its "Checklist"
+   (they assume dependency inversion) — use the ones **from this file** (top-down).
+3. **Layered-specific anti-patterns**, **Checklist** and **References** (from this file).
 
-## Fundamentação Teórica
+Recording rules: preserve the IDs (`INV-n`, `DES-n`, etc.) and section names — the
+`code-analyzer` cites "section — Rule N" textually.
 
-Baseada em **Martin Fowler** (*Patterns of Enterprise Application Architecture*, 2002 — capítulo
-"Layering") e no padrão Layers (Buschmann et al., *POSA*). As três camadas principais são
-**Presentation** (UI/API), **Domain** (lógica de negócio; opcionalmente uma **Service Layer**) e
-**Data Source** (persistência/integração). Princípio de camadas: uma camada superior usa
-serviços da inferior, e as inferiores **desconhecem** as superiores.
+## Theoretical Foundations
 
-Divergência honesta em relação a hexagonal/clean/onion: o layered clássico **não** faz inversão
-de dependência para um centro — a camada de domínio pode depender da camada de dados, e a
-persistência é a base, não a borda. Por isso este guia **não** aplica as regras de "domínio
-isolado da infraestrutura" daquelas arquiteturas; a garantia aqui é a **direção top-down** e a
-**separação de responsabilidades**.
+Based on **Martin Fowler** (*Patterns of Enterprise Application Architecture*, 2002 — the
+"Layering" chapter) and the Layers pattern (Buschmann et al., *POSA*). The three main
+layers are **Presentation** (UI/API), **Domain** (business logic; optionally a **Service
+Layer**) and **Data Source** (persistence/integration). Layering principle: an upper layer
+uses the services of the one below, and lower layers **know nothing** of the upper ones.
 
-## Princípios (invariantes da arquitetura em camadas)
+Honest divergence from hexagonal/clean/onion: classic layered does **not** invert
+dependencies toward a center — the domain layer may depend on the data layer, and
+persistence is the base, not the edge. That is why this guide does **not** apply those
+architectures' "domain isolated from infrastructure" rules; the guarantee here is the
+**top-down direction** and the **separation of responsibilities**.
 
-1. (INV-1) Camadas principais (Fowler): **Presentation → Domain → Data Source** (opcional
-   **Service Layer** entre apresentação e domínio). No projeto, concretiza-se tipicamente como
-   `controller → service → repository → model`.
-2. (INV-2) **Dependência top-down**: cada camada usa a imediatamente inferior; camadas
-   inferiores nunca conhecem nem chamam as superiores.
-3. (INV-3) Cada camada **esconde** as camadas inferiores das superiores (encapsulamento de
-   camada): a de cima fala com a de baixo por um contrato, sem vazar detalhes.
-4. (INV-4) Escolha entre **layering estrito** (uma camada só chama a imediatamente inferior) e
-   **relaxado** (pode pular camadas) e seja consistente em todo o projeto.
-5. (INV-5) **Separação de responsabilidades**: apresentação (UI/API/serialização), domínio
-   (regras de negócio), data source (persistência/integração externa).
-6. (INV-6) A **lógica de negócio pertence à camada de Domínio/Service** — não vaza para a
-   apresentação (controllers gordos) nem para a camada de dados (SQL/stored procedures).
+## Principles (layered architecture invariants)
 
-## Anti-patterns específicos de Layered
+1. (INV-1) Main layers (Fowler): **Presentation → Domain → Data Source** (optional
+   **Service Layer** between presentation and domain). In a project, it typically
+   concretizes as `controller → service → repository → model`.
+2. (INV-2) **Top-down dependency**: each layer uses the one immediately below; lower
+   layers never know nor call the upper ones.
+3. (INV-3) Each layer **hides** the lower layers from the upper ones (layer
+   encapsulation): the one above talks to the one below through a contract, leaking no
+   details.
+4. (INV-4) Choose between **strict layering** (a layer only calls the one immediately
+   below) and **relaxed** (may skip layers) and be consistent across the whole project.
+5. (INV-5) **Separation of responsibilities**: presentation (UI/API/serialization), domain
+   (business rules), data source (persistence/external integration).
+6. (INV-6) The **business logic belongs to the Domain/Service layer** — it leaks neither
+   into presentation (fat controllers) nor into the data layer (rules in SQL/stored
+   procedures).
 
-Além dos anti-patterns de design (ver Regras Obrigatórias), reprovam nesta arquitetura:
+## Layered-specific anti-patterns
 
-- Regra de negócio na camada de **apresentação** (controller com lógica) ou na camada de
-  **dados** (regra em SQL/stored procedure).
-- Camada **inferior** conhecendo ou chamando uma **superior** (viola INV-2).
-- Em layering estrito, **pular camadas** (ex.: apresentação acessando o repositório direto,
-  sem passar pelo domínio/serviço) — viola INV-4.
-- Camada **pass-through anêmica**, que só repassa a chamada sem responsabilidade própria
-  (reforça DES-7 e DES-10).
+Beyond the design anti-patterns (see Mandatory rules), these reprove in this architecture:
 
-## Checklist (guard-rails da IA — verifique antes e depois de gerar/alterar código)
+- Business rules in the **presentation** layer (a controller with logic) or in the
+  **data** layer (rules in SQL/stored procedures).
+- A **lower** layer knowing or calling an **upper** one (violates INV-2).
+- In strict layering, **skipping layers** (e.g. presentation hitting the repository
+  directly, bypassing the domain/service) — violates INV-4.
+- An **anemic pass-through layer**, which only forwards the call with no responsibility of
+  its own (reinforces DES-7 and DES-10).
 
-- A **regra de negócio** está na camada de Domínio/Service (não na apresentação nem na de
-  dados)?
-- As **dependências vão só de cima para baixo**? Nenhuma camada inferior chama a superior?
-- Se o projeto adota **layering estrito**, ninguém pula camadas?
-- Cada camada tem responsabilidade própria (nada de pass-through anêmico)?
-- Testes com objetos reais (TST-1), mock só na borda (TST-2), sem matcher genérico (TST-5);
-  nomes significativos (NAM-1, NAM-2).
+## Checklist (AI guard-rails — check before and after generating/changing code)
+
+- Is the **business rule** in the Domain/Service layer (not in presentation nor in the
+  data layer)?
+- Do the **dependencies flow only top-down**? No lower layer calls an upper one?
+- If the project adopts **strict layering**, nobody skips layers?
+- Does each layer have its own responsibility (no anemic pass-through)?
+- Tests with real objects (TST-1), mock only at the edge (TST-2), no generic matcher
+  (TST-5); meaningful names (NAM-1, NAM-2).
 
 ## Enforcement
 
-Codifique os `INV` acima (direção **top-down**: presentation → domínio/service → data, sem
-chamadas para cima) na ferramenta de arch-lint do perfil da linguagem, seguindo a "Governança
-do enforcement" das Boas Práticas transversais (guard-rail; nunca enfraquecer; mudança de
-regra só via `adr-create`). Ruleset concreto `[ADAPTADO — validar com o time]`.
+Encode the `INV` above (the **top-down** direction: presentation → domain/service → data,
+no upward calls) in the language profile's arch-lint tool, following the cross-cutting
+Good Practices' "Enforcement governance" (a guard-rail; never weaken; rule changes only
+via `adr-create`). Concrete ruleset `[ADAPTED — validate with the team]`.
 
-## Referências Oficiais
+## Official References
 
 - Fowler, Martin. *Patterns of Enterprise Application Architecture*. Addison-Wesley, 2002
-  (capítulo "Layering"; camadas Presentation / Domain / Data Source).
-- Buschmann, F. et al. *Pattern-Oriented Software Architecture, Vol. 1* — padrão **Layers**.
+  (the "Layering" chapter; Presentation / Domain / Data Source layers).
+- Buschmann, F. et al. *Pattern-Oriented Software Architecture, Vol. 1* — the **Layers**
+  pattern.

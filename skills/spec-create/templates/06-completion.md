@@ -1,11 +1,11 @@
 # Completion — <feature>
 
-## Resumo do que mudou
-## Testes
-<!-- todos verdes? cobertura relevante? -->
-## SDD atualizada (diff)
-<!-- o que mudou em /docs/sdd/ -->
-## ADRs criados/afetados
+## Summary of what changed
+## Tests
+<!-- all green? relevant coverage? -->
+## SDD updated (diff)
+<!-- what changed in /docs/sdd/ -->
+## ADRs created/affected
 ## Review
-<!-- resultado do code-analyzer sobre os arquivos tocados -->
-## Pendências
+<!-- code-analyzer result over the touched files -->
+## Pending items

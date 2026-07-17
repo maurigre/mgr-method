@@ -29,10 +29,18 @@
     "prepare": "git config core.hooksPath .githooks || true"
   },
   "keywords": [
+    "spec-driven-development",
+    "sdd",
     "agent-skills",
     "claude-code",
     "github-copilot",
-    "spec-driven-development",
+    "coding-agents",
+    "ai-agents",
+    "adr",
+    "architecture-decision-records",
+    "code-review",
+    "developer-tools",
+    "cli",
     "hexagonal"
   ],
   "license": "SEE LICENSE IN LICENSE",

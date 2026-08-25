@@ -16,6 +16,9 @@ import { collectInstallAnswers, detectUserLanguage, CANCELLED } from "../src/pro
 import { getMessages } from "../src/messages.js";
 import { validateAll, validateSkill, checkSkill } from "../src/validator.js";
 import { aggregateChecksum, sha256 } from "../src/plugin.js";
+import { add as addPlugin } from "../src/plugin-installer.js";
+import { addRegistry } from "../src/registry.js";
+import { readLockfile } from "../src/lockfile.js";
 import { captureCli } from "../scripts/capture-cli-baseline.mjs";
 
 const tmp = () => mkdtempSync(path.join(os.tmpdir(), "mgr-"));
@@ -698,4 +701,195 @@ test("planInstall sem replaced mantém o conjunto e o manifesto de hoje", () => 
   const manifesto = JSON.parse(readFileSync(path.join(repo, ".mgr-core", "manifest.json"), "utf8"));
   assert.equal(manifesto.replaced, undefined, "manifesto sem substituição não ganha o campo");
   assert.ok(existsSync(path.join(repo, ".claude/skills/junit-clean/SKILL.md")));
+});
+
+// Registry stub local servindo um plugin de nome IGUAL ao de uma skill do método.
+function stubDeColisao(nome = "junit-clean", registry = "acme") {
+  const skillMd = `---\nname: ${nome}\ndescription: Variante interna da empresa para testes Java, com regras proprias.\n---\n\n# ${nome} do plugin\n`;
+  const manifest = {
+    name: `@${registry}/${nome}`, version: "1.0.0", author: "Acme",
+    description: "Variante interna da empresa para testes Java. Use when the user asks for the Acme flavour.",
+    category: "language", permissions: ["read-files"],
+  };
+  const contents = [
+    { path: "SKILL.md", content: Buffer.from(skillMd, "utf8") },
+    { path: "mgr-manifest.json", content: Buffer.from(JSON.stringify(manifest, null, 2), "utf8") },
+  ];
+  let index;
+  const server = createServer((request, response) => {
+    if (request.url === "/index.json") {
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify(index));
+      return;
+    }
+    const file = contents.find((candidate) => request.url === `/${nome}/${candidate.path}`);
+    if (!file) { response.statusCode = 404; response.end("nf"); return; }
+    response.end(file.content);
+  });
+  const pronto = new Promise((done) => server.listen(0, "127.0.0.1", done)).then(() => {
+    const base = `http://127.0.0.1:${server.address().port}`;
+    index = {
+      indexVersion: 1, registry, generatedAt: "2026-08-25T00:00:00.000Z",
+      categories: {
+        language: [{
+          name: manifest.name, version: "1.0.0", description: manifest.description,
+          checksum: aggregateChecksum(contents),
+          files: contents.map((file) => ({ path: file.path, url: `${base}/${nome}/${file.path}`, sha256: sha256(file.content) })),
+        }],
+      },
+    };
+    return { base, indexUrl: `${base}/index.json` };
+  });
+  return { server, pronto, marcaDoPlugin: "do plugin" };
+}
+
+test("ciclo completo da substituição: add substitui, install respeita, remove avisa, update devolve", async () => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const repo = tmp();
+  const stub = stubDeColisao();
+  const { indexUrl } = await stub.pronto;
+  const run = async (args, options = {}) => (await promisify(execFile)("node", [bin, ...args], {
+    encoding: "utf8", env: { ...process.env, LC_ALL: "pt_BR.UTF-8" }, ...options,
+  })).stdout;
+  const skillMd = path.join(repo, ".claude/skills/junit-clean/SKILL.md");
+
+  try {
+    await run(["install", "--engine", "claude-code", "--language", "java", "--arch", "hexagonal", "--project-id", "ciclo", "-y", repo]);
+    assert.doesNotMatch(readFileSync(skillMd, "utf8"), /do plugin/, "começa com a skill do método");
+
+    addRegistry(path.join(repo, ".mgr-core"), { name: "acme", url: indexUrl });
+    await addPlugin("@acme/junit-clean", {
+      repo, coreDir: path.join(repo, ".mgr-core"),
+      targets: [{ engine: "claude-code", dir: path.join(repo, ".claude/skills") }],
+      fetchImpl: globalThis.fetch, confirm: async () => true, resolveCollision: async () => "replace",
+    });
+    assert.match(readFileSync(skillMd, "utf8"), /do plugin/, "o plugin tomou a pasta");
+    assert.equal(readLockfile(repo).skills["@acme/junit-clean"].replaces, "junit-clean");
+
+    await run(["install", "--engine", "claude-code", "--language", "java", "--arch", "hexagonal", "--project-id", "ciclo", "-y", repo]);
+    assert.match(readFileSync(skillMd, "utf8"), /do plugin/, "install não devolve a skill do método");
+    const manifesto = JSON.parse(readFileSync(path.join(repo, ".mgr-core/manifest.json"), "utf8"));
+    assert.deepEqual(manifesto.replaced, { "claude-code": { "junit-clean": "@acme/junit-clean" } });
+    assert.ok(manifesto.skills.includes("junit-clean"), "o conjunto pretendido segue completo");
+
+    const status = await run(["status", repo]);
+    assert.match(status, /substitui a skill junit-clean do método/);
+
+    let avisoDoRemove = "";
+    try {
+      await promisify(execFile)("node", [bin, "remove", "@acme/junit-clean"], {
+        encoding: "utf8", cwd: repo, env: { ...process.env, LC_ALL: "pt_BR.UTF-8" },
+      }).then((r) => { avisoDoRemove = r.stderr; });
+    } catch (error) { avisoDoRemove = error.stderr; }
+    assert.match(avisoDoRemove, /a skill junit-clean do método volta no próximo/);
+    assert.ok(!existsSync(path.join(repo, ".claude/skills/junit-clean")));
+
+    await run(["update", repo]);
+    assert.doesNotMatch(readFileSync(skillMd, "utf8"), /do plugin/, "a skill do método voltou");
+  } finally {
+    stub.server.closeAllConnections();
+    stub.server.close();
+  }
+});
+
+test("registry fora do ar não devolve a skill do método fingindo ser o plugin", async () => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const repo = tmp();
+  const stub = stubDeColisao();
+  const { indexUrl } = await stub.pronto;
+  const flags = ["install", "--engine", "claude-code", "--language", "java", "--arch", "hexagonal", "--project-id", "fora", "-y", repo];
+  const run = (args, options = {}) => promisify(execFile)("node", [bin, ...args], {
+    encoding: "utf8", env: { ...process.env, LC_ALL: "pt_BR.UTF-8" }, ...options,
+  });
+
+  try {
+    await run(flags);
+    addRegistry(path.join(repo, ".mgr-core"), { name: "acme", url: indexUrl });
+    await addPlugin("@acme/junit-clean", {
+      repo, coreDir: path.join(repo, ".mgr-core"),
+      targets: [{ engine: "claude-code", dir: path.join(repo, ".claude/skills") }],
+      fetchImpl: globalThis.fetch, confirm: async () => true, resolveCollision: async () => "replace",
+    });
+  } finally {
+    stub.server.closeAllConnections();
+    stub.server.close();
+  }
+
+  await assert.rejects(run(flags), /Command failed/, "com o registry fora do ar o install falha");
+  assert.ok(!existsSync(path.join(repo, ".claude/skills/junit-clean/SKILL.md"))
+    || !readFileSync(path.join(repo, ".claude/skills/junit-clean/SKILL.md"), "utf8").includes("Standardizes Java"),
+  "a pasta não pode conter a skill do método no lugar do plugin");
+});
+
+test("status reporta divergência entre o lockfile e o disco, sem corrigir", () => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const repo = tmp();
+  const run = () => execFileSync("node", [bin, "status", repo], {
+    encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, LC_ALL: "pt_BR.UTF-8" },
+  });
+  installer.execute(installer.planInstall(["claude-code"], "project", repo, { architecture: "hexagonal" }));
+  writeFileSync(path.join(repo, "mgr-skills.lock"), JSON.stringify({
+    lockfileVersion: 1,
+    registries: { acme: { url: "https://raw.example/index.json", trusted: false } },
+    skills: {
+      "@acme/junit-clean": {
+        version: "1.0.0", registry: "acme", checksum: `sha256-${"a".repeat(64)}`,
+        category: "language", dir: "junit-clean", engines: ["claude-code"], applied: {},
+      },
+    },
+  }, null, 2) + "\n", "utf8");
+
+  const divergente = run();
+  assert.match(divergente, /divergências \(lockfile x disco\)/);
+  assert.match(divergente, /@acme\/junit-clean: travada no lockfile, ausente ou diferente no disco/);
+  assert.match(divergente, /rode `mgr install` para restaurar o conjunto travado/);
+  assert.ok(!existsSync(path.join(repo, ".claude/skills/junit-clean")), "reporta, nunca corrige");
+
+  mkdirSync(path.join(repo, ".claude/skills/junit-clean"), { recursive: true });
+  writeFileSync(path.join(repo, ".claude/skills/junit-clean/mgr-manifest.json"),
+    JSON.stringify({ name: "@acme/junit-clean" }), "utf8");
+  assert.doesNotMatch(run(), /divergências/, "conjunto coerente não reporta nada");
+});
+
+test("clone limpo reproduz a substituição sem perguntar (critério 4 da spec)", async () => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const origem = tmp();
+  const stub = stubDeColisao();
+  const { indexUrl } = await stub.pronto;
+  const flags = (repo, id) => ["install", "--engine", "claude-code", "--language", "java", "--arch", "hexagonal", "--project-id", id, "-y", repo];
+  const run = async (args) => (await promisify(execFile)("node", [bin, ...args], {
+    encoding: "utf8", env: { ...process.env, LC_ALL: "pt_BR.UTF-8" },
+  })).stdout;
+
+  try {
+    await run(flags(origem, "origem"));
+    addRegistry(path.join(origem, ".mgr-core"), { name: "acme", url: indexUrl });
+    await addPlugin("@acme/junit-clean", {
+      repo: origem, coreDir: path.join(origem, ".mgr-core"),
+      targets: [{ engine: "claude-code", dir: path.join(origem, ".claude/skills") }],
+      fetchImpl: globalThis.fetch, confirm: async () => true, resolveCollision: async () => "replace",
+    });
+
+    // O colega clona: só o lockfile viaja (o .mgr-core fica na máquina de quem instalou).
+    const clone = tmp();
+    writeFileSync(path.join(clone, "mgr-skills.lock"), readFileSync(path.join(origem, "mgr-skills.lock"), "utf8"), "utf8");
+
+    const saida = await run(flags(clone, "clone"));
+    assert.doesNotMatch(saida, /O método já fornece a skill/, "install não pergunta nada");
+
+    const skillMd = path.join(clone, ".claude/skills/junit-clean/SKILL.md");
+    assert.match(readFileSync(skillMd, "utf8"), /do plugin/, "a pasta tem o plugin, não a skill do método");
+    assert.equal(
+      readFileSync(skillMd, "utf8"),
+      readFileSync(path.join(origem, ".claude/skills/junit-clean/SKILL.md"), "utf8"),
+      "conjunto idêntico ao da máquina de origem",
+    );
+    const manifesto = JSON.parse(readFileSync(path.join(clone, ".mgr-core/manifest.json"), "utf8"));
+    assert.deepEqual(manifesto.replaced, { "claude-code": { "junit-clean": "@acme/junit-clean" } });
+    assert.ok(manifesto.skills.includes("junit-clean"), "o conjunto pretendido segue completo no clone");
+  } finally {
+    stub.server.closeAllConnections();
+    stub.server.close();
+  }
 });

@@ -117,10 +117,11 @@ decision automatically generates an ADR. Out comes the same SDD as brownfield; t
 ## Repository structure
 
 ```
-bin/mgr.js          # CLI (install · status · update · uninstall · build · validate · list)
-src/                # bundle · builder (runtime+launchers) · installer (2 phases) · manifest · validator
+bin/mgr.js          # CLI (install · status · update · uninstall · build · validate · list · add · remove · registry)
+src/                # bundle · builder · installer · manifest · validator · plugin · registry · lockfile · adapters
 skills/             # the 12 skills (source)
 shared/scripts/     # sdd-check.sh (checks the spec-create prerequisites)
+docs/plugins.md     # plugin skill format: manifest, registry, lockfile, capability matrix
 test/               # node:test
 ```
 

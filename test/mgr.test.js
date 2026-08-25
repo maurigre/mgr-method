@@ -634,3 +634,38 @@ test("regressão §2.7: projeto sem plugins tem saída idêntica à baseline pr�
     }
   }
 });
+
+test("CLI: status de projeto só com plugin não se contradiz nem falha", () => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const repo = tmp();
+  const run = (args) => {
+    try {
+      return { status: 0, stdout: execFileSync("node", [bin, ...args], {
+        encoding: "utf8", cwd: repo, stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, LC_ALL: "pt_BR.UTF-8" },
+      }) };
+    } catch (error) {
+      return { status: error.status, stdout: error.stdout };
+    }
+  };
+
+  const vazio = run(["status"]);
+  assert.equal(vazio.status, 1, "projeto sem nada segue saindo 1");
+  assert.match(vazio.stdout, /Nenhuma instalação MGR encontrada/);
+
+  writeFileSync(path.join(repo, "mgr-skills.lock"), JSON.stringify({
+    lockfileVersion: 1,
+    registries: { mgr: { url: "https://raw.example/index.json", trusted: true } },
+    skills: {
+      "@mgr/junit-clean": {
+        version: "1.0.0", registry: "mgr", checksum: `sha256-${"a".repeat(64)}`,
+        category: "language", dir: "junit-clean", engines: ["claude-code"], applied: {},
+      },
+    },
+  }, null, 2) + "\n", "utf8");
+
+  const comPlugin = run(["status"]);
+  assert.equal(comPlugin.status, 0, "projeto com plugin travado tem instalação: exit 0");
+  assert.match(comPlugin.stdout, /@mgr\/junit-clean@1\.0\.0 \(mgr\)/);
+  assert.doesNotMatch(comPlugin.stdout, /Nenhuma instalação MGR encontrada/);
+});

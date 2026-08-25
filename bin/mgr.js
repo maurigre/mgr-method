@@ -320,6 +320,9 @@ function cmdStatus(_f, positional) {
   const lockfile = readLockfile(repo);
   const plugins = Object.entries(lockfile?.skills || {});
   if (plugins.length) {
+    // Plugin travado é instalação encontrada: sem isto o status listaria os plugins e logo
+    // depois afirmaria "nenhuma instalação encontrada", saindo 1 num projeto que TEM algo.
+    shown = true;
     console.log(M.statusPluginsTitle(LOCKFILE_NAME));
     for (const [name, entry] of plugins) console.log(M.statusPluginItem(name, entry.version, entry.registry));
   }

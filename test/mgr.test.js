@@ -669,3 +669,33 @@ test("CLI: status de projeto só com plugin não se contradiz nem falha", () => 
   assert.match(comPlugin.stdout, /@mgr\/junit-clean@1\.0\.0 \(mgr\)/);
   assert.doesNotMatch(comPlugin.stdout, /Nenhuma instalação MGR encontrada/);
 });
+
+test("planInstall exclui a skill substituída só do motor indicado e registra replaced", () => {
+  const repo = tmp();
+  const replaced = { "claude-code": { "junit-clean": "@acme/junit-clean" } };
+  const plan = installer.planInstall(["claude-code", "copilot"], "project", repo, {
+    language: "java", architecture: "hexagonal", replaced,
+  });
+
+  const porMotor = Object.fromEntries(plan.targets.map((alvo) => [alvo.engine, alvo.skills]));
+  assert.ok(!porMotor["claude-code"].includes("junit-clean"), "sai do motor com substituição");
+  assert.ok(porMotor.copilot.includes("junit-clean"), "permanece no motor sem substituição");
+  assert.ok(plan.skills.includes("junit-clean"), "o conjunto pretendido segue completo");
+
+  installer.execute(plan);
+  assert.ok(!existsSync(path.join(repo, ".claude/skills/junit-clean")), "não escreve a substituída");
+  assert.ok(existsSync(path.join(repo, ".github/skills/junit-clean/SKILL.md")));
+  const manifesto = JSON.parse(readFileSync(path.join(repo, ".mgr-core", "manifest.json"), "utf8"));
+  assert.deepEqual(manifesto.replaced, replaced);
+  assert.ok(manifesto.skills.includes("junit-clean"), "skills[] preserva o conjunto pretendido");
+});
+
+test("planInstall sem replaced mantém o conjunto e o manifesto de hoje", () => {
+  const repo = tmp();
+  const plan = installer.planInstall(["claude-code"], "project", repo, { language: "java", architecture: "hexagonal" });
+  assert.deepEqual(plan.targets[0].skills, plan.skills);
+  installer.execute(plan);
+  const manifesto = JSON.parse(readFileSync(path.join(repo, ".mgr-core", "manifest.json"), "utf8"));
+  assert.equal(manifesto.replaced, undefined, "manifesto sem substituição não ganha o campo");
+  assert.ok(existsSync(path.join(repo, ".claude/skills/junit-clean/SKILL.md")));
+});

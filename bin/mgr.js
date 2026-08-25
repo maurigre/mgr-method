@@ -214,6 +214,7 @@ function cmdRemove(flags, positional) {
   console.log(M.pluginRemoving(name));
   const result = removePlugin(name, { repo, targets });
   for (const dir of result.removed) console.log(pc.dim(M.removedItem(path.relative(repo, dir) || dir)));
+  for (const { dir } of result.skipped) console.warn(M.pluginRemoveSkipped(path.relative(repo, dir) || dir, name));
   console.log(pc.green(M.pluginRemoved(name)));
   return 0;
 }

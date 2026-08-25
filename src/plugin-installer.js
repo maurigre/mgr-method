@@ -9,7 +9,7 @@
 //   - `mgr add` sem callback de confirmação não existe (sem bypass nesta fase);
 //   - o lockfile é atualizado na mesma operação que instala.
 import { Buffer } from "node:buffer";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { aggregateChecksum, assertValidManifest, MANIFEST_NAME, parseSkillName, sha256 } from "./plugin.js";
 import { listRegistries, resolve } from "./registry.js";
@@ -179,8 +179,25 @@ export async function add(name, { repo, coreDir, targets, fetchImpl, confirm }) 
   return { installed: state.installed, lockfile };
 }
 
+// A pasta instalada só pode ser apagada se ela FOR o plugin: o `mgr-manifest.json` com o
+// nome correspondente é a prova. Sem isso, remover um plugin cujo nome curto coincide com o
+// de uma skill do método apagaria a skill do método — a pasta é a mesma (ex.: o método
+// instala `diagnosing-bugs` e o registry publica `@mgr/diagnosing-bugs`). Nunca apagar
+// pasta que não se instalou.
+function isPluginDir(installedDir, name) {
+  const manifestFile = path.join(installedDir, MANIFEST_NAME);
+  if (!existsSync(manifestFile)) return false;
+  try {
+    return JSON.parse(readFileSync(manifestFile, "utf8")).name === name;
+  } catch {
+    return false;
+  }
+}
+
 // Remove a skill plugável dos motores e do lockfile na mesma operação (ADR-0006 §6).
 // Só a pasta da própria skill sai: `_shared/` e as skills do método nunca são tocadas.
+// Pasta ocupada por outra coisa é PULADA e devolvida em `skipped` para a borda avisar —
+// pular em silêncio esconderia do usuário que sobrou arquivo do plugin no disco.
 export function remove(name, { repo, targets }) {
   const lockfile = readLockfile(repo);
   const entry = lockfile?.skills?.[name];
@@ -195,17 +212,21 @@ export function remove(name, { repo, targets }) {
   }
 
   const removed = [];
+  const skipped = [];
   // Só os motores TRAVADOS na entrada (ADR-0006 §6 — o lockfile é a fonte de verdade):
   // pasta de mesmo nome num motor onde o plugin não foi instalado não é tocada.
   for (const target of targets) {
     if (!entry.engines.includes(target.engine)) continue;
     const installedDir = path.join(target.dir, entry.dir);
-    if (existsSync(installedDir)) {
-      rmSync(installedDir, { recursive: true, force: true });
-      removed.push(installedDir);
+    if (!existsSync(installedDir)) continue;
+    if (!isPluginDir(installedDir, name)) {
+      skipped.push({ engine: target.engine, dir: installedDir });
+      continue;
     }
+    rmSync(installedDir, { recursive: true, force: true });
+    removed.push(installedDir);
   }
-  return { removed, entry, lockfile: writeLockfile(repo, removeSkill(lockfile, name)) };
+  return { removed, skipped, entry, lockfile: writeLockfile(repo, removeSkill(lockfile, name)) };
 }
 
 // Reinstala o conjunto EXATO travado no lockfile (semântica de restore do ADR-0006 §4):

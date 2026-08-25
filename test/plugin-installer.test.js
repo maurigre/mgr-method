@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { add, assertSafePath, CANCELLED_EXIT_CODE, download, manifestFromFiles, remove, restore } from "../src/plugin-installer.js";
@@ -347,4 +347,39 @@ test("restore reporta os motores travados sem target ativo (degradação explíc
 
   const completo = await restore({ repo, targets, fetchImpl: registry.fetchImpl });
   assert.deepEqual(completo.restored[0].skippedEngines, []);
+});
+
+test("remove nunca apaga pasta que não é do plugin (skill do método de mesmo nome)", async () => {
+  const { repo, coreDir, targets } = project();
+  const registry = stubRegistry([{ name: "@mgr/junit-clean" }]);
+  addRegistry(coreDir, { name: "mgr", url: registry.indexUrl });
+  await add("@mgr/junit-clean", { repo, coreDir, targets, fetchImpl: registry.fetchImpl, confirm: accept });
+
+  // Simula o que o `mgr update` faz: reinstala a skill do MÉTODO por cima, sem manifest.
+  const doMetodo = path.join(repo, ".claude/skills/junit-clean");
+  rmSync(doMetodo, { recursive: true, force: true });
+  mkdirSync(doMetodo, { recursive: true });
+  writeFileSync(path.join(doMetodo, "SKILL.md"), "skill do método, não do plugin", "utf8");
+
+  const { removed, skipped } = remove("@mgr/junit-clean", { repo, targets });
+
+  assert.deepEqual(removed, [path.join(repo, ".github/skills/junit-clean")], "só a pasta que é o plugin sai");
+  assert.deepEqual(skipped.map((item) => item.engine), ["claude-code"]);
+  assert.equal(readFileSync(path.join(doMetodo, "SKILL.md"), "utf8"), "skill do método, não do plugin");
+  assert.equal(readLockfile(repo).skills["@mgr/junit-clean"], undefined, "o lockfile é limpo mesmo assim");
+});
+
+test("remove recusa pasta com manifest de OUTRO plugin", async () => {
+  const { repo, coreDir, targets } = project();
+  const registry = stubRegistry([{ name: "@mgr/junit-clean" }]);
+  addRegistry(coreDir, { name: "mgr", url: registry.indexUrl });
+  await add("@mgr/junit-clean", { repo, coreDir, targets: [targets[0]], fetchImpl: registry.fetchImpl, confirm: accept });
+
+  const dir = path.join(repo, ".claude/skills/junit-clean");
+  writeFileSync(path.join(dir, "mgr-manifest.json"), JSON.stringify({ name: "@outro/junit-clean" }), "utf8");
+
+  const { removed, skipped } = remove("@mgr/junit-clean", { repo, targets: [targets[0]] });
+  assert.deepEqual(removed, []);
+  assert.equal(skipped.length, 1);
+  assert.ok(existsSync(dir));
 });

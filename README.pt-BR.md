@@ -120,10 +120,11 @@ feature, idêntico.
 ## Estrutura do repositório
 
 ```
-bin/mgr.js          # CLI (install · status · update · uninstall · build · validate · list)
-src/                # bundle · builder (runtime+lançadores) · installer (2 fases) · manifest · validator
+bin/mgr.js          # CLI (install · status · update · uninstall · build · validate · list · add · remove · registry)
+src/                # bundle · builder · installer · manifest · validator · plugin · registry · lockfile · adapters
 skills/             # as 12 skills (fonte)
 shared/scripts/     # sdd-check.sh (verifica pré-requisitos do spec-create)
+docs/plugins.md     # formato de skill plugável: manifest, registry, lockfile, matriz de suporte
 test/               # node:test
 ```
 

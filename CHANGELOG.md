@@ -7,6 +7,49 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
+## [0.6.0-beta.1] - 2026-08-25
+> Pré-release da **Fase 1 da evolução do MGR** (fundação de skills plugáveis), publicada no
+> dist-tag `next`. `npm i mgr-method` continua trazendo a 0.5.0 estável.
+
+### Adicionado
+- **Skills plugáveis instaláveis por `mgr add`** (ADR-0004 a ADR-0007). Um plugin é uma pasta
+  de skill 100% padrão [Agent Skills](https://agentskills.io/specification) com um
+  `mgr-manifest.json` na raiz: o frontmatter segue sendo o contrato com as plataformas, o
+  manifest é o contrato com o MGR (procedência, categoria, permissões, model/effort).
+- **Comandos novos:** `mgr add <@registry/skill>`, `mgr remove <@registry/skill>` e
+  `mgr registry add|remove|list`. `mgr list`, `mgr status`, `mgr install` e `mgr update`
+  ganham seções e etapas de plugin **apenas quando existem** lockfile ou registry configurado —
+  quem não usa plugins tem a saída de antes, travada por teste de regressão contra a baseline
+  real da `main`.
+- **Registry oficial** [`mgr-registry`](https://github.com/maurigre/mgr-registry): repo Git com
+  `index.json` gerado dos manifests (nunca editado à mão) e CI que reprova manifest inválido,
+  índice fora de sincronia ou URL publicada que não bate com o checksum anunciado. Estreia com
+  `@mgr/junit-clean` e `@mgr/diagnosing-bugs` — as duas seguem no núcleo do pacote.
+- **Lockfile `mgr-skills.lock`** na raiz do projeto, versionado: `git clone` + `mgr install`
+  reproduz o conjunto exato de skills do time, com integridade verificada. O bloco `applied`
+  registra o que cada motor efetivamente traduziu ou degradou.
+- **Tradução por motor com degradação explícita:** no Claude Code, `model` e `effort` do
+  manifest entram no frontmatter da skill instalada; no Copilot, que não tem onde recebê-los,
+  a instalação **não falha** — emite aviso e registra a degradação no lockfile.
+- Documentação do formato em [`docs/plugins.md`](docs/plugins.md), com a matriz de suporte por
+  plataforma datada e os limites conhecidos desta versão.
+
+### Segurança
+- **Toda instalação de plugin exige confirmação humana**, mostrando origem, versão, permissões
+  declaradas e checksum antes de escrever qualquer byte. **Não existe flag de bypass**; sem
+  terminal interativo o comando falha com mensagem explícita.
+- **Integridade obrigatória:** sha256 por arquivo mais checksum agregado do conjunto, validados
+  em memória — divergência aborta sem escrever nada. O `restore` resolve no registry travado no
+  lockfile, não no configurado na máquina, e recusa versão ou checksum diferentes do travado.
+- Caminho de arquivo vindo do registry e pasta de instalação vinda do lockfile são validados
+  contra travessia de diretório.
+- Vulnerabilidades `high` de dependências transitivas de desenvolvimento corrigidas
+  (`brace-expansion`, `fast-uri`, `js-yaml`).
+
+### Corrigido
+- `mgr status` não afirma mais que nada está instalado quando há plugin travado no lockfile
+  sem instalação do método no projeto (saída autocontraditória, com exit code 1 indevido).
+
 ## [0.5.0] - 2026-07-17
 ### Alterado
 - **Inglês é o idioma canônico do conteúdo distribuído** (ADR-0003): as 12 skills, os

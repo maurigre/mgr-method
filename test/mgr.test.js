@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { Buffer } from "node:buffer";
+import { execFile, execFileSync } from "node:child_process";
+import { createServer } from "node:http";
+import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
 import path from "node:path";
@@ -12,6 +15,8 @@ import * as catalog from "../src/catalog.js";
 import { collectInstallAnswers, detectUserLanguage, CANCELLED } from "../src/prompts.js";
 import { getMessages } from "../src/messages.js";
 import { validateAll, validateSkill, checkSkill } from "../src/validator.js";
+import { aggregateChecksum, sha256 } from "../src/plugin.js";
+import { captureCli } from "../scripts/capture-cli-baseline.mjs";
 
 const tmp = () => mkdtempSync(path.join(os.tmpdir(), "mgr-"));
 const CORE = ["spec-init", "spec-create", "spec-execute", "adr-create", "code-analyzer", "diagnosing-bugs"];
@@ -194,6 +199,15 @@ test("getMessages: en é o default e qualquer pt-* seleciona a tabela pt-BR", ()
   assert.equal(getMessages("pt-BR").aborted, "abortado.");
   assert.equal(getMessages("pt").confirmInstall, "Confirmar instalação?");
   assert.equal(getMessages("PT-PT").uninstalled, "Desinstalado.");
+});
+
+test("as tabelas en e pt-BR têm exatamente as mesmas chaves", () => {
+  const en = Object.keys(getMessages("en")).sort();
+  const ptBR = Object.keys(getMessages("pt-BR")).sort();
+  assert.deepEqual(ptBR, en);
+  for (const key of en) {
+    assert.equal(typeof getMessages("pt-BR")[key], typeof getMessages("en")[key], key);
+  }
 });
 
 test("collectInstallAnswers usa a tabela de mensagens injetada (pt-BR)", async () => {
@@ -430,4 +444,228 @@ test("checkSkill cobre frontmatter, name, description e tamanho", () => {
   assert.ok(longo.some((p) => p.includes("linhas")));
 
   assert.deepEqual(checkSkill("foo", `---\nname: foo\ndescription: ${desc}\n---\n`), []);
+});
+
+test("CLI: mgr add exige nome e terminal interativo, sem flag de bypass", () => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const run = (args, env = {}) => {
+    try {
+      const stdout = execFileSync("node", [bin, ...args], {
+        encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, LC_ALL: "pt_BR.UTF-8", ...env },
+      });
+      return { status: 0, stdout, stderr: "" };
+    } catch (error) {
+      return { status: error.status, stdout: error.stdout, stderr: error.stderr };
+    }
+  };
+
+  const semNome = run(["add"]);
+  assert.equal(semNome.status, 1);
+  assert.match(semNome.stderr, /uso: mgr add <@registry\/skill>/);
+
+  const semTty = run(["add", "@mgr/junit-clean"]);
+  assert.equal(semTty.status, 1);
+  assert.match(semTty.stderr, /exige terminal interativo/);
+  assert.match(run(["add", "@mgr/junit-clean"], { LC_ALL: "en_US.UTF-8" }).stderr, /requires an interactive terminal/);
+  assert.doesNotMatch(run(["add", "@mgr/junit-clean", "-y"]).stderr, /instalada/);
+});
+
+test("CLI: mgr registry add/list/remove persiste em .mgr-core/config.json", () => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const repo = tmp();
+  const run = (args) => execFileSync("node", [bin, ...args], {
+    encoding: "utf8", cwd: repo, stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, LC_ALL: "pt_BR.UTF-8" },
+  });
+  const config = path.join(repo, ".mgr-core", "config.json");
+  const url = "https://raw.githubusercontent.com/maurigre/mgr-registry/main/index.json";
+
+  assert.match(run(["registry", "list"]), /Nenhum registry configurado/);
+  assert.match(run(["registry", "add", "mgr", url, "--trusted"]), /registry "mgr" adicionado/);
+  assert.deepEqual(JSON.parse(readFileSync(config, "utf8")).registries, [{ name: "mgr", url, trusted: true }]);
+
+  run(["registry", "add", "empresa", "https://registry.empresa.dev/index.json"]);
+  const listed = run(["registry", "list"]);
+  assert.match(listed, /mgr \(confiável\)/);
+  assert.match(listed, /empresa {2}https:\/\/registry.empresa.dev/);
+
+  assert.match(run(["registry", "remove", "empresa"]), /registry "empresa" removido/);
+  assert.deepEqual(JSON.parse(readFileSync(config, "utf8")).registries.map((r) => r.name), ["mgr"]);
+
+  assert.throws(() => run(["registry", "add", "mgr", url]), /Command failed/);
+  assert.throws(() => run(["registry", "listar"]), /Command failed/);
+  assert.throws(() => run(["remove"]), /Command failed/);
+});
+
+test("CLI: list e status ganham as seções de plugin só quando há lockfile ou registry", () => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const repo = tmp();
+  const run = (args) => execFileSync("node", [bin, ...args], {
+    encoding: "utf8", cwd: repo, stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, LC_ALL: "pt_BR.UTF-8" },
+  });
+
+  const semPlugins = run(["list"]);
+  assert.doesNotMatch(semPlugins, /Skills plugáveis instaladas|Disponíveis nos registries/);
+
+  writeFileSync(path.join(repo, "mgr-skills.lock"), JSON.stringify({
+    lockfileVersion: 1,
+    registries: { mgr: { url: "https://raw.example/index.json", trusted: true } },
+    skills: {
+      "@mgr/junit-clean": {
+        version: "1.0.0", registry: "mgr", checksum: `sha256-${"a".repeat(64)}`,
+        category: "language", dir: "junit-clean", engines: ["claude-code"], applied: {},
+      },
+    },
+  }, null, 2) + "\n", "utf8");
+
+  const comLockfile = run(["list"]);
+  assert.match(comLockfile, /Skills plugáveis instaladas/);
+  assert.match(comLockfile, /@mgr\/junit-clean@1\.0\.0 {2}\(registry: mgr, pasta: junit-clean\)/);
+  assert.ok(comLockfile.startsWith(semPlugins), "o catálogo do método sai antes e intocado");
+
+  installer.execute(installer.planInstall(["claude-code"], "project", repo, { architecture: "hexagonal" }));
+  const status = run(["status"]);
+  assert.match(status, /plugins: mgr-skills\.lock/);
+  assert.match(status, /@mgr\/junit-clean@1\.0\.0 \(mgr\)/);
+});
+
+test("CLI: install e update restauram o conjunto travado no lockfile (registry HTTP local)", async () => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const repo = tmp();
+  const skillMd = "---\nname: junit-clean\ndescription: Standardizes Java unit tests with JUnit 5 following strict rules.\n---\n\n# junit-clean\n";
+  const manifest = {
+    name: "@mgr/junit-clean", version: "1.0.0", author: "Mauri Reis",
+    description: "Standardizes Java unit tests with JUnit 5 following strict quality rules.",
+    category: "language", permissions: ["read-files"],
+    model: { "claude-code": "sonnet" }, effort: "medium",
+  };
+  const contents = [
+    { path: "SKILL.md", content: Buffer.from(skillMd, "utf8") },
+    { path: "mgr-manifest.json", content: Buffer.from(JSON.stringify(manifest, null, 2), "utf8") },
+  ];
+
+  const server = createServer((request, response) => {
+    const file = contents.find((candidate) => request.url === `/junit-clean/${candidate.path}`);
+    if (request.url === "/index.json") {
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify(index));
+      return;
+    }
+    if (!file) { response.statusCode = 404; response.end("not found"); return; }
+    response.end(file.content);
+  });
+  await new Promise((done) => server.listen(0, "127.0.0.1", done));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const index = {
+    indexVersion: 1, registry: "mgr", generatedAt: "2026-07-21T00:00:00.000Z",
+    categories: {
+      language: [{
+        name: "@mgr/junit-clean", version: "1.0.0", description: manifest.description,
+        checksum: aggregateChecksum(contents),
+        files: contents.map((file) => ({ path: file.path, url: `${base}/junit-clean/${file.path}`, sha256: sha256(file.content) })),
+      }],
+    },
+  };
+
+  const lockfile = {
+    lockfileVersion: 1,
+    registries: { mgr: { url: `${base}/index.json`, trusted: true } },
+    skills: {
+      "@mgr/junit-clean": {
+        version: "1.0.0", registry: "mgr", checksum: index.categories.language[0].checksum,
+        category: "language", dir: "junit-clean", engines: ["claude-code"],
+        applied: { "claude-code": { model: "sonnet", effort: "medium" } },
+      },
+    },
+  };
+  writeFileSync(path.join(repo, "mgr-skills.lock"), JSON.stringify(lockfile, null, 2) + "\n", "utf8");
+
+  const run = async (args, options = {}) => (await promisify(execFile)("node", [bin, ...args], {
+    encoding: "utf8", env: { ...process.env, LC_ALL: "pt_BR.UTF-8" }, ...options,
+  })).stdout;
+
+  try {
+    const installed = await run(["install", "--engine", "claude-code", "--arch", "hexagonal", "--project-id", "x", "-y", repo]);
+    assert.match(installed, /Restaurando skills plugáveis de mgr-skills\.lock/);
+    assert.match(installed, /1 skill\(s\) plugável\(is\) restaurada\(s\)/);
+    const installedMd = readFileSync(path.join(repo, ".claude/skills/junit-clean/SKILL.md"), "utf8");
+    assert.match(installedMd, /^model: sonnet$/m);
+    assert.match(installedMd, /^effort: medium$/m);
+    assert.match(await run(["update", repo]), /1 skill\(s\) plugável\(is\) restaurada\(s\)/);
+
+    assert.match(await run(["remove", "@mgr/junit-clean"], { cwd: repo }), /@mgr\/junit-clean removida/);
+    assert.ok(!existsSync(path.join(repo, ".claude/skills/junit-clean")));
+    assert.ok(existsSync(path.join(repo, ".claude/skills/spec-init/SKILL.md")), "skills do método intactas");
+
+    const adulterado = tmp();
+    writeFileSync(path.join(adulterado, "mgr-skills.lock"), JSON.stringify({
+      ...lockfile,
+      skills: { "@mgr/junit-clean": { ...lockfile.skills["@mgr/junit-clean"], checksum: `sha256-${"0".repeat(64)}` } },
+    }, null, 2) + "\n", "utf8");
+    await assert.rejects(
+      run(["install", "--engine", "claude-code", "--arch", "hexagonal", "--project-id", "x", "-y", adulterado]),
+      /does not match mgr-skills.lock/,
+    );
+    assert.ok(!existsSync(path.join(adulterado, ".claude/skills/junit-clean")), "checksum divergente não escreve o plugin");
+  } finally {
+    server.closeAllConnections();
+    server.close();
+  }
+});
+
+test("regressão §2.7: projeto sem plugins tem saída idêntica à baseline pré-plugins", () => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const repo = tmp();
+  const home = tmp();
+
+  const atual = captureCli(bin, { repo, home });
+  const arquivo = readFileSync(fileURLToPath(new URL("./fixtures/cli-baseline.txt", import.meta.url)), "utf8");
+  const baseline = arquivo.slice(arquivo.indexOf("\n") + 1);
+
+  assert.equal(atual, baseline, "install/list/status/update mudaram para quem não usa plugins");
+  assert.ok(!existsSync(path.join(repo, "mgr-skills.lock")), "nenhum lockfile criado");
+  assert.ok(!existsSync(path.join(repo, ".mgr-core", "config.json")), "nenhum config de registry criado");
+  for (const lang of ["en", "pt-BR"]) {
+    const msg = getMessages(lang);
+    for (const titulo of [msg.pluginsInstalledTitle, msg.pluginsAvailableTitle, msg.registryListTitle]) {
+      assert.ok(!atual.includes(titulo), `seção de plugin vazou na saída: ${titulo}`);
+    }
+  }
+});
+
+test("CLI: status de projeto só com plugin não se contradiz nem falha", () => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const repo = tmp();
+  const run = (args) => {
+    try {
+      return { status: 0, stdout: execFileSync("node", [bin, ...args], {
+        encoding: "utf8", cwd: repo, stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, LC_ALL: "pt_BR.UTF-8" },
+      }) };
+    } catch (error) {
+      return { status: error.status, stdout: error.stdout };
+    }
+  };
+
+  const vazio = run(["status"]);
+  assert.equal(vazio.status, 1, "projeto sem nada segue saindo 1");
+  assert.match(vazio.stdout, /Nenhuma instalação MGR encontrada/);
+
+  writeFileSync(path.join(repo, "mgr-skills.lock"), JSON.stringify({
+    lockfileVersion: 1,
+    registries: { mgr: { url: "https://raw.example/index.json", trusted: true } },
+    skills: {
+      "@mgr/junit-clean": {
+        version: "1.0.0", registry: "mgr", checksum: `sha256-${"a".repeat(64)}`,
+        category: "language", dir: "junit-clean", engines: ["claude-code"], applied: {},
+      },
+    },
+  }, null, 2) + "\n", "utf8");
+
+  const comPlugin = run(["status"]);
+  assert.equal(comPlugin.status, 0, "projeto com plugin travado tem instalação: exit 0");
+  assert.match(comPlugin.stdout, /@mgr\/junit-clean@1\.0\.0 \(mgr\)/);
+  assert.doesNotMatch(comPlugin.stdout, /Nenhuma instalação MGR encontrada/);
 });

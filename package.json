@@ -1,6 +1,6 @@
 {
   "name": "mgr-method",
-  "version": "0.5.0",
+  "version": "0.6.0-beta.1",
   "description": "MGR — Método Governado por Rastreabilidade (Traceability-Governed Method): specification-driven development framework for coding agents, portable between Claude Code and GitHub Copilot.",
   "type": "module",
   "bin": {
@@ -22,7 +22,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "node --test",
-    "coverage": "node --test --experimental-test-coverage --test-coverage-lines=95 --test-coverage-exclude='test/**' --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=lcov.info",
+    "coverage": "node --test --experimental-test-coverage --test-coverage-lines=95 --test-coverage-exclude='test/**' --test-coverage-exclude='scripts/**' --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=lcov.info",
     "validate": "node bin/mgr.js validate",
     "build": "esbuild bin/mgr.js --bundle --minify --platform=node --format=esm --external:@clack/prompts --external:picocolors --outfile=dist/mgr.min.js",
     "prepack": "npm run build",

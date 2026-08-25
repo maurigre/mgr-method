@@ -16,6 +16,7 @@ import { collectInstallAnswers, detectUserLanguage, CANCELLED } from "../src/pro
 import { getMessages } from "../src/messages.js";
 import { validateAll, validateSkill, checkSkill } from "../src/validator.js";
 import { aggregateChecksum, sha256 } from "../src/plugin.js";
+import { captureCli } from "../scripts/capture-cli-baseline.mjs";
 
 const tmp = () => mkdtempSync(path.join(os.tmpdir(), "mgr-"));
 const CORE = ["spec-init", "spec-create", "spec-execute", "adr-create", "code-analyzer", "diagnosing-bugs"];
@@ -611,5 +612,25 @@ test("CLI: install e update restauram o conjunto travado no lockfile (registry H
   } finally {
     server.closeAllConnections();
     server.close();
+  }
+});
+
+test("regressão §2.7: projeto sem plugins tem saída idêntica à baseline pré-plugins", () => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const repo = tmp();
+  const home = tmp();
+
+  const atual = captureCli(bin, { repo, home });
+  const arquivo = readFileSync(fileURLToPath(new URL("./fixtures/cli-baseline.txt", import.meta.url)), "utf8");
+  const baseline = arquivo.slice(arquivo.indexOf("\n") + 1);
+
+  assert.equal(atual, baseline, "install/list/status/update mudaram para quem não usa plugins");
+  assert.ok(!existsSync(path.join(repo, "mgr-skills.lock")), "nenhum lockfile criado");
+  assert.ok(!existsSync(path.join(repo, ".mgr-core", "config.json")), "nenhum config de registry criado");
+  for (const lang of ["en", "pt-BR"]) {
+    const msg = getMessages(lang);
+    for (const titulo of [msg.pluginsInstalledTitle, msg.pluginsAvailableTitle, msg.registryListTitle]) {
+      assert.ok(!atual.includes(titulo), `seção de plugin vazou na saída: ${titulo}`);
+    }
   }
 });

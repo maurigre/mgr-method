@@ -1,0 +1,29 @@
+# baseline da CLI capturada de "main" - regenerar com scripts/capture-cli-baseline.mjs
+$ mgr list
+adr-create arch-clean arch-hexagonal arch-layered arch-onion code-analyzer
+diagnosing-bugs evidence-capture junit-clean spec-create spec-execute
+spec-init
+
+$ mgr install --engine claude-code --arch hexagonal --project-id x -y <REPO>
+███ ███ ██████ ██████ ███ ███ ███████ ████████ ██ ██ ██████ ██████ ████ ████
+██ ██ ██ ████ ████ ██ ██ ██ ██ ██ ██ ██ ██ ██ ████ ██ ██ ███ ██████ █████ ██
+████ ██ █████ ██ ███████ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██ ██
+██ ██ ██ ██ ██ ██ ██████ ██ ██ ██ ██ ███████ ██ ██ ██ ██████ ██████ MGR-METHOD
+— Método Governado por Rastreabilidade AI Development Framework (SDD para
+agentes de código) Instalador v<VERSION> Criado por Mauri Reis ·
+maurigre@gmail.com mgr install Plano de instalação (autossuficiente por motor)
+projeto: x escopo: project motor(es): claude-code linguagem: — arquitetura:
+hexagonal idioma: pt-BR (saída das skills: conversa e artefatos) config →
+<REPO>/.mgr-core (manifest.json + .env) skills → <REPO>/.claude/skills skills
+(7): spec-init, spec-create, spec-execute, adr-create, code-analyzer,
+diagnosing-bugs, arch-hexagonal Skills instaladas em <REPO>/.claude/skills.
+Pronto! Comece com /spec-init e depois /spec-create por feature.
+
+$ mgr status <REPO>
+[project] MGR v<VERSION> — claude-code — self-contained projeto: x config:
+<REPO>/.mgr-core stack: linguagem=— arquitetura=hexagonal idioma: pt-BR
+skills: .claude/skills skills: spec-init, spec-create, spec-execute,
+adr-create, code-analyzer, diagnosing-bugs, arch-hexagonal em: <TS>
+
+$ mgr update <REPO>
+Re-sincronizado (project): 7 skills em <REPO>/.claude/skills.

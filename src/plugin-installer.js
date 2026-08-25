@@ -9,11 +9,12 @@
 //   - `mgr add` sem callback de confirmação não existe (sem bypass nesta fase);
 //   - o lockfile é atualizado na mesma operação que instala.
 import { Buffer } from "node:buffer";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { aggregateChecksum, assertValidManifest, MANIFEST_NAME, parseSkillName, sha256 } from "./plugin.js";
 import { listRegistries, resolve } from "./registry.js";
 import { LOCKFILE_NAME, readLockfile, removeSkill, upsertSkill, writeLockfile } from "./lockfile.js";
+import { readManifest } from "./manifest.js";
 import { applyToEngine, resolveInstallDirName } from "./adapters.js";
 
 // Exit code próprio do cancelamento pelo usuário (contrato de CLI da spec seção 5).
@@ -99,6 +100,53 @@ const displayPath = (repo, absolute) => {
   return relative && !relative.startsWith("..") ? relative : absolute;
 };
 
+// A pasta instalada só pode ser apagada se ela FOR o plugin: o `mgr-manifest.json` com o
+// nome correspondente é a prova. Sem isso, remover um plugin cujo nome curto coincide com o
+// de uma skill do método apagaria a skill do método — a pasta é a mesma (ex.: o método
+// instala `diagnosing-bugs` e o registry publica `@mgr/diagnosing-bugs`). Nunca apagar
+// pasta que não se instalou.
+function isPluginDir(installedDir, name) {
+  const manifestFile = path.join(installedDir, MANIFEST_NAME);
+  if (!existsSync(manifestFile)) return false;
+  try {
+    return JSON.parse(readFileSync(manifestFile, "utf8")).name === name;
+  } catch {
+    return false;
+  }
+}
+
+// Classifica a pasta de destino (DT-3/ADR-0008). Cruzar disco com a lista de skills do
+// metodo e o que separa "colisao com o metodo" (o usuario pode escolher) de "ocupante
+// desconhecido" (recusa): sem esse cruzamento, ou se oferece substituir o que nao e do
+// metodo, ou se recusa sem saida o que e.
+export const TARGET_FREE = "free";
+export const TARGET_SAME_PLUGIN = "same-plugin";
+export const TARGET_METHOD_SKILL = "method-skill";
+export const TARGET_FOREIGN = "foreign";
+
+export function classifyTarget(installedDir, { name, methodSkills = [] }) {
+  if (!existsSync(installedDir)) return TARGET_FREE;
+  if (isPluginDir(installedDir, name)) return TARGET_SAME_PLUGIN;
+  return methodSkills.includes(path.basename(installedDir)) ? TARGET_METHOD_SKILL : TARGET_FOREIGN;
+}
+
+const classifyAll = (context, dir, name) => context.targets.map((target) => {
+  const installedDir = path.join(target.dir, dir);
+  return {
+    target, installedDir, methodSkill: path.basename(installedDir),
+    kind: classifyTarget(installedDir, { name, methodSkills: context.methodSkills }),
+  };
+});
+
+function refuseForeign(classified, name) {
+  const foreign = classified.find((item) => item.kind === TARGET_FOREIGN);
+  if (foreign) {
+    throw new Error(
+      `cannot install ${name}: ${foreign.installedDir} already holds another skill (no ${MANIFEST_NAME} for ${name})`,
+    );
+  }
+}
+
 async function installOne(name, context, state) {
   if (state.pending.has(name)) {
     throw new Error(`circular "extends" chain involving ${name}`);
@@ -130,7 +178,36 @@ async function installOne(name, context, state) {
     state.pending.delete(name);
   }
 
-  const dir = resolveInstallDirName(parseSkillName(name).skill, origin.name, hasCollision(state.lockfile, name));
+  let dir = resolveInstallDirName(parseSkillName(name).skill, origin.name, hasCollision(state.lockfile, name));
+  let replaces = null;
+  // Colisao com skill do METODO: o usuario decide, e a decisao vai para o lockfile
+  // (ADR-0008). Ocupante desconhecido segue recusado. Tudo antes de qualquer escrita.
+  const alvosClassificados = classifyAll(context, dir, name);
+  refuseForeign(alvosClassificados, name);
+
+  const collision = alvosClassificados.find((item) => item.kind === TARGET_METHOD_SKILL);
+  if (collision) {
+    if (typeof context.resolveCollision !== "function") {
+      throw new Error(
+        `${name} collides with the method skill "${collision.methodSkill}" in ${collision.installedDir}. `
+        + "Resolving it requires an interactive choice; run `mgr add` instead",
+      );
+    }
+    const alongsideDir = resolveInstallDirName(parseSkillName(name).skill, origin.name, true);
+    const choice = await context.resolveCollision({
+      name, methodSkill: collision.methodSkill, engine: collision.target.engine,
+      replaceDir: dir, alongsideDir,
+    });
+    if (choice === "replace") {
+      replaces = collision.methodSkill;
+    } else if (choice === "alongside") {
+      dir = alongsideDir;
+      refuseForeign(classifyAll(context, dir, name), name);
+    } else {
+      throw new InstallCancelled(name);
+    }
+  }
+
   const dirs = {};
   const applied = {};
   for (const target of context.targets) {
@@ -151,6 +228,7 @@ async function installOne(name, context, state) {
     engines: context.targets.map((target) => target.engine),
     applied,
   };
+  if (replaces) lockEntry.replaces = replaces;
   if (manifest.extends) lockEntry.extends = manifest.extends;
 
   state.lockfile = upsertSkill(state.lockfile, name, lockEntry, origin);
@@ -165,14 +243,20 @@ const warningsOf = (applied) => Object.entries(applied)
 // Instala a skill plugável (e a base, quando o manifest declara `extends` — DT-5).
 // `targets` = [{engine, dir}] (pastas dos motores, vindas da borda); `confirm` = callback
 // obrigatório de confirmação humana; `fetchImpl` = fetch injetado (Humble Object).
-export async function add(name, { repo, coreDir, targets, fetchImpl, confirm }) {
+export async function add(name, { repo, coreDir, targets, fetchImpl, confirm, resolveCollision }) {
   if (typeof confirm !== "function") {
     throw new Error("mgr add requires a human confirmation callback (there is no bypass in this phase)");
   }
   if (!targets?.length) {
     throw new Error("mgr add requires at least one engine target");
   }
-  const context = { repo, targets, fetchImpl, confirm, registries: listRegistries(coreDir) };
+  const context = {
+    repo, targets, fetchImpl, confirm, resolveCollision,
+    registries: listRegistries(coreDir),
+    // Projeto sem o método instalado é estado legítimo: sem manifesto, nenhuma pasta
+    // conta como skill do método, então ocupante inesperado cai em `foreign` (recusa).
+    methodSkills: readManifest(coreDir)?.skills || [],
+  };
   const state = { lockfile: readLockfile(repo), installed: [], pending: new Set() };
   await installOne(name, context, state);
   const lockfile = writeLockfile(repo, state.lockfile);
@@ -181,6 +265,8 @@ export async function add(name, { repo, coreDir, targets, fetchImpl, confirm }) 
 
 // Remove a skill plugável dos motores e do lockfile na mesma operação (ADR-0006 §6).
 // Só a pasta da própria skill sai: `_shared/` e as skills do método nunca são tocadas.
+// Pasta ocupada por outra coisa é PULADA e devolvida em `skipped` para a borda avisar —
+// pular em silêncio esconderia do usuário que sobrou arquivo do plugin no disco.
 export function remove(name, { repo, targets }) {
   const lockfile = readLockfile(repo);
   const entry = lockfile?.skills?.[name];
@@ -195,17 +281,21 @@ export function remove(name, { repo, targets }) {
   }
 
   const removed = [];
+  const skipped = [];
   // Só os motores TRAVADOS na entrada (ADR-0006 §6 — o lockfile é a fonte de verdade):
   // pasta de mesmo nome num motor onde o plugin não foi instalado não é tocada.
   for (const target of targets) {
     if (!entry.engines.includes(target.engine)) continue;
     const installedDir = path.join(target.dir, entry.dir);
-    if (existsSync(installedDir)) {
-      rmSync(installedDir, { recursive: true, force: true });
-      removed.push(installedDir);
+    if (!existsSync(installedDir)) continue;
+    if (!isPluginDir(installedDir, name)) {
+      skipped.push({ engine: target.engine, dir: installedDir });
+      continue;
     }
+    rmSync(installedDir, { recursive: true, force: true });
+    removed.push(installedDir);
   }
-  return { removed, entry, lockfile: writeLockfile(repo, removeSkill(lockfile, name)) };
+  return { removed, skipped, entry, lockfile: writeLockfile(repo, removeSkill(lockfile, name)) };
 }
 
 // Reinstala o conjunto EXATO travado no lockfile (semântica de restore do ADR-0006 §4):
@@ -254,4 +344,19 @@ function lockedDirOf(lockfile, baseName, extendingName) {
     throw new Error(`${LOCKFILE_NAME} is inconsistent: ${extendingName} extends ${baseName}, which is not locked`);
   }
   return base.dir;
+}
+
+// Nomes dos plugins travados que estão REALMENTE no disco, com a prova de posse de sempre
+// (`mgr-manifest.json` correspondente). Alimenta o `diff` do lockfile: o que está travado e
+// não aparece aqui é divergência entre o contrato do time e a máquina (DT-8/RN-8).
+// Fica no núcleo, não na borda, porque é regra de domínio — a borda só imprime (INV-5/INV-6).
+export function installedPluginNames(lockfile, targets) {
+  const presentes = [];
+  for (const [name, entry] of Object.entries(lockfile?.skills || {})) {
+    const alvos = targets.filter((target) => entry.engines.includes(target.engine));
+    const emTodos = alvos.length > 0
+      && alvos.every((target) => isPluginDir(path.join(target.dir, entry.dir), name));
+    if (emTodos) presentes.push(name);
+  }
+  return presentes;
 }

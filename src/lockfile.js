@@ -14,6 +14,11 @@ export const lockfilePath = (repo) => path.join(repo, LOCKFILE_NAME);
 // "dir" malicioso alcançaria rmSync/write fora da pasta do motor; daí validar na leitura.
 const INSTALL_DIR_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*(?:--[a-z0-9]+(?:-[a-z0-9]+)*)?$/;
 
+// `replaces` guarda o nome CURTO da skill do metodo substituida (ADR-0008): skill do
+// metodo nao tem scope nem sufixo de registry. Campo opcional — ausencia significa
+// instalada ao lado ou sem colisao, e e o estado de todo lockfile anterior ao ADR-0008.
+const METHOD_SKILL_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
 export const emptyLockfile = () => ({ lockfileVersion: LOCKFILE_VERSION, registries: {}, skills: {} });
 
 // Ausência de lockfile é estado legítimo (projeto sem plugins) — devolve null, mesmo
@@ -28,6 +33,9 @@ export function readLockfile(repo) {
   for (const [name, entry] of Object.entries(lockfile.skills || {})) {
     if (!INSTALL_DIR_RE.test(entry?.dir || "")) {
       throw new Error(`unsafe install dir in ${LOCKFILE_NAME} for ${name}: ${JSON.stringify(entry?.dir)}`);
+    }
+    if (entry.replaces !== undefined && !METHOD_SKILL_RE.test(entry.replaces)) {
+      throw new Error(`invalid "replaces" in ${LOCKFILE_NAME} for ${name}: ${JSON.stringify(entry.replaces)} (expected a method skill name in kebab-case)`);
     }
   }
   return lockfile;
@@ -82,4 +90,18 @@ export function diff(lockfile, installedNames) {
     missing: locked.filter((name) => !installed.has(name)),
     unexpected: [...installed].filter((name) => !locked.includes(name)),
   };
+}
+
+// Skills do MÉTODO substituídas, por motor: `{ motor: { skill: plugin } }` (DT-6/ADR-0008).
+// Consulta pura: quem instala o método recebe este mapa pronto da borda e continua sem
+// conhecer plugins (INV-3/INV-5). Sem lockfile, ou sem nenhum `replaces`, devolve `{}`.
+export function replacedByEngine(lockfile) {
+  const byEngine = {};
+  for (const [plugin, entry] of Object.entries(lockfile?.skills || {})) {
+    if (!entry.replaces) continue;
+    for (const engine of entry.engines || []) {
+      byEngine[engine] = { ...byEngine[engine], [entry.replaces]: plugin };
+    }
+  }
+  return byEngine;
 }

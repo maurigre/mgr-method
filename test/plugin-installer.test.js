@@ -1,10 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { add, assertSafePath, CANCELLED_EXIT_CODE, download, manifestFromFiles, remove, restore } from "../src/plugin-installer.js";
+import {
+  add, assertSafePath, CANCELLED_EXIT_CODE, classifyTarget, download, installedPluginNames,
+  manifestFromFiles, remove, restore,
+  TARGET_FOREIGN, TARGET_FREE, TARGET_METHOD_SKILL, TARGET_SAME_PLUGIN,
+} from "../src/plugin-installer.js";
 import { aggregateChecksum, sha256 } from "../src/plugin.js";
 import { addRegistry } from "../src/registry.js";
 import { readLockfile, LOCKFILE_NAME } from "../src/lockfile.js";
@@ -347,4 +351,189 @@ test("restore reporta os motores travados sem target ativo (degradação explíc
 
   const completo = await restore({ repo, targets, fetchImpl: registry.fetchImpl });
   assert.deepEqual(completo.restored[0].skippedEngines, []);
+});
+
+test("remove nunca apaga pasta que não é do plugin (skill do método de mesmo nome)", async () => {
+  const { repo, coreDir, targets } = project();
+  const registry = stubRegistry([{ name: "@mgr/junit-clean" }]);
+  addRegistry(coreDir, { name: "mgr", url: registry.indexUrl });
+  await add("@mgr/junit-clean", { repo, coreDir, targets, fetchImpl: registry.fetchImpl, confirm: accept });
+
+  // Simula o que o `mgr update` faz: reinstala a skill do MÉTODO por cima, sem manifest.
+  const doMetodo = path.join(repo, ".claude/skills/junit-clean");
+  rmSync(doMetodo, { recursive: true, force: true });
+  mkdirSync(doMetodo, { recursive: true });
+  writeFileSync(path.join(doMetodo, "SKILL.md"), "skill do método, não do plugin", "utf8");
+
+  const { removed, skipped } = remove("@mgr/junit-clean", { repo, targets });
+
+  assert.deepEqual(removed, [path.join(repo, ".github/skills/junit-clean")], "só a pasta que é o plugin sai");
+  assert.deepEqual(skipped.map((item) => item.engine), ["claude-code"]);
+  assert.equal(readFileSync(path.join(doMetodo, "SKILL.md"), "utf8"), "skill do método, não do plugin");
+  assert.equal(readLockfile(repo).skills["@mgr/junit-clean"], undefined, "o lockfile é limpo mesmo assim");
+});
+
+test("remove recusa pasta com manifest de OUTRO plugin", async () => {
+  const { repo, coreDir, targets } = project();
+  const registry = stubRegistry([{ name: "@mgr/junit-clean" }]);
+  addRegistry(coreDir, { name: "mgr", url: registry.indexUrl });
+  await add("@mgr/junit-clean", { repo, coreDir, targets: [targets[0]], fetchImpl: registry.fetchImpl, confirm: accept });
+
+  const dir = path.join(repo, ".claude/skills/junit-clean");
+  writeFileSync(path.join(dir, "mgr-manifest.json"), JSON.stringify({ name: "@outro/junit-clean" }), "utf8");
+
+  const { removed, skipped } = remove("@mgr/junit-clean", { repo, targets: [targets[0]] });
+  assert.deepEqual(removed, []);
+  assert.equal(skipped.length, 1);
+  assert.ok(existsSync(dir));
+});
+
+test("add recusa instalar por cima de pasta de ocupante desconhecido e não escreve nada", async () => {
+  const { repo, coreDir, targets } = project();
+  const registry = stubRegistry([{ name: "@mgr/junit-clean" }]);
+  addRegistry(coreDir, { name: "mgr", url: registry.indexUrl });
+
+  const doMetodo = path.join(repo, ".claude/skills/junit-clean");
+  mkdirSync(doMetodo, { recursive: true });
+  writeFileSync(path.join(doMetodo, "SKILL.md"), "skill do método", "utf8");
+
+  await assert.rejects(
+    add("@mgr/junit-clean", { repo, coreDir, targets, fetchImpl: registry.fetchImpl, confirm: accept }),
+    /already holds another skill/,
+  );
+  assert.equal(readFileSync(path.join(doMetodo, "SKILL.md"), "utf8"), "skill do método");
+  assert.ok(!existsSync(path.join(repo, ".github/skills/junit-clean")), "recusa antes de escrever em QUALQUER motor");
+  assert.equal(readLockfile(repo), null);
+});
+
+test("add do mesmo plugin sobre a própria instalação segue permitido", async () => {
+  const { repo, coreDir, targets } = project();
+  const registry = stubRegistry([{ name: "@mgr/junit-clean" }]);
+  addRegistry(coreDir, { name: "mgr", url: registry.indexUrl });
+  await add("@mgr/junit-clean", { repo, coreDir, targets, fetchImpl: registry.fetchImpl, confirm: accept });
+
+  const reinstalado = await add("@mgr/junit-clean", { repo, coreDir, targets, fetchImpl: registry.fetchImpl, confirm: accept });
+  assert.equal(reinstalado.installed[0].name, "@mgr/junit-clean");
+  assert.ok(existsSync(path.join(repo, ".claude/skills/junit-clean/mgr-manifest.json")));
+});
+
+const skillDoMetodo = (repo, engineDir, nome, conteudo = "skill do método") => {
+  const dir = path.join(repo, engineDir, nome);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, "SKILL.md"), conteudo, "utf8");
+  return dir;
+};
+
+const comMetodoInstalado = (coreDir, skills) => {
+  mkdirSync(coreDir, { recursive: true });
+  writeFileSync(path.join(coreDir, "manifest.json"), JSON.stringify({ model: "self-contained", skills }), "utf8");
+};
+
+test("classifyTarget separa livre, mesmo plugin, skill do método e ocupante desconhecido", async () => {
+  const { repo, coreDir, targets } = project();
+  const registry = stubRegistry([{ name: "@mgr/junit-clean" }]);
+  addRegistry(coreDir, { name: "mgr", url: registry.indexUrl });
+  await add("@mgr/junit-clean", { repo, coreDir, targets: [targets[0]], fetchImpl: registry.fetchImpl, confirm: accept });
+
+  const doPlugin = path.join(repo, ".claude/skills/junit-clean");
+  const doMetodo = skillDoMetodo(repo, ".claude/skills", "code-analyzer");
+  const desconhecida = skillDoMetodo(repo, ".claude/skills", "coisa-alheia");
+  const metodo = ["code-analyzer"];
+
+  assert.equal(classifyTarget(path.join(repo, ".claude/skills/nao-existe"), { name: "@mgr/x", methodSkills: metodo }), TARGET_FREE);
+  assert.equal(classifyTarget(doPlugin, { name: "@mgr/junit-clean", methodSkills: metodo }), TARGET_SAME_PLUGIN);
+  assert.equal(classifyTarget(doMetodo, { name: "@acme/code-analyzer", methodSkills: metodo }), TARGET_METHOD_SKILL);
+  assert.equal(classifyTarget(desconhecida, { name: "@acme/coisa-alheia", methodSkills: metodo }), TARGET_FOREIGN);
+  assert.equal(classifyTarget(doMetodo, { name: "@acme/code-analyzer", methodSkills: [] }), TARGET_FOREIGN);
+});
+
+test("colisão com skill do método: escolher instalar ao lado preserva a do método", async () => {
+  const { repo, coreDir, targets } = project();
+  const registry = stubRegistry([{ name: "@acme/junit-clean" }], { registry: "acme", indexUrl: "https://raw.example/acme/index.json" });
+  addRegistry(coreDir, { name: "acme", url: registry.indexUrl });
+  comMetodoInstalado(coreDir, ["junit-clean"]);
+  const doMetodo = skillDoMetodo(repo, ".claude/skills", "junit-clean");
+
+  const perguntas = [];
+  const { installed } = await add("@acme/junit-clean", {
+    repo, coreDir, targets: [targets[0]], fetchImpl: registry.fetchImpl, confirm: accept,
+    resolveCollision: async (proposta) => { perguntas.push(proposta); return "alongside"; },
+  });
+
+  assert.equal(perguntas.length, 1);
+  assert.equal(perguntas[0].methodSkill, "junit-clean");
+  assert.equal(perguntas[0].alongsideDir, "junit-clean--acme");
+  assert.equal(installed[0].dir, "junit-clean--acme");
+  assert.equal(readFileSync(path.join(doMetodo, "SKILL.md"), "utf8"), "skill do método");
+  assert.ok(existsSync(path.join(repo, ".claude/skills/junit-clean--acme/SKILL.md")));
+  assert.equal(readLockfile(repo).skills["@acme/junit-clean"].replaces, undefined);
+});
+
+test("colisão com skill do método: escolher substituir grava replaces no lockfile", async () => {
+  const { repo, coreDir, targets } = project();
+  const registry = stubRegistry([{ name: "@acme/junit-clean" }], { registry: "acme", indexUrl: "https://raw.example/acme/index.json" });
+  addRegistry(coreDir, { name: "acme", url: registry.indexUrl });
+  comMetodoInstalado(coreDir, ["junit-clean"]);
+  skillDoMetodo(repo, ".claude/skills", "junit-clean");
+
+  const { installed } = await add("@acme/junit-clean", {
+    repo, coreDir, targets: [targets[0]], fetchImpl: registry.fetchImpl, confirm: accept,
+    resolveCollision: async () => "replace",
+  });
+
+  assert.equal(installed[0].dir, "junit-clean");
+  const entrada = readLockfile(repo).skills["@acme/junit-clean"];
+  assert.equal(entrada.replaces, "junit-clean");
+  assert.ok(existsSync(path.join(repo, ".claude/skills/junit-clean/mgr-manifest.json")));
+});
+
+test("colisão negada cancela e colisão sem callback é erro explícito", async () => {
+  const { repo, coreDir, targets } = project();
+  const registry = stubRegistry([{ name: "@acme/junit-clean" }], { registry: "acme", indexUrl: "https://raw.example/acme/index.json" });
+  addRegistry(coreDir, { name: "acme", url: registry.indexUrl });
+  comMetodoInstalado(coreDir, ["junit-clean"]);
+  const doMetodo = skillDoMetodo(repo, ".claude/skills", "junit-clean");
+
+  const cancelada = await add("@acme/junit-clean", {
+    repo, coreDir, targets: [targets[0]], fetchImpl: registry.fetchImpl, confirm: accept,
+    resolveCollision: async () => null,
+  }).then(() => null, (error) => error);
+  assert.equal(cancelada.exitCode, CANCELLED_EXIT_CODE);
+  assert.equal(readFileSync(path.join(doMetodo, "SKILL.md"), "utf8"), "skill do método");
+  assert.equal(readLockfile(repo), null);
+
+  await assert.rejects(
+    add("@acme/junit-clean", { repo, coreDir, targets: [targets[0]], fetchImpl: registry.fetchImpl, confirm: accept }),
+    /collides with the method skill "junit-clean".*interactive choice/s,
+  );
+});
+
+test("sem colisão o callback de resolução nunca é chamado", async () => {
+  const { repo, coreDir, targets } = project();
+  const registry = stubRegistry([{ name: "@mgr/junit-clean" }]);
+  addRegistry(coreDir, { name: "mgr", url: registry.indexUrl });
+  comMetodoInstalado(coreDir, ["spec-create"]);
+
+  let chamado = false;
+  await add("@mgr/junit-clean", {
+    repo, coreDir, targets, fetchImpl: registry.fetchImpl, confirm: accept,
+    resolveCollision: async () => { chamado = true; return "replace"; },
+  });
+  assert.equal(chamado, false);
+});
+
+test("installedPluginNames: presença parcial entre motores é divergência, não sucesso", async () => {
+  const { repo, coreDir, targets } = project();
+  const registry = stubRegistry([{ name: "@mgr/junit-clean" }]);
+  addRegistry(coreDir, { name: "mgr", url: registry.indexUrl });
+  await add("@mgr/junit-clean", { repo, coreDir, targets, fetchImpl: registry.fetchImpl, confirm: accept });
+  const lockfile = readLockfile(repo);
+
+  assert.deepEqual(installedPluginNames(lockfile, targets), ["@mgr/junit-clean"], "presente nos dois motores");
+
+  rmSync(path.join(repo, ".github/skills/junit-clean"), { recursive: true, force: true });
+  assert.deepEqual(installedPluginNames(lockfile, targets), [], "presente só em um dos dois motores travados");
+
+  assert.deepEqual(installedPluginNames(lockfile, []), [], "sem alvo algum não conta como presente");
+  assert.deepEqual(installedPluginNames(null, targets), []);
 });

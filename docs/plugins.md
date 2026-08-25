@@ -79,6 +79,46 @@ an install never fails because a platform lacks a capability. Verified 2026-07-2
 Whatever each adapter applied or degraded is recorded per engine in the `applied` block of
 the lockfile, so the result is auditable without extra tooling.
 
+## When a plugin has the same name as a method skill
+
+MGR ships its own skills into the same folder a plugin would use. When the short names
+collide — `@acme/code-analyzer` against the method's `code-analyzer` — `mgr add` stops and
+asks, before writing anything:
+
+| Choice | What happens |
+|---|---|
+| **Install alongside** (default) | the plugin goes to `code-analyzer--acme`; the method skill stays where it is |
+| **Replace the method skill** | the plugin takes the `code-analyzer` folder, and the lockfile records it |
+
+Replacing is recorded, not improvised. The lockfile entry gains a `replaces` field:
+
+```json
+"@acme/code-analyzer": {
+  "version": "1.0.0",
+  "registry": "acme",
+  "dir": "code-analyzer",
+  "replaces": "code-analyzer"
+}
+```
+
+That single line is what makes the rest of the CLI behave:
+
+- `mgr install` and `mgr update` **skip** the replaced skill when installing the method, so
+  the folder is written once, with what you chose — instead of being written and then
+  overwritten. If the registry is unreachable, the command fails loudly and the folder stays
+  empty, rather than silently holding a version you did not pick.
+- `.mgr-core/manifest.json` keeps the method's full intended skill set and adds a `replaced`
+  map, so it never claims to have installed something a plugin took over.
+- `mgr status` names the replacement, and reports any skill the lockfile locks but the disk
+  does not match. It reports; it never fixes silently.
+- `mgr remove` of a replacing plugin tells you the method skill returns on the next
+  `mgr install` or `mgr update`.
+
+The choice is made once, travels in the lockfile, and is applied without asking again — so a
+teammate cloning the repository gets the same layout from `mgr install`.
+
+A folder occupied by something that is neither the plugin nor a method skill is refused:
+MGR never writes over content it cannot account for.
 ## `mgr-skills.lock`
 
 ```json
@@ -151,6 +191,7 @@ installer uses.
 
 - Upgrading an installed plugin is not supported yet: `mgr remove` then `mgr add`.
 - `extends` installs both skills and injects a precedence header into the extending one;
-  merging instructions is out of scope.
+  merging instructions is out of scope — the same holds for a plugin that replaces a method
+  skill: one folder wins, nothing is merged.
 - Plugins are installed as published: the `{{MGR_USER_LANGUAGE}}` token of the method skills
   is resolved at export time, not per project.

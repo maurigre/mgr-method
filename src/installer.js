@@ -65,13 +65,17 @@ function archRulesRef(engineDir, scope, repo) {
 }
 
 export function planInstall(engines, scope, repo, opts = {}) {
-  const { skillsDir = null, language = null, architecture = null, userLanguage = null, optional = [], all = false, names = null, projectId = null } = opts;
+  const { skillsDir = null, language = null, architecture = null, userLanguage = null, optional = [], all = false, names = null, projectId = null, replaced = {} } = opts;
   const skills = names || (all ? bundle.skillNames() : catalog.selectSkills({ language, architecture, optional }));
+  // Skill substituída por plugin sai do conjunto DAQUELE motor (ADR-0008): sem isso o
+  // instalador escreveria a skill do método para o restore sobrescrever logo em seguida,
+  // deixando no disco, no intervalo, a versão que o usuário não escolheu.
+  const forEngine = (engine) => skills.filter((name) => !(replaced[engine] || {})[name]);
   const targets = skillsDir
-    ? [{ engine: "custom", dir: skillsDir }]
-    : engines.map((e) => ({ engine: e, dir: engineSkillsDir(e, scope, repo) }));
+    ? [{ engine: "custom", dir: skillsDir, skills }]
+    : engines.map((e) => ({ engine: e, dir: engineSkillsDir(e, scope, repo), skills: forEngine(e) }));
   const pid = projectId || path.basename(path.resolve(repo));
-  return { engines: skillsDir ? ["custom"] : engines, scope, repo, targets, skills, language, architecture, userLanguage, projectId: pid };
+  return { engines: skillsDir ? ["custom"] : engines, scope, repo, targets, skills, replaced, language, architecture, userLanguage, projectId: pid };
 }
 
 // Migra do modelo antigo (runtime-launcher): remove lançadores e o conteúdo de skills/shared
@@ -100,7 +104,7 @@ export function execute(plan) {
   const migrated = migrateOld(plan.scope, plan.repo);
   for (const t of plan.targets) {
     const ref = t.engine === "custom" ? undefined : archRulesRef(t.dir, plan.scope, plan.repo);
-    installEngine(t.dir, plan.skills, { archRulesRef: ref, userLanguage: plan.userLanguage });
+    installEngine(t.dir, t.skills || plan.skills, { archRulesRef: ref, userLanguage: plan.userLanguage });
   }
   const core = coreDir(plan.scope, plan.repo);
   const rel = (p) => (plan.scope === "project" ? path.relative(plan.repo, p) : p);
@@ -113,7 +117,11 @@ export function execute(plan) {
     userLanguage: plan.userLanguage,
     projectId: plan.projectId,
     skillsDirs: plan.targets.map((t) => rel(t.dir)),
+    // `skills` continua sendo o conjunto PRETENDIDO do método — é o que faz a skill voltar
+    // quando o plugin que a substituiu for removido (DT-6). `replaced` diz o que, hoje,
+    // está cedido a um plugin naquele motor.
     skills: plan.skills,
+    ...(Object.keys(plan.replaced || {}).length ? { replaced: plan.replaced } : {}),
   });
   writeEnv(core, plan.projectId);
   return {
@@ -151,7 +159,7 @@ export function uninstall(scope, repo) {
   return { removed };
 }
 
-export function update(scope, repo) {
+export function update(scope, repo, { replaced = {} } = {}) {
   const man = readManifest(coreDir(scope, repo));
   if (!man) throw new Error("nenhuma instalação MGR encontrada — rode `mgr install` antes");
   const engines = (man.engines || [man.engine]).filter((x) => x && x !== "custom");
@@ -160,6 +168,7 @@ export function update(scope, repo) {
     // Manifesto anterior a esta versão não tem userLanguage: toda instalação dessa era é
     // pt-BR — herdar preserva a experiência sem pergunta nova (decisão do CHECKPOINT 1).
     userLanguage: man.userLanguage || "pt-BR",
+    replaced,
   });
   return execute(plan);
 }

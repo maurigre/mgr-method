@@ -10,9 +10,12 @@ import { validateAll } from "../src/validator.js";
 import { printBanner } from "../src/banner.js";
 import { collectInstallAnswers, detectUserLanguage, CANCELLED } from "../src/prompts.js";
 import { getMessages } from "../src/messages.js";
-import { add as addPlugin, remove as removePlugin, restore as restorePlugins, CANCELLED_EXIT_CODE } from "../src/plugin-installer.js";
+import {
+  add as addPlugin, remove as removePlugin, restore as restorePlugins,
+  installedPluginNames, CANCELLED_EXIT_CODE,
+} from "../src/plugin-installer.js";
 import { addRegistry, fetchIndex, listRegistries, removeRegistry } from "../src/registry.js";
-import { readLockfile, LOCKFILE_NAME } from "../src/lockfile.js";
+import { diff as lockfileDiff, readLockfile, replacedByEngine, LOCKFILE_NAME } from "../src/lockfile.js";
 
 const SCOPES = ["project", "global"];
 // Comandos de skill plugável: o posicional é o nome da skill/registry, nunca o repositório.
@@ -103,7 +106,8 @@ async function cmdInstall(flags, positional) {
     else p.log.warn(M.resyncWarn);
   }
 
-  const plan = installer.planInstall(engines, scope, repo, { skillsDir, language, architecture, userLanguage, optional, all: flags.allSkills, projectId });
+  const replaced = replacedByEngine(readLockfile(repo));
+  const plan = installer.planInstall(engines, scope, repo, { skillsDir, language, architecture, userLanguage, optional, all: flags.allSkills, projectId, replaced });
   p.note(
     [
       M.planProject(plan.projectId, plan.scope),
@@ -170,6 +174,22 @@ function pluginConfirmer() {
   };
 }
 
+// Colisão com skill do método (ADR-0008): quem decide é o humano, e o default é a opção
+// que não desfaz nada. Cancelar cai no mesmo caminho do `confirm` — nada é escrito.
+function pluginCollisionResolver() {
+  return async (collision) => {
+    const choice = await p.select({
+      message: M.pluginCollisionQuestion(collision.methodSkill),
+      initialValue: "alongside",
+      options: [
+        { value: "alongside", label: M.pluginCollisionAlongside, hint: M.pluginCollisionAlongsideHint(collision.alongsideDir) },
+        { value: "replace", label: M.pluginCollisionReplace, hint: M.pluginCollisionReplaceHint(collision.methodSkill) },
+      ],
+    });
+    return p.isCancel(choice) ? null : choice;
+  };
+}
+
 async function cmdAdd(flags, positional) {
   const name = positional[0];
   if (!name) { console.error(M.pluginUsageAdd); return 1; }
@@ -185,7 +205,7 @@ async function cmdAdd(flags, positional) {
   try {
     result = await addPlugin(name, {
       repo, coreDir: installer.coreDir(scope, repo), targets,
-      fetchImpl: globalThis.fetch, confirm: pluginConfirmer(),
+      fetchImpl: globalThis.fetch, confirm: pluginConfirmer(), resolveCollision: pluginCollisionResolver(),
     });
   } catch (error) {
     if (error.exitCode === CANCELLED_EXIT_CODE) { p.cancel(M.pluginCancelled); return CANCELLED_EXIT_CODE; }
@@ -214,6 +234,8 @@ function cmdRemove(flags, positional) {
   console.log(M.pluginRemoving(name));
   const result = removePlugin(name, { repo, targets });
   for (const dir of result.removed) console.log(pc.dim(M.removedItem(path.relative(repo, dir) || dir)));
+  for (const { dir } of result.skipped) console.warn(M.pluginRemoveSkipped(path.relative(repo, dir) || dir, name));
+  if (result.entry.replaces) console.warn(M.pluginRemoveReturns(result.entry.replaces));
   console.log(pc.green(M.pluginRemoved(name)));
   return 0;
 }
@@ -324,7 +346,20 @@ function cmdStatus(_f, positional) {
     // depois afirmaria "nenhuma instalação encontrada", saindo 1 num projeto que TEM algo.
     shown = true;
     console.log(M.statusPluginsTitle(LOCKFILE_NAME));
-    for (const [name, entry] of plugins) console.log(M.statusPluginItem(name, entry.version, entry.registry));
+    for (const [name, entry] of plugins) {
+      console.log(entry.replaces
+        ? M.statusPluginItemReplacing(name, entry.version, entry.registry, entry.replaces)
+        : M.statusPluginItem(name, entry.version, entry.registry));
+    }
+    // Divergência entre o contrato do time e ESTA máquina é reportada, nunca corrigida em
+    // silêncio (RN-8): quem decide restaurar é o usuário.
+    const alvos = installer.ENGINES.map((engine) => ({ engine, dir: installer.engineSkillsDir(engine, "project", repo) }));
+    const ausentes = lockfileDiff(lockfile, installedPluginNames(lockfile, alvos)).missing;
+    if (ausentes.length) {
+      console.log(M.statusDivergenceTitle);
+      for (const name of ausentes) console.log(M.statusDivergenceItem(name));
+      console.log(M.statusDivergenceHint);
+    }
   }
   if (!shown) { console.log(M.statusNone); return 1; }
   return 0;
@@ -337,7 +372,7 @@ async function cmdUpdate(flags, positional) {
     scope = installer.detectPrior("global", repo) && !installer.detectPrior("project", repo)
       ? "global" : "project";
   }
-  const res = installer.update(scope, repo);
+  const res = installer.update(scope, repo, { replaced: replacedByEngine(readLockfile(repo)) });
   if (res.migrated) console.log(pc.dim(M.updateMigrated));
   console.log(pc.green(M.updateDone(scope, res.skills.length, res.targets.map((t) => t.dir).join(" · "))));
 

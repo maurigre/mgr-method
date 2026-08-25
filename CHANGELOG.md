@@ -7,6 +7,37 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
+## [0.6.0-beta.2] - 2026-08-25
+> Corrige um defeito destrutivo da `0.6.0-beta.1` e transforma a colisão entre skill do
+> método e plugin em decisão do usuário (ADR-0008). Pré-release no dist-tag `next`.
+
+### Corrigido
+- **Instalar um plugin já não apaga a skill do método de mesmo nome.** Na `0.6.0-beta.1`,
+  `mgr add @mgr/diagnosing-bugs` (ou `@mgr/junit-clean`) escrevia por cima da skill do
+  método, que sumia sem aviso e sem registro, e o `mgr remove` seguinte apagava a pasta.
+  Atingia toda instalação, porque `diagnosing-bugs` é skill de núcleo.
+- **`mgr remove` só apaga pasta comprovadamente sua** — exige o `mgr-manifest.json`
+  correspondente. Pasta de outra skill é preservada e o motivo é avisado.
+- **`mgr status` não afirma mais que nada está instalado** quando há plugin travado no
+  lockfile sem instalação do método no projeto (saída autocontraditória, com exit 1 indevido).
+
+### Adicionado
+- **Colisão com skill do método virou escolha registrada** (ADR-0008): `mgr add` pergunta
+  entre instalar ao lado (default, em `<skill>--<registry>`) e substituir a skill do método,
+  e grava a resposta no lockfile (campo `replaces`). A decisão viaja no Git e é aplicada sem
+  nova pergunta em `mgr install` — inclusive em clone limpo.
+- `mgr install`/`mgr update` **pulam** a skill substituída ao instalar o método: a pasta é
+  escrita uma vez, com o que foi escolhido, em vez de escrita e sobrescrita. Com o registry
+  fora do ar, a falha é explícita e a pasta fica vazia, em vez de conter silenciosamente uma
+  versão que ninguém escolheu.
+- `.mgr-core/manifest.json` ganha `replaced` e mantém `skills` completo, então deixa de
+  afirmar que instalou uma skill que um plugin ocupou — e a skill volta ao remover o plugin.
+- **`mgr status` relata divergências entre o lockfile e o disco** (travado mas ausente ou
+  diferente), com a sugestão de restaurar. Reporta; nunca corrige em silêncio.
+
+### Segurança
+- Pasta ocupada por algo que não é nem o plugin nem uma skill do método continua sendo
+  recusada: o instalador nunca escreve sobre conteúdo que não consegue explicar.
 ## [0.6.0-beta.1] - 2026-08-25
 > Pré-release da **Fase 1 da evolução do MGR** (fundação de skills plugáveis), publicada no
 > dist-tag `next`. `npm i mgr-method` continua trazendo a 0.5.0 estável.

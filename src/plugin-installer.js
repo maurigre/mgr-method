@@ -99,6 +99,21 @@ const displayPath = (repo, absolute) => {
   return relative && !relative.startsWith("..") ? relative : absolute;
 };
 
+// A pasta instalada só pode ser apagada se ela FOR o plugin: o `mgr-manifest.json` com o
+// nome correspondente é a prova. Sem isso, remover um plugin cujo nome curto coincide com o
+// de uma skill do método apagaria a skill do método — a pasta é a mesma (ex.: o método
+// instala `diagnosing-bugs` e o registry publica `@mgr/diagnosing-bugs`). Nunca apagar
+// pasta que não se instalou.
+function isPluginDir(installedDir, name) {
+  const manifestFile = path.join(installedDir, MANIFEST_NAME);
+  if (!existsSync(manifestFile)) return false;
+  try {
+    return JSON.parse(readFileSync(manifestFile, "utf8")).name === name;
+  } catch {
+    return false;
+  }
+}
+
 async function installOne(name, context, state) {
   if (state.pending.has(name)) {
     throw new Error(`circular "extends" chain involving ${name}`);
@@ -131,6 +146,19 @@ async function installOne(name, context, state) {
   }
 
   const dir = resolveInstallDirName(parseSkillName(name).skill, origin.name, hasCollision(state.lockfile, name));
+  // A colisao do Q1 (sufixo --registry) so resolve plugin contra plugin. Pasta ocupada por
+  // uma skill do METODO tem o mesmo nome e nao e sufixada — escrever por cima apagaria a
+  // skill do metodo sem registro nenhum. Recusa antes de qualquer escrita; compor metodo e
+  // plugin na mesma pasta e feature propria, ainda nao especificada.
+  for (const target of context.targets) {
+    const occupied = path.join(target.dir, dir);
+    if (existsSync(occupied) && !isPluginDir(occupied, name)) {
+      throw new Error(
+        `cannot install ${name}: ${occupied} already holds another skill (no ${MANIFEST_NAME} for ${name}). `
+        + "Installing a plugin over a method skill is not supported yet",
+      );
+    }
+  }
   const dirs = {};
   const applied = {};
   for (const target of context.targets) {
@@ -177,21 +205,6 @@ export async function add(name, { repo, coreDir, targets, fetchImpl, confirm }) 
   await installOne(name, context, state);
   const lockfile = writeLockfile(repo, state.lockfile);
   return { installed: state.installed, lockfile };
-}
-
-// A pasta instalada só pode ser apagada se ela FOR o plugin: o `mgr-manifest.json` com o
-// nome correspondente é a prova. Sem isso, remover um plugin cujo nome curto coincide com o
-// de uma skill do método apagaria a skill do método — a pasta é a mesma (ex.: o método
-// instala `diagnosing-bugs` e o registry publica `@mgr/diagnosing-bugs`). Nunca apagar
-// pasta que não se instalou.
-function isPluginDir(installedDir, name) {
-  const manifestFile = path.join(installedDir, MANIFEST_NAME);
-  if (!existsSync(manifestFile)) return false;
-  try {
-    return JSON.parse(readFileSync(manifestFile, "utf8")).name === name;
-  } catch {
-    return false;
-  }
 }
 
 // Remove a skill plugável dos motores e do lockfile na mesma operação (ADR-0006 §6).

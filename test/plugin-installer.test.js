@@ -383,3 +383,32 @@ test("remove recusa pasta com manifest de OUTRO plugin", async () => {
   assert.equal(skipped.length, 1);
   assert.ok(existsSync(dir));
 });
+
+test("add recusa instalar por cima de skill do método e não escreve nada", async () => {
+  const { repo, coreDir, targets } = project();
+  const registry = stubRegistry([{ name: "@mgr/junit-clean" }]);
+  addRegistry(coreDir, { name: "mgr", url: registry.indexUrl });
+
+  const doMetodo = path.join(repo, ".claude/skills/junit-clean");
+  mkdirSync(doMetodo, { recursive: true });
+  writeFileSync(path.join(doMetodo, "SKILL.md"), "skill do método", "utf8");
+
+  await assert.rejects(
+    add("@mgr/junit-clean", { repo, coreDir, targets, fetchImpl: registry.fetchImpl, confirm: accept }),
+    /already holds another skill.*not supported yet/s,
+  );
+  assert.equal(readFileSync(path.join(doMetodo, "SKILL.md"), "utf8"), "skill do método");
+  assert.ok(!existsSync(path.join(repo, ".github/skills/junit-clean")), "recusa antes de escrever em QUALQUER motor");
+  assert.equal(readLockfile(repo), null);
+});
+
+test("add do mesmo plugin sobre a própria instalação segue permitido", async () => {
+  const { repo, coreDir, targets } = project();
+  const registry = stubRegistry([{ name: "@mgr/junit-clean" }]);
+  addRegistry(coreDir, { name: "mgr", url: registry.indexUrl });
+  await add("@mgr/junit-clean", { repo, coreDir, targets, fetchImpl: registry.fetchImpl, confirm: accept });
+
+  const reinstalado = await add("@mgr/junit-clean", { repo, coreDir, targets, fetchImpl: registry.fetchImpl, confirm: accept });
+  assert.equal(reinstalado.installed[0].name, "@mgr/junit-clean");
+  assert.ok(existsSync(path.join(repo, ".claude/skills/junit-clean/mgr-manifest.json")));
+});

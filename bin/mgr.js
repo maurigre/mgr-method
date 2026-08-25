@@ -10,8 +10,13 @@ import { validateAll } from "../src/validator.js";
 import { printBanner } from "../src/banner.js";
 import { collectInstallAnswers, detectUserLanguage, CANCELLED } from "../src/prompts.js";
 import { getMessages } from "../src/messages.js";
+import { add as addPlugin, remove as removePlugin, restore as restorePlugins, CANCELLED_EXIT_CODE } from "../src/plugin-installer.js";
+import { addRegistry, fetchIndex, listRegistries, removeRegistry } from "../src/registry.js";
+import { readLockfile, LOCKFILE_NAME } from "../src/lockfile.js";
 
 const SCOPES = ["project", "global"];
+// Comandos de skill plugável: o posicional é o nome da skill/registry, nunca o repositório.
+const PLUGIN_COMMANDS = ["add", "remove", "registry"];
 const isTTY = process.stdin.isTTY && process.stdout.isTTY;
 
 // Tabela de mensagens da CLI. Começa pelo locale; o main refina com a precedência
@@ -42,6 +47,7 @@ function parseArgs(argv) {
     else if (a === "--arch") flags.arch = argv[++i];
     else if (a === "--project-id") flags.projectId = argv[++i];
     else if (a === "--all-skills") flags.allSkills = true;
+    else if (a === "--trusted") flags.trusted = true;
     else if (a === "--out") flags.out = argv[++i];
     else if (a.startsWith("-")) { console.error(M.unknownFlag(a)); process.exit(1); }
     else positional.push(a);
@@ -122,8 +128,176 @@ async function cmdInstall(flags, positional) {
   const res = installer.execute(plan);
   s.stop(M.installedAt(res.targets.map((t) => t.dir).join(" · ")));
   if (res.migrated) p.log.info(M.migrationInfo(res.migrated.removed.length));
+
+  if (readLockfile(plan.repo)) {
+    p.log.step(M.restoring(LOCKFILE_NAME));
+    const restored = await restoreLockedPlugins(plan.repo, plan.targets, (message) => p.log.warn(message));
+    if (restored) p.log.success(M.restoreDone(restored.restored.length));
+  }
   p.outro(pc.green(M.done));
   return 0;
+}
+
+
+// Motores/pastas de destino das skills plugáveis: as flags mandam; sem flag, herda os
+// motores da instalação do método neste escopo; sem instalação, claude-code.
+function pluginTargets(flags, repo) {
+  const scope = flags.scope || "project";
+  if (!SCOPES.includes(scope)) { p.log.error(M.invalidScope(scope)); process.exit(1); }
+  const prior = installer.detectPrior(scope, repo);
+  const engines = (flags.engines.length ? flags.engines : (prior?.engines || []))
+    .filter((engine) => installer.ENGINES.includes(engine));
+  const chosen = engines.length ? engines : ["claude-code"];
+  return { scope, targets: chosen.map((engine) => ({ engine, dir: installer.engineSkillsDir(engine, scope, repo) })) };
+}
+
+// Confirmação humana obrigatória do `mgr add` (ADR-0007): mostra origem, versão,
+// permissões declaradas e checksum ANTES de qualquer escrita. Sem flag de bypass.
+function pluginConfirmer() {
+  return async (proposal) => {
+    p.note([
+      M.pluginProposalName(proposal.name, proposal.version),
+      M.pluginProposalOrigin(proposal.origin.name, proposal.origin.url),
+      M.pluginProposalTrust(proposal.origin.trusted === true),
+      M.pluginProposalCategory(proposal.category),
+      M.pluginProposalPermissions(proposal.permissions.length ? proposal.permissions.join(", ") : M.pluginNoPermissions),
+      M.pluginProposalChecksum(proposal.checksum),
+      M.pluginProposalEngines(proposal.engines.join(", ")),
+      ...(proposal.extends ? [M.pluginProposalExtends(proposal.extends)] : []),
+    ].join("\n"), M.pluginProposalTitle);
+    const ok = await p.confirm({ message: M.pluginConfirm, initialValue: false });
+    return !p.isCancel(ok) && ok === true;
+  };
+}
+
+async function cmdAdd(flags, positional) {
+  const name = positional[0];
+  if (!name) { console.error(M.pluginUsageAdd); return 1; }
+  // Sem TTY não há como confirmar, e confirmação é requisito de segurança da fase.
+  if (!isTTY) { console.error(pc.red(M.errorPrefix(M.pluginNeedsTty))); return 1; }
+
+  const repo = path.resolve(".");
+  const { scope, targets } = pluginTargets(flags, repo);
+  p.intro(pc.bgCyan(pc.black(" mgr add ")));
+  p.log.step(M.pluginInstalling);
+
+  let result;
+  try {
+    result = await addPlugin(name, {
+      repo, coreDir: installer.coreDir(scope, repo), targets,
+      fetchImpl: globalThis.fetch, confirm: pluginConfirmer(),
+    });
+  } catch (error) {
+    if (error.exitCode === CANCELLED_EXIT_CODE) { p.cancel(M.pluginCancelled); return CANCELLED_EXIT_CODE; }
+    throw error;
+  }
+
+  for (const skill of result.installed) {
+    p.log.success(M.pluginInstalled(skill.name, Object.values(skill.dirs).join(" · ")));
+    for (const { engine, warning } of skill.warnings) p.log.warn(M.pluginWarning(engine, warning));
+  }
+  p.outro(pc.green(M.pluginLocked(path.relative(repo, result.lockfile) || result.lockfile)));
+  return 0;
+}
+
+
+function cmdRemove(flags, positional) {
+  const name = positional[0];
+  if (!name) { console.error(M.pluginUsageRemove); return 1; }
+  const repo = path.resolve(".");
+  const scope = flags.scope || "project";
+  if (!SCOPES.includes(scope)) { console.error(M.invalidScope(scope)); return 1; }
+  // Alvos de TODOS os motores conhecidos: o remove honra os engines travados no lockfile
+  // (entry.engines), não a instalação atual do método — sem pasta órfã se o conjunto de
+  // motores mudou entre o add e o remove (review do bloco P1).
+  const targets = installer.ENGINES.map((engine) => ({ engine, dir: installer.engineSkillsDir(engine, scope, repo) }));
+  console.log(M.pluginRemoving(name));
+  const result = removePlugin(name, { repo, targets });
+  for (const dir of result.removed) console.log(pc.dim(M.removedItem(path.relative(repo, dir) || dir)));
+  console.log(pc.green(M.pluginRemoved(name)));
+  return 0;
+}
+
+// `mgr registry add|remove|list` — CRUD dos registries em .mgr-core/config.json (ADR-0005).
+function cmdRegistry(flags, positional) {
+  const [action, ...args] = positional;
+  const repo = path.resolve(".");
+  const scope = flags.scope || "project";
+  if (!SCOPES.includes(scope)) { console.error(M.invalidScope(scope)); return 1; }
+  const core = installer.coreDir(scope, repo);
+
+  if (action === "add") {
+    const [name, url] = args;
+    if (!name || !url) { console.error(M.registryUsage); return 1; }
+    console.log(M.registryAdding(name));
+    addRegistry(core, { name, url, trusted: flags.trusted === true });
+    console.log(pc.green(M.registryAdded(name, url)));
+    return 0;
+  }
+  if (action === "remove") {
+    const [name] = args;
+    if (!name) { console.error(M.registryUsage); return 1; }
+    console.log(M.registryRemoving(name));
+    removeRegistry(core, name);
+    console.log(pc.green(M.registryRemoved(name)));
+    return 0;
+  }
+  if (action === "list") {
+    const registries = listRegistries(core);
+    if (!registries.length) { console.log(M.registryListEmpty); return 0; }
+    console.log(pc.bold(M.registryListTitle));
+    for (const registry of registries) console.log(M.registryListItem(registry.name, registry.url, registry.trusted));
+    return 0;
+  }
+  console.error(M.registryUsage);
+  return 1;
+}
+
+
+// `mgr list` — extensão ADITIVA (DT-2/CONSTITUTION 2.7): o catálogo do método sai igual;
+// as seções de plugin só aparecem quando há lockfile ou registry configurado.
+async function cmdList(_flags, positional) {
+  bundle.skillNames().forEach((name) => console.log(name));
+  const repo = path.resolve(positional[0] || ".");
+
+  const lockfile = readLockfile(repo);
+  const installed = Object.entries(lockfile?.skills || {});
+  if (installed.length) {
+    console.log("");
+    console.log(pc.bold(M.pluginsInstalledTitle));
+    for (const [name, entry] of installed) {
+      console.log(M.pluginsInstalledItem(name, entry.version, entry.registry, entry.dir));
+    }
+  }
+
+  const registries = listRegistries(installer.coreDir("project", repo));
+  if (!registries.length) return 0;
+  console.log("");
+  console.log(pc.bold(M.pluginsAvailableTitle));
+  for (const registry of registries) {
+    try {
+      const index = await fetchIndex(registry.url, { fetchImpl: globalThis.fetch });
+      for (const [category, entries] of Object.entries(index.categories)) {
+        for (const entry of entries) console.log(M.pluginsAvailableItem(entry.name, entry.version, category));
+      }
+    } catch (error) {
+      // Registry fora do ar não derruba o `list`: a parte local do comando já foi entregue.
+      console.log(pc.dim(M.pluginsAvailableError(registry.name, error.message)));
+    }
+  }
+  return 0;
+}
+
+
+// Restauração do conjunto travado (DT-2/ADR-0006 §4): `install` e `update` reinstalam os
+// plugins do `mgr-skills.lock` quando o arquivo existe. Sem lockfile, no-op absoluto —
+// é o que mantém a saída de quem não usa plugins idêntica à de hoje (CONSTITUTION 2.7).
+async function restoreLockedPlugins(repo, targets, warn) {
+  const result = await restorePlugins({ repo, targets, fetchImpl: globalThis.fetch });
+  for (const skill of result?.restored || []) {
+    if (skill.skippedEngines.length) warn(M.restoreSkippedEngine(skill.name, skill.skippedEngines.join(", ")));
+  }
+  return result?.restored.length ? result : null;
 }
 
 function cmdStatus(_f, positional) {
@@ -143,11 +317,17 @@ function cmdStatus(_f, positional) {
       console.log(M.statusInstalledAt(man.installedAt));
     }
   }
+  const lockfile = readLockfile(repo);
+  const plugins = Object.entries(lockfile?.skills || {});
+  if (plugins.length) {
+    console.log(M.statusPluginsTitle(LOCKFILE_NAME));
+    for (const [name, entry] of plugins) console.log(M.statusPluginItem(name, entry.version, entry.registry));
+  }
   if (!shown) { console.log(M.statusNone); return 1; }
   return 0;
 }
 
-function cmdUpdate(flags, positional) {
+async function cmdUpdate(flags, positional) {
   const repo = path.resolve(positional[0] || ".");
   let scope = flags.scope;
   if (!scope) {
@@ -157,6 +337,12 @@ function cmdUpdate(flags, positional) {
   const res = installer.update(scope, repo);
   if (res.migrated) console.log(pc.dim(M.updateMigrated));
   console.log(pc.green(M.updateDone(scope, res.skills.length, res.targets.map((t) => t.dir).join(" · "))));
+
+  if (readLockfile(repo)) {
+    console.log(M.restoring(LOCKFILE_NAME));
+    const restored = await restoreLockedPlugins(repo, res.targets, (message) => console.warn(message));
+    if (restored) console.log(pc.green(M.restoreDone(restored.restored.length)));
+  }
   return 0;
 }
 
@@ -196,19 +382,22 @@ async function main() {
   const [, , command, ...rest] = process.argv;
   const { flags, positional } = parseArgs(rest);
   // Refina o idioma da CLI: flag > manifesto (project > global) > locale (default acima).
-  const repo = path.resolve(positional[0] || ".");
+  const repo = path.resolve(PLUGIN_COMMANDS.includes(command) ? "." : (positional[0] || "."));
   const manifestLang = installer.detectPrior("project", repo)?.userLanguage
     || installer.detectPrior("global", repo)?.userLanguage;
   M = getMessages(flags.userLanguage || manifestLang || detectUserLanguage(process.env));
   try {
     switch (command) {
       case "install": return await cmdInstall(flags, positional);
+      case "add": return await cmdAdd(flags, positional);
+      case "remove": return cmdRemove(flags, positional);
+      case "registry": return cmdRegistry(flags, positional);
       case "status": return cmdStatus(flags, positional);
-      case "update": return cmdUpdate(flags, positional);
+      case "update": return await cmdUpdate(flags, positional);
       case "uninstall": return await cmdUninstall(flags, positional);
       case "build": return cmdBuild(flags);
       case "validate": return cmdValidate();
-      case "list": bundle.skillNames().forEach((n) => console.log(n)); return 0;
+      case "list": return await cmdList(flags, positional);
       case "version": case "--version": case "-v":
         console.log(`mgr-method ${bundle.readVersion()}`); return 0;
       case undefined: case "help": case "--help": case "-h":

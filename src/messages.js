@@ -70,6 +70,49 @@ const en = {
   qOptionalEvidence: "Include the optional evidence-capture skill?",
   qProjectId: "MGR_PROJECT_ID (project identifier for the mgr-code memory)?",
 
+  pluginProposalTitle: "Plugin skill to install",
+  pluginProposalName: (name, version) => `skill:       ${name}@${version}`,
+  pluginProposalOrigin: (registry, url) => `origin:      ${registry} (${url})`,
+  pluginProposalTrust: (trusted) => `trusted:     ${trusted ? "yes" : "no"}`,
+  pluginProposalCategory: (category) => `category:    ${category}`,
+  pluginProposalPermissions: (permissions) => `permissions: ${permissions}`,
+  pluginProposalChecksum: (checksum) => `checksum:    ${checksum}`,
+  pluginProposalEngines: (engines) => `engine(s):   ${engines}`,
+  pluginProposalExtends: (base) => `extends:     ${base} (installed together; the extending skill takes precedence)`,
+  pluginNoPermissions: "none declared",
+  pluginConfirm: "Install this skill?",
+  pluginNeedsTty: "`mgr add` requires an interactive terminal: every install is confirmed by a human and there is no bypass flag.",
+  pluginInstalling: "Downloading and verifying",
+  pluginInstalled: (name, dir) => `${name} installed at ${dir}.`,
+  pluginWarning: (engine, warning) => `  warning (${engine}): ${warning}`,
+  pluginLocked: (file) => `locked in ${file}.`,
+  pluginCancelled: "installation cancelled by the user.",
+  pluginRemoving: (name) => `Removing ${name} from the engines and the lockfile`,
+  pluginRemoved: (name) => `${name} removed.`,
+  pluginUsageAdd: "usage: mgr add <@registry/skill>",
+  pluginUsageRemove: "usage: mgr remove <@registry/skill>",
+
+  registryAdding: (name) => `Adding registry "${name}" to .mgr-core/config.json`,
+  registryAdded: (name, url) => `registry "${name}" added: ${url}`,
+  registryRemoving: (name) => `Removing registry "${name}" from .mgr-core/config.json`,
+  registryRemoved: (name) => `registry "${name}" removed.`,
+  registryListTitle: "Configured registries",
+  registryListItem: (name, url, trusted) => `  ${name}${trusted ? " (trusted)" : ""}  ${url}`,
+  registryListEmpty: "No registry configured — run `mgr registry add <name> <index-url>`.",
+  registryUsage: "usage: mgr registry add <name> <index-url> [--trusted] | mgr registry remove <name> | mgr registry list",
+
+  pluginsInstalledTitle: "Installed plugin skills",
+  pluginsInstalledItem: (name, version, registry, dir) => `  ${name}@${version}  (registry: ${registry}, folder: ${dir})`,
+  pluginsAvailableTitle: "Available in the configured registries",
+  pluginsAvailableItem: (name, version, category) => `  ${name}@${version}  [${category}]`,
+  pluginsAvailableError: (registry, reason) => `  (registry "${registry}" unavailable: ${reason})`,
+  statusPluginsTitle: (file) => `  plugins: ${file}`,
+  statusPluginItem: (name, version, registry) => `    ${name}@${version} (${registry})`,
+
+  restoring: (file) => `Restoring plugin skills from ${file}`,
+  restoreDone: (count) => `${count} plugin skill(s) restored.`,
+  restoreSkippedEngine: (name, engines) => `${name} is locked for ${engines}, not an active engine here; that copy was not restored`,
+
   help: `MGR — Método Governado por Rastreabilidade (Traceability-Governed Method)
 
 Usage: mgr <command> [options]
@@ -84,6 +127,13 @@ Usage: mgr <command> [options]
   validate         validates the SKILL.md files
   list             lists the skills
   version          shows the version
+
+Plugin skills (see docs/plugins.md):
+
+  add <@registry/skill>       installs a plugin skill (always asks for confirmation)
+  remove <@registry/skill>    removes a plugin skill
+  registry add <name> <url> [--trusted] | remove <name> | list
+                              manages the registries in .mgr-core/config.json
 `,
 };
 
@@ -154,6 +204,49 @@ const ptBR = {
   qOptionalEvidence: "Incluir a skill opcional evidence-capture?",
   qProjectId: "MGR_PROJECT_ID (identificador do projeto para a memória do mgr-code)?",
 
+  pluginProposalTitle: "Skill plugável a instalar",
+  pluginProposalName: (name, version) => `skill:       ${name}@${version}`,
+  pluginProposalOrigin: (registry, url) => `origem:      ${registry} (${url})`,
+  pluginProposalTrust: (trusted) => `confiável:   ${trusted ? "sim" : "não"}`,
+  pluginProposalCategory: (category) => `categoria:   ${category}`,
+  pluginProposalPermissions: (permissions) => `permissões:  ${permissions}`,
+  pluginProposalChecksum: (checksum) => `checksum:    ${checksum}`,
+  pluginProposalEngines: (engines) => `motor(es):   ${engines}`,
+  pluginProposalExtends: (base) => `estende:     ${base} (instalada junto; a skill que estende tem precedência)`,
+  pluginNoPermissions: "nenhuma declarada",
+  pluginConfirm: "Instalar esta skill?",
+  pluginNeedsTty: "`mgr add` exige terminal interativo: toda instalação é confirmada por uma pessoa e não há flag de bypass.",
+  pluginInstalling: "Baixando e verificando",
+  pluginInstalled: (name, dir) => `${name} instalada em ${dir}.`,
+  pluginWarning: (engine, warning) => `  aviso (${engine}): ${warning}`,
+  pluginLocked: (file) => `travada em ${file}.`,
+  pluginCancelled: "instalação cancelada pelo usuário.",
+  pluginRemoving: (name) => `Removendo ${name} dos motores e do lockfile`,
+  pluginRemoved: (name) => `${name} removida.`,
+  pluginUsageAdd: "uso: mgr add <@registry/skill>",
+  pluginUsageRemove: "uso: mgr remove <@registry/skill>",
+
+  registryAdding: (name) => `Adicionando o registry "${name}" ao .mgr-core/config.json`,
+  registryAdded: (name, url) => `registry "${name}" adicionado: ${url}`,
+  registryRemoving: (name) => `Removendo o registry "${name}" de .mgr-core/config.json`,
+  registryRemoved: (name) => `registry "${name}" removido.`,
+  registryListTitle: "Registries configurados",
+  registryListItem: (name, url, trusted) => `  ${name}${trusted ? " (confiável)" : ""}  ${url}`,
+  registryListEmpty: "Nenhum registry configurado — rode `mgr registry add <nome> <url-do-index>`.",
+  registryUsage: "uso: mgr registry add <nome> <url-do-index> [--trusted] | mgr registry remove <nome> | mgr registry list",
+
+  pluginsInstalledTitle: "Skills plugáveis instaladas",
+  pluginsInstalledItem: (name, version, registry, dir) => `  ${name}@${version}  (registry: ${registry}, pasta: ${dir})`,
+  pluginsAvailableTitle: "Disponíveis nos registries configurados",
+  pluginsAvailableItem: (name, version, category) => `  ${name}@${version}  [${category}]`,
+  pluginsAvailableError: (registry, reason) => `  (registry "${registry}" indisponível: ${reason})`,
+  statusPluginsTitle: (file) => `  plugins: ${file}`,
+  statusPluginItem: (name, version, registry) => `    ${name}@${version} (${registry})`,
+
+  restoring: (file) => `Restaurando skills plugáveis de ${file}`,
+  restoreDone: (count) => `${count} skill(s) plugável(is) restaurada(s).`,
+  restoreSkippedEngine: (name, engines) => `${name} está travada para ${engines}, motor não ativo aqui; essa cópia não foi restaurada`,
+
   help: `MGR — Método Governado por Rastreabilidade
 
 Uso: mgr <comando> [opções]
@@ -168,6 +261,13 @@ Uso: mgr <comando> [opções]
   validate         valida as SKILL.md
   list             lista as skills
   version          mostra a versão
+
+Skills plugáveis (ver docs/plugins.md):
+
+  add <@registry/skill>       instala uma skill plugável (sempre pede confirmação)
+  remove <@registry/skill>    remove uma skill plugável
+  registry add <nome> <url> [--trusted] | remove <nome> | list
+                              gerencia os registries em .mgr-core/config.json
 `,
 };
 

@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  diff, emptyLockfile, lockfilePath, readLockfile, removeSkill, upsertSkill,
+  diff, emptyLockfile, lockfilePath, readLockfile, removeSkill, replacedByEngine, upsertSkill,
   writeLockfile, LOCKFILE_NAME, LOCKFILE_VERSION,
 } from "../src/lockfile.js";
 
@@ -101,4 +101,43 @@ test("readLockfile rejeita dir adulterado (fora do checksum, alcançaria rmSync)
   };
   writeFileSync(lockfilePath(repo), JSON.stringify(sufixado), "utf8");
   assert.equal(readLockfile(repo).skills["@mgr/junit-clean"].dir, "junit-clean--empresa");
+});
+
+test("replacedByEngine agrupa por motor as skills do método substituídas", () => {
+  const base = upsertSkill(emptyLockfile(), "@acme/code-analyzer",
+    entry({ dir: "code-analyzer", replaces: "code-analyzer", engines: ["claude-code"] }), MGR_ORIGIN);
+  assert.deepEqual(replacedByEngine(base), { "claude-code": { "code-analyzer": "@acme/code-analyzer" } });
+
+  const doisMotores = upsertSkill(base, "@empresa/junit-clean",
+    entry({ dir: "junit-clean", replaces: "junit-clean", engines: ["claude-code", "copilot"] }), COMPANY_ORIGIN);
+  assert.deepEqual(replacedByEngine(doisMotores), {
+    "claude-code": { "code-analyzer": "@acme/code-analyzer", "junit-clean": "@empresa/junit-clean" },
+    copilot: { "junit-clean": "@empresa/junit-clean" },
+  });
+});
+
+test("replacedByEngine ignora plugin instalado ao lado e lockfile ausente", () => {
+  const aoLado = upsertSkill(emptyLockfile(), "@acme/code-analyzer",
+    entry({ dir: "code-analyzer--acme" }), MGR_ORIGIN);
+  assert.deepEqual(replacedByEngine(aoLado), {});
+  assert.deepEqual(replacedByEngine(null), {});
+  assert.deepEqual(replacedByEngine(emptyLockfile()), {});
+});
+
+test("readLockfile aceita replaces válido e reprova o inválido", () => {
+  const repo = tmp();
+  const comReplaces = upsertSkill(emptyLockfile(), "@acme/code-analyzer",
+    entry({ dir: "code-analyzer", replaces: "code-analyzer" }), MGR_ORIGIN);
+  writeLockfile(repo, comReplaces);
+  assert.equal(readLockfile(repo).skills["@acme/code-analyzer"].replaces, "code-analyzer");
+
+  // Lockfile da 0.6.0-beta.1: sem o campo, segue válido (compatibilidade — DT-2).
+  writeLockfile(repo, upsertSkill(emptyLockfile(), "@acme/code-analyzer", entry({ dir: "code-analyzer" }), MGR_ORIGIN));
+  assert.equal(readLockfile(repo).skills["@acme/code-analyzer"].replaces, undefined);
+
+  for (const invalido of ["@mgr/junit-clean", "junit_clean", "../etc", "", "Junit"]) {
+    writeLockfile(repo, upsertSkill(emptyLockfile(), "@acme/code-analyzer",
+      entry({ dir: "code-analyzer", replaces: invalido }), MGR_ORIGIN));
+    assert.throws(() => readLockfile(repo), /invalid "replaces"/, JSON.stringify(invalido));
+  }
 });

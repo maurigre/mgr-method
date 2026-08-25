@@ -128,7 +128,7 @@ Usage: mgr <command> [options]
   list             lists the skills
   version          shows the version
 
-Plugin skills (see docs/plugins.md):
+Plugin skills (https://github.com/maurigre/mgr-method/blob/main/docs/plugins.md):
 
   add <@registry/skill>       installs a plugin skill (always asks for confirmation)
   remove <@registry/skill>    removes a plugin skill
@@ -262,7 +262,7 @@ Uso: mgr <comando> [opções]
   list             lista as skills
   version          mostra a versão
 
-Skills plugáveis (ver docs/plugins.md):
+Skills plugáveis (ver https://github.com/maurigre/mgr-method/blob/main/docs/plugins.md):
 
   add <@registry/skill>       instala uma skill plugável (sempre pede confirmação)
   remove <@registry/skill>    remove uma skill plugável

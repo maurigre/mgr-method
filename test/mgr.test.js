@@ -618,16 +618,18 @@ test("CLI: install e update restauram o conjunto travado no lockfile (registry H
   }
 });
 
-test("regressão §2.7: projeto sem plugins tem saída idêntica à baseline pré-plugins", () => {
+test("regressão §2.7: a saída da CLI só muda por decisão deliberada", () => {
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
   const repo = tmp();
   const home = tmp();
 
   const atual = captureCli(bin, { repo, home });
   const arquivo = readFileSync(fileURLToPath(new URL("./fixtures/cli-baseline.txt", import.meta.url)), "utf8");
-  const baseline = arquivo.slice(arquivo.indexOf("\n") + 1);
+  // A fixture abre com linhas de comentário explicando como regenerá-la; só o corpo conta.
+  const baseline = arquivo.split("\n").filter((linha) => !linha.startsWith("#")).join("\n");
 
-  assert.equal(atual, baseline, "install/list/status/update mudaram para quem não usa plugins");
+  assert.equal(atual, baseline,
+    "install/list/status/update mudaram: se foi deliberado, regenere com `node scripts/capture-cli-baseline.mjs working-tree`");
   assert.ok(!existsSync(path.join(repo, "mgr-skills.lock")), "nenhum lockfile criado");
   assert.ok(!existsSync(path.join(repo, ".mgr-core", "config.json")), "nenhum config de registry criado");
   for (const lang of ["en", "pt-BR"]) {
@@ -888,6 +890,153 @@ test("clone limpo reproduz a substituição sem perguntar (critério 4 da spec)"
     const manifesto = JSON.parse(readFileSync(path.join(clone, ".mgr-core/manifest.json"), "utf8"));
     assert.deepEqual(manifesto.replaced, { "claude-code": { "junit-clean": "@acme/junit-clean" } });
     assert.ok(manifesto.skills.includes("junit-clean"), "o conjunto pretendido segue completo no clone");
+  } finally {
+    stub.server.closeAllConnections();
+    stub.server.close();
+  }
+});
+
+// Registry stub com uma skill que DECLARA o ecossistema — é o que a torna sugerível.
+function stubComEcossistema(nome = "junit-clean", ecosystems = ["java"]) {
+  const skillMd = `---\nname: ${nome}\ndescription: Skill de teste para o ecossistema declarado no manifest.\n---\n\n# ${nome}\n`;
+  const manifest = {
+    name: `@mgr/${nome}`, version: "1.1.0", author: "Mauri Reis",
+    description: "Skill de teste para o ecossistema declarado. Use when the project matches it.",
+    category: "language", permissions: ["read-files"], ecosystems,
+  };
+  const contents = [
+    { path: "SKILL.md", content: Buffer.from(skillMd, "utf8") },
+    { path: "mgr-manifest.json", content: Buffer.from(JSON.stringify(manifest, null, 2), "utf8") },
+  ];
+  let index;
+  const server = createServer((request, response) => {
+    if (request.url === "/index.json") {
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify(index));
+      return;
+    }
+    const file = contents.find((candidate) => request.url === `/${nome}/${candidate.path}`);
+    if (!file) { response.statusCode = 404; response.end("nf"); return; }
+    response.end(file.content);
+  });
+  const pronto = new Promise((done) => server.listen(0, "127.0.0.1", done)).then(() => {
+    const base = `http://127.0.0.1:${server.address().port}`;
+    index = {
+      indexVersion: 1, registry: "mgr", generatedAt: "2026-08-26T00:00:00.000Z",
+      categories: {
+        language: [{
+          name: manifest.name, version: manifest.version, description: manifest.description,
+          checksum: aggregateChecksum(contents), ecosystems,
+          files: contents.map((file) => ({ path: file.path, url: `${base}/${nome}/${file.path}`, sha256: sha256(file.content) })),
+        }],
+      },
+    };
+    return { indexUrl: `${base}/index.json` };
+  });
+  return { server, pronto };
+}
+
+test("CLI: install grava o hook dos motores escolhidos, sem duplicar, e uninstall remove", () => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const repo = tmp();
+  const run = (args) => execFileSync("node", [bin, ...args], {
+    encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, LC_ALL: "pt_BR.UTF-8" },
+  });
+  const flags = ["--engine", "both", "--arch", "hexagonal", "--project-id", "hk", "-y", repo];
+  const claude = path.join(repo, ".claude", "settings.local.json");
+  const copilot = path.join(repo, ".github", "copilot", "settings.local.json");
+
+  const saida = run(["install", ...flags]);
+  assert.match(saida, /hook de sessão gravado em .claude\/settings.local.json/);
+  assert.match(saida, /hook de sessão gravado em .github\/copilot\/settings.local.json/);
+  assert.match(saida, /Copilot só carrega o hook do repositório depois que você confia na pasta/);
+  assert.equal(JSON.parse(readFileSync(claude, "utf8")).hooks.SessionStart.length, 1);
+  assert.equal(JSON.parse(readFileSync(copilot, "utf8")).hooks.sessionStart.length, 1);
+
+  run(["install", ...flags]);
+  assert.equal(JSON.parse(readFileSync(claude, "utf8")).hooks.SessionStart.length, 1, "reinstalar não duplica");
+
+  const removido = run(["uninstall", "-y", repo]);
+  assert.match(removido, /hook de sessão removido de .claude\/settings.local.json/);
+  assert.ok(!existsSync(claude) && !existsSync(copilot), "os arquivos criados pelo MGR somem");
+});
+
+test("CLI: --no-hooks não grava hook nenhum e o plano não promete o que não vai fazer", () => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const repo = tmp();
+  const saida = execFileSync("node", [bin, "install", "--engine", "claude-code", "--arch", "hexagonal",
+    "--project-id", "nh", "--no-hooks", "-y", repo], {
+    encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, LC_ALL: "pt_BR.UTF-8" },
+  });
+  assert.doesNotMatch(saida, /hook de sessão gravado/);
+  assert.doesNotMatch(saida, /hooks {4}→/);
+  assert.ok(!existsSync(path.join(repo, ".claude", "settings.local.json")));
+});
+
+test("CLI: modo manual não sugere e detectionMode inválido falha antes de escrever", () => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const repo = tmp();
+  writeFileSync(path.join(repo, "pom.xml"), "<project/>", "utf8");
+  mkdirSync(path.join(repo, ".mgr-core"), { recursive: true });
+  const config = path.join(repo, ".mgr-core", "config.json");
+  const flags = ["install", "--engine", "claude-code", "--arch", "hexagonal", "--project-id", "md", "-y", repo];
+  const run = (args) => execFileSync("node", [bin, ...args], {
+    encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, LC_ALL: "pt_BR.UTF-8" },
+  });
+
+  writeFileSync(config, JSON.stringify({ registries: [], detectionMode: "manual" }), "utf8");
+  assert.doesNotMatch(run(flags), /Skills plugáveis disponíveis/, "manual não sugere");
+
+  writeFileSync(config, JSON.stringify({ registries: [], detectionMode: "auto" }), "utf8");
+  const semAuto = tmp();
+  writeFileSync(path.join(semAuto, "marcador"), "x", "utf8");
+  mkdirSync(path.join(semAuto, ".mgr-core"), { recursive: true });
+  writeFileSync(path.join(semAuto, ".mgr-core", "config.json"),
+    JSON.stringify({ registries: [], detectionMode: "auto" }), "utf8");
+  assert.throws(
+    () => run(["install", "--engine", "claude-code", "--arch", "hexagonal", "--project-id", "au", "-y", semAuto]),
+    /Command failed/,
+  );
+  assert.ok(!existsSync(path.join(semAuto, ".claude")), "auto falha ANTES de escrever qualquer skill");
+});
+
+test("CLI: ciclo da sugestão — detect propõe, add instala, detect para de propor", async () => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const repo = tmp();
+  const stub = stubComEcossistema();
+  const { indexUrl } = await stub.pronto;
+  const run = async (args, options = {}) => (await promisify(execFile)("node", [bin, ...args], {
+    encoding: "utf8", env: { ...process.env, LC_ALL: "pt_BR.UTF-8" }, ...options,
+  })).stdout;
+
+  try {
+    writeFileSync(path.join(repo, "pom.xml"), "<project/>", "utf8");
+    addRegistry(path.join(repo, ".mgr-core"), { name: "mgr", url: indexUrl });
+
+    const detectado = await run(["detect", repo]);
+    assert.match(detectado, /java {2}\(por pom\.xml\)/);
+    assert.match(detectado, /@mgr\/junit-clean@1\.1\.0 {2}— java, por pom\.xml/);
+
+    const noHook = await run(["detect", "--hook", "claude-code", repo]);
+    assert.match(noHook, /@mgr\/junit-clean@1\.1\.0 \(ecosystem: java, evidence: pom\.xml\)/);
+
+    const instalando = await run(["install", "--engine", "claude-code", "--arch", "hexagonal",
+      "--project-id", "ciclo", "-y", repo]);
+    assert.match(instalando, /Skills plugáveis disponíveis/, "o install informa a sugestão");
+    assert.match(instalando, /Sem terminal interativo não há pergunta/, "e não instala sozinho");
+    assert.ok(!existsSync(path.join(repo, "mgr-skills.lock")), "sem TTY nada é instalado");
+
+    await addPlugin("@mgr/junit-clean", {
+      repo, coreDir: path.join(repo, ".mgr-core"),
+      targets: [{ engine: "claude-code", dir: path.join(repo, ".claude/skills") }],
+      fetchImpl: globalThis.fetch, confirm: async () => true, resolveCollision: async () => "alongside",
+    });
+
+    assert.match(await run(["detect", repo]), /Nenhuma skill dos registries configurados/,
+      "skill já travada não é sugerida de novo");
   } finally {
     stub.server.closeAllConnections();
     stub.server.close();

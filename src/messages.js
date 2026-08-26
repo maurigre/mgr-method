@@ -124,6 +124,21 @@ const en = {
   restoreDone: (count) => `${count} plugin skill(s) restored.`,
   restoreSkippedEngine: (name, engines) => `${name} is locked for ${engines}, not an active engine here; that copy was not restored`,
 
+  detectTitle: "Detected in this project",
+  detectItem: (ecosystem, evidence) => `  ${ecosystem}  (from ${evidence})`,
+  detectNothing: "Nothing detected: no known project file found at the paths mgr looks at.",
+  suggestTitle: "Plugin skills available for what was detected",
+  suggestItem: (name, version, ecosystem, evidence) => `  ${name}@${version}  — ${ecosystem}, from ${evidence}`,
+  suggestNone: "No skill in the configured registries matches what was detected.",
+  suggestConfirm: (name) => `Install ${name}?`,
+  suggestNonInteractive: "Not asking without an interactive terminal; install with `mgr add <name>`.",
+  suggestSkipped: "No skill installed from the suggestion.",
+  planHooks: (files) => `hooks    →   ${files}`,
+  planHooksHint: "(session detection per engine)",
+  hookWritten: (file) => `  session hook written to ${file}`,
+  hookRemoved: (file) => `  session hook removed from ${file}`,
+  hookCopilotTrust: "Copilot only loads the repository hook after you trust the folder: the first session will ask, and nothing happens until you accept.",
+
   help: `MGR — Método Governado por Rastreabilidade (Traceability-Governed Method)
 
 Usage: mgr <command> [options]
@@ -145,6 +160,8 @@ Plugin skills (https://github.com/maurigre/mgr-method/blob/main/docs/plugins.md)
   remove <@registry/skill>    removes a plugin skill
   registry add <name> <url> [--trusted] | remove <name> | list
                               manages the registries in .mgr-core/config.json
+  detect [repo]               shows what the project needs and what the registries offer
+                              (--hook <engine> emits the session-hook report)
 `,
 };
 
@@ -269,6 +286,21 @@ const ptBR = {
   restoreDone: (count) => `${count} skill(s) plugável(is) restaurada(s).`,
   restoreSkippedEngine: (name, engines) => `${name} está travada para ${engines}, motor não ativo aqui; essa cópia não foi restaurada`,
 
+  detectTitle: "Detectado neste projeto",
+  detectItem: (ecosystem, evidence) => `  ${ecosystem}  (por ${evidence})`,
+  detectNothing: "Nada detectado: nenhum arquivo de projeto conhecido nos caminhos que o mgr consulta.",
+  suggestTitle: "Skills plugáveis disponíveis para o que foi detectado",
+  suggestItem: (name, version, ecosystem, evidence) => `  ${name}@${version}  — ${ecosystem}, por ${evidence}`,
+  suggestNone: "Nenhuma skill dos registries configurados corresponde ao que foi detectado.",
+  suggestConfirm: (name) => `Instalar ${name}?`,
+  suggestNonInteractive: "Sem terminal interativo não há pergunta; instale com `mgr add <nome>`.",
+  suggestSkipped: "Nenhuma skill instalada a partir da sugestão.",
+  planHooks: (files) => `hooks    →   ${files}`,
+  planHooksHint: "(detecção por sessão, por motor)",
+  hookWritten: (file) => `  hook de sessão gravado em ${file}`,
+  hookRemoved: (file) => `  hook de sessão removido de ${file}`,
+  hookCopilotTrust: "O Copilot só carrega o hook do repositório depois que você confia na pasta: a primeira sessão vai perguntar, e nada acontece até você aceitar.",
+
   help: `MGR — Método Governado por Rastreabilidade
 
 Uso: mgr <comando> [opções]
@@ -290,6 +322,8 @@ Skills plugáveis (ver https://github.com/maurigre/mgr-method/blob/main/docs/plu
   remove <@registry/skill>    remove uma skill plugável
   registry add <nome> <url> [--trusted] | remove <nome> | list
                               gerencia os registries em .mgr-core/config.json
+  detect [repo]               mostra o que o projeto pede e o que os registries oferecem
+                              (--hook <motor> emite o relatório do hook de sessão)
 `,
 };
 

@@ -14,13 +14,25 @@ import {
   add as addPlugin, remove as removePlugin, restore as restorePlugins,
   installedPluginNames, CANCELLED_EXIT_CODE,
 } from "../src/plugin-installer.js";
-import { addRegistry, fetchIndex, listRegistries, removeRegistry } from "../src/registry.js";
+import {
+  addRegistry, fetchIndex, listRegistries, readDetectionMode, removeRegistry,
+} from "../src/registry.js";
 import { diff as lockfileDiff, readLockfile, replacedByEngine, LOCKFILE_NAME } from "../src/lockfile.js";
+import { collectSuggestions, detect, hookReport } from "../src/detector.js";
+import { hookFilePath, removeHook, writeHook } from "../src/hooks.js";
 
 const SCOPES = ["project", "global"];
 // Comandos de skill plugável: o posicional é o nome da skill/registry, nunca o repositório.
 const PLUGIN_COMMANDS = ["add", "remove", "registry"];
 const isTTY = process.stdin.isTTY && process.stdout.isTTY;
+
+// Glue: junta os dados que o nucleo precisa. A decisao de como combinar e do detector.
+const suggestionsFor = (repo, detected) => collectSuggestions(
+  detected,
+  listRegistries(installer.coreDir("project", repo)),
+  readLockfile(repo),
+  { fetchImpl: globalThis.fetch, fetchIndexImpl: fetchIndex },
+);
 
 // Tabela de mensagens da CLI. Começa pelo locale; o main refina com a precedência
 // flag --user-language > manifesto (project > global) > locale.
@@ -51,6 +63,8 @@ function parseArgs(argv) {
     else if (a === "--project-id") flags.projectId = argv[++i];
     else if (a === "--all-skills") flags.allSkills = true;
     else if (a === "--trusted") flags.trusted = true;
+    else if (a === "--hook") flags.hook = argv[++i];
+    else if (a === "--no-hooks") flags.noHooks = true;
     else if (a === "--out") flags.out = argv[++i];
     else if (a.startsWith("-")) { console.error(M.unknownFlag(a)); process.exit(1); }
     else positional.push(a);
@@ -61,6 +75,17 @@ function parseArgs(argv) {
 }
 
 function bail(msg) { p.cancel(msg || M.aborted); process.exit(0); }
+
+// Comando que o hook vai executar. A borda é quem sabe como o CLI foi invocado; o núcleo
+// recebe isso pronto. O caminho absoluto é aceitável porque o arquivo de hook é local à
+// máquina e gitignored — não viaja para o time.
+const mgrCommand = () => `node "${process.argv[1]}"`;
+
+// Motores que recebem hook nesta instalação: os escolhidos pelo usuário, menos o alvo
+// `custom` do --skills-dir, e nenhum quando `--no-hooks`.
+const hookEngines = (plan, flags) => (flags.noHooks
+  ? []
+  : plan.targets.map((target) => target.engine).filter((engine) => installer.ENGINES.includes(engine)));
 
 async function cmdInstall(flags, positional) {
   const repo = path.resolve(positional[0] || ".");
@@ -99,6 +124,8 @@ async function cmdInstall(flags, positional) {
   if (!engines.length) engines = ["claude-code"];
   scope = scope || "project";
   if (!SCOPES.includes(scope)) { p.log.error(M.invalidScope(scope)); process.exit(1); }
+  // Lido cedo de propósito: modo de detecção inválido falha ANTES de escrever qualquer coisa.
+  const detectionMode = readDetectionMode(installer.coreDir(scope, repo));
 
   const prior = installer.detectPrior(scope, repo);
   if (prior) {
@@ -108,6 +135,7 @@ async function cmdInstall(flags, positional) {
 
   const replaced = replacedByEngine(readLockfile(repo));
   const plan = installer.planInstall(engines, scope, repo, { skillsDir, language, architecture, userLanguage, optional, all: flags.allSkills, projectId, replaced });
+  const motoresComHook = hookEngines(plan, flags);
   p.note(
     [
       M.planProject(plan.projectId, plan.scope),
@@ -117,6 +145,11 @@ async function cmdInstall(flags, positional) {
       `${M.planConfig(installer.coreDir(plan.scope, plan.repo))}  ${pc.dim(M.planConfigHint)}`,
       ...plan.targets.map((t) => M.planSkillsDir(t.dir)),
       M.planSkills(plan.skills.length, plan.skills.join(", ")),
+      // O hook mora em arquivo do usuário; ele vê no plano o que será escrito antes de
+      // confirmar, e pode abortar. Consentimento visível sem pergunta nova (ADR-0009).
+      ...(motoresComHook.length
+        ? [`${M.planHooks(motoresComHook.map((engine) => path.relative(plan.repo, hookFilePath(engine, plan.repo))).join(" · "))}  ${pc.dim(M.planHooksHint)}`]
+        : []),
     ].join("\n"),
     M.planTitle
   );
@@ -133,11 +166,21 @@ async function cmdInstall(flags, positional) {
   s.stop(M.installedAt(res.targets.map((t) => t.dir).join(" · ")));
   if (res.migrated) p.log.info(M.migrationInfo(res.migrated.removed.length));
 
+  for (const engine of motoresComHook) {
+    const file = writeHook(engine, plan.repo, { command: mgrCommand() });
+    p.log.success(M.hookWritten(path.relative(plan.repo, file)));
+  }
+  // O hook do repositório só carrega depois do folder trust; sem este aviso o usuário conclui,
+  // com razão, que o MGR gravou algo quebrado (verificado por experimento — ADR-0009).
+  if (motoresComHook.includes("copilot")) p.log.warn(M.hookCopilotTrust);
+
   if (readLockfile(plan.repo)) {
     p.log.step(M.restoring(LOCKFILE_NAME));
     const restored = await restoreLockedPlugins(plan.repo, plan.targets, (message) => p.log.warn(message));
     if (restored) p.log.success(M.restoreDone(restored.restored.length));
   }
+
+  if (detectionMode === "suggest") await proposeDetected(plan.repo, plan.scope, plan.targets);
   p.outro(pc.green(M.done));
   return 0;
 }
@@ -322,6 +365,73 @@ async function restoreLockedPlugins(repo, targets, warn) {
   return result?.restored.length ? result : null;
 }
 
+// `mgr detect` — le o projeto e mostra o que o registry oferece para o que foi detectado.
+// NAO ESCREVE NADA: nem lockfile, nem config, nem pasta de motor. Com `--hook <motor>`,
+// emite o relatorio no formato daquele motor, que e o que o hook de sessao consome.
+async function cmdDetect(flags, positional) {
+  const repo = path.resolve(positional[0] || ".");
+  const detected = detect(repo);
+
+  if (flags.hook) {
+    // Falha aqui nao pode poluir nem derrubar a sessao do agente: no pior caso, silencio.
+    try {
+      process.stdout.write(hookReport((await suggestionsFor(repo, detected)).suggestions, flags.hook));
+    } catch {
+      return 0;
+    }
+    return 0;
+  }
+
+  if (!detected.length) { console.log(M.detectNothing); return 0; }
+  console.log(pc.bold(M.detectTitle));
+  for (const item of detected) console.log(M.detectItem(item.ecosystem, item.evidence));
+
+  const { suggestions, unreachable } = await suggestionsFor(repo, detected);
+  console.log("");
+  // Registry fora do ar e REPORTADO, como no `list`: sem isso o usuario leria "nenhuma skill
+  // corresponde" quando a verdade e "nao consegui falar com o registry".
+  for (const falha of unreachable) console.log(pc.dim(M.pluginsAvailableError(falha.registry, falha.reason)));
+  if (!suggestions.length) { console.log(M.suggestNone); return 0; }
+  console.log(pc.bold(M.suggestTitle));
+  for (const item of suggestions) console.log(M.suggestItem(item.name, item.version, item.ecosystem, item.evidence));
+  return 0;
+}
+// Sugestão ao fim do install (ADR-0009). Aceitar entra no MESMO fluxo do `mgr add`: a
+// confirmação que mostra origem, permissões e checksum continua sendo a última palavra, e
+// esta feature não cria um segundo caminho de instalação.
+async function proposeDetected(repo, scope, targets) {
+  const detected = detect(repo);
+  if (!detected.length) return;
+
+  const { suggestions: sugestoes } = await suggestionsFor(repo, detected);
+  if (!sugestoes.length) return;
+
+  p.note(
+    sugestoes.map((item) => M.suggestItem(item.name, item.version, item.ecosystem, item.evidence)).join("\n"),
+    M.suggestTitle,
+  );
+  if (!isTTY) { p.log.info(M.suggestNonInteractive); return; }
+
+  const motores = targets.filter((target) => installer.ENGINES.includes(target.engine));
+  if (!motores.length) return;
+
+  let instaladas = 0;
+  for (const item of sugestoes) {
+    const aceito = await p.confirm({ message: M.suggestConfirm(item.name), initialValue: false });
+    if (p.isCancel(aceito) || !aceito) continue;
+    const resultado = await addPlugin(item.name, {
+      repo, coreDir: installer.coreDir(scope, repo), targets: motores,
+      fetchImpl: globalThis.fetch, confirm: pluginConfirmer(), resolveCollision: pluginCollisionResolver(),
+    });
+    for (const skill of resultado.installed) {
+      p.log.success(M.pluginInstalled(skill.name, Object.values(skill.dirs).join(" · ")));
+      for (const { engine, warning } of skill.warnings) p.log.warn(M.pluginWarning(engine, warning));
+    }
+    instaladas += resultado.installed.length;
+  }
+  if (!instaladas) p.log.info(M.suggestSkipped);
+}
+
 function cmdStatus(_f, positional) {
   const repo = path.resolve(positional[0] || ".");
   let shown = false;
@@ -393,6 +503,10 @@ async function cmdUninstall(flags, positional) {
   }
   const res = installer.uninstall(scope, repo);
   for (const r of res.removed) console.log(pc.dim(M.removedItem(r)));
+  for (const engine of installer.ENGINES) {
+    const file = removeHook(engine, repo);
+    if (file) console.log(pc.dim(M.hookRemoved(path.relative(repo, file))));
+  }
   console.log(pc.green(M.uninstalled));
   return 0;
 }
@@ -430,6 +544,7 @@ async function main() {
       case "add": return await cmdAdd(flags, positional);
       case "remove": return cmdRemove(flags, positional);
       case "registry": return cmdRegistry(flags, positional);
+      case "detect": return await cmdDetect(flags, positional);
       case "status": return cmdStatus(flags, positional);
       case "update": return await cmdUpdate(flags, positional);
       case "uninstall": return await cmdUninstall(flags, positional);

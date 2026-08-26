@@ -29,14 +29,24 @@ const DEFAULT_VERSION = "1.0.0";
 //                    vez"), dai `run-shell`.
 export const PLUGIN_METADATA = {
   "junit-clean": {
+    // 1.1.0: ganhou `ecosystems`, e o checksum cobre todos os arquivos da pasta — versao
+    // publicada nunca e sobrescrita (CONSTITUTION §5).
+    version: "1.1.0",
     category: "language",
     permissions: ["read-files", "write-files"],
+    // Serve a projeto Java: e o que o detector casa contra o index (ADR-0009). Sem este
+    // campo a skill so e instalavel por nome.
+    ecosystems: ["java"],
     model: { "claude-code": "sonnet", copilot: "Claude Sonnet 4.5" },
     effort: "medium",
   },
   "diagnosing-bugs": {
+    // Segue em 1.0.0: o manifest dela NAO mudou. Publicar versao que nao muda nada seria
+    // ruido para quem instala.
     category: "workflow",
     permissions: ["read-files", "write-files", "run-shell"],
+    // SEM `ecosystems` de proposito: diagnosticar bug nao pertence a um ecossistema de
+    // projeto. Inventar um so para aparecer em sugestao seria ruido.
   },
 };
 
@@ -75,6 +85,7 @@ export function buildManifest(skill, frontmatter, { registry, version, author })
     compatibility: { mgr: ">=0.6.0" },
     extends: null,
     permissions: metadata.permissions,
+    ...(metadata.ecosystems ? { ecosystems: metadata.ecosystems } : {}),
     ...(metadata.model ? { model: metadata.model } : {}),
     ...(metadata.effort ? { effort: metadata.effort } : {}),
   });
@@ -91,7 +102,7 @@ export function collectFiles(dir, prefix = "") {
   });
 }
 
-export function exportPlugin(skill, { outDir, registry = DEFAULT_REGISTRY, version = DEFAULT_VERSION, author, skillsDir } = {}) {
+export function exportPlugin(skill, { outDir, registry = DEFAULT_REGISTRY, version = null, author, skillsDir } = {}) {
   const source = path.join(skillsDir || path.join(ROOT, "skills"), skill);
   const skillMd = path.join(source, "SKILL.md");
   const frontmatter = readFrontmatter(readFileSync(skillMd, "utf8"));
@@ -99,7 +110,7 @@ export function exportPlugin(skill, { outDir, registry = DEFAULT_REGISTRY, versi
     throw new Error(`${skill}: o "name" do frontmatter (${frontmatter.name}) tem de ser o nome da pasta`);
   }
   const manifest = buildManifest(skill, frontmatter, {
-    registry, version,
+    registry, version: version || PLUGIN_METADATA[skill]?.version || DEFAULT_VERSION,
     author: author || JSON.parse(readFileSync(path.join(ROOT, "package.json"), "utf8")).author.replace(/ <.*$/, ""),
   });
 

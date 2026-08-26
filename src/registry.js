@@ -120,3 +120,23 @@ export async function resolve(name, registries, { fetchImpl }) {
   }
   throw new Error(`skill not found in registry "${scope}": ${name}`);
 }
+
+// Modo de detecção do projeto (ADR-0009), guardado no mesmo config dos registries.
+// Ausente = `suggest`, o default de D03.
+export const DETECTION_MODES = ["manual", "suggest"];
+export const DEFAULT_DETECTION_MODE = "suggest";
+
+export function readDetectionMode(coreDir) {
+  const mode = readConfig(coreDir).detectionMode;
+  if (mode === undefined) return DEFAULT_DETECTION_MODE;
+  // `auto` está no vocabulário de D03 mas depende do `mgr audit` para existir: instalar sem
+  // confirmação humana precisa de uma base de auditoria que ainda não temos. Tratar como
+  // `suggest` em silêncio seria mentir sobre a política de segurança que o usuário configurou.
+  if (mode === "auto") {
+    throw new Error('detectionMode "auto" is not available yet: installing without human confirmation depends on `mgr audit`, which is not implemented');
+  }
+  if (!DETECTION_MODES.includes(mode)) {
+    throw new Error(`invalid detectionMode: ${JSON.stringify(mode)} (expected ${DETECTION_MODES.join(" | ")})`);
+  }
+  return mode;
+}

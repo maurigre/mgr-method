@@ -4,8 +4,8 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  addRegistry, configPath, fetchIndex, listRegistries, readConfig, removeRegistry,
-  resolve, validateIndex, writeConfig,
+  addRegistry, configPath, fetchIndex, listRegistries, readConfig, readDetectionMode,
+  removeRegistry, resolve, validateIndex, writeConfig,
 } from "../src/registry.js";
 
 const tmp = () => mkdtempSync(path.join(os.tmpdir(), "mgr-registry-"));
@@ -130,4 +130,29 @@ test("resolve falha com registry não configurado ou skill ausente", async () =>
     resolve("@mgr/unknown", [{ name: "mgr", url: INDEX_URL }], { fetchImpl: fetchStub(indexFixture()) }),
     /skill not found in registry "mgr": @mgr\/unknown/,
   );
+});
+
+test("readDetectionMode: ausente é suggest, manual é aceito, auto é recusado com o motivo", () => {
+  const core = tmp();
+  assert.equal(readDetectionMode(core), "suggest", "sem config, o default de D03");
+
+  writeConfig(core, { registries: [], detectionMode: "manual" });
+  assert.equal(readDetectionMode(core), "manual");
+
+  writeConfig(core, { registries: [], detectionMode: "suggest" });
+  assert.equal(readDetectionMode(core), "suggest");
+
+  writeConfig(core, { registries: [], detectionMode: "auto" });
+  assert.throws(() => readDetectionMode(core), /"auto" is not available yet.*mgr audit/s);
+
+  writeConfig(core, { registries: [], detectionMode: "sugerir" });
+  assert.throws(() => readDetectionMode(core), /invalid detectionMode: "sugerir"/);
+});
+
+test("o modo de detecção convive com os registries no mesmo config", () => {
+  const core = tmp();
+  writeConfig(core, { registries: [], detectionMode: "manual" });
+  addRegistry(core, { name: "mgr", url: INDEX_URL });
+  assert.equal(readDetectionMode(core), "manual", "addRegistry preserva o modo");
+  assert.deepEqual(listRegistries(core).map((registry) => registry.name), ["mgr"]);
 });

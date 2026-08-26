@@ -106,3 +106,17 @@ test("sha256 e aggregateChecksum são determinísticos e sensíveis a conteúdo"
     `sha256-${sha256("a.md\nab.md\nb")}`,
   );
 });
+
+test("ecosystems é opcional, kebab e de vocabulário aberto", () => {
+  assert.deepEqual(validateManifest(manifest()), [], "ausente segue válido");
+  assert.deepEqual(validateManifest(manifest({ ecosystems: [] })), [], "vazio é válido e nunca sugere");
+  assert.deepEqual(validateManifest(manifest({ ecosystems: ["java", "postgres"] })), []);
+  assert.deepEqual(validateManifest(manifest({ ecosystems: ["kafka"] })), [],
+    "token que o detector ainda não conhece é aceito — vocabulário aberto");
+
+  for (const invalido of [["Java"], ["java_ee"], [""], ["java", 7], "java", { java: true }]) {
+    const problems = validateManifest(manifest({ ecosystems: invalido }));
+    assert.equal(problems.length, 1, JSON.stringify(invalido));
+    assert.match(problems[0], /"ecosystems" must be an array of kebab-case/);
+  }
+});

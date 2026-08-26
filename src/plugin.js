@@ -21,6 +21,12 @@ const KEBAB = "[a-z0-9]+(?:-[a-z0-9]+)*";
 const NAME_RE = new RegExp(`^@(${KEBAB})/(${KEBAB})$`);
 const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
+// `ecosystems`: a que ecossistema de projeto a skill serve (ADR-0009). Vocabulário ABERTO —
+// só a forma é validada. Uma skill pode declarar um ecossistema que o detector ainda não
+// conhece: ela apenas não é sugerida até o CLI aprender, e nada quebra. Lista fechada
+// travaria skill de terceiro na velocidade do CLI.
+const ECOSYSTEM_RE = new RegExp(`^${KEBAB}$`);
+
 export const DESCRIPTION_MIN = 40;
 export const DESCRIPTION_MAX = 1024;
 
@@ -93,6 +99,14 @@ export function validateManifest(manifest) {
   }
   if (manifest.effort !== undefined && !EFFORT_LEVELS.includes(manifest.effort)) {
     problems.push(`"effort" must be one of: ${EFFORT_LEVELS.join(", ")} (got ${JSON.stringify(manifest.effort)})`);
+  }
+  if (manifest.ecosystems !== undefined) {
+    const ecosystems = manifest.ecosystems;
+    const validos = Array.isArray(ecosystems)
+      && ecosystems.every((token) => typeof token === "string" && ECOSYSTEM_RE.test(token));
+    if (!validos) {
+      problems.push('"ecosystems" must be an array of kebab-case project ecosystem tokens, e.g. ["java", "postgres"]');
+    }
   }
   if (manifest.testedModels !== undefined && !isStringArray(manifest.testedModels)) {
     problems.push('"testedModels" must be an array of model display names');

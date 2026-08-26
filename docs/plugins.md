@@ -21,6 +21,7 @@ it by hand.
 | `mgr list` | after the method catalog, lists installed plugins and what the registries offer |
 | `mgr status` | adds a plugin block (name, version, registry) |
 | `mgr install` / `mgr update` | when `mgr-skills.lock` exists, restores the exact locked set |
+| `mgr detect` | reads the project and lists what the registries offer for it; writes nothing |
 
 Registries live in `.mgr-core/config.json`; the locked set lives in `mgr-skills.lock` at the
 root of the project. Commit the lockfile: it is a team contract, like `package-lock.json`.
@@ -59,6 +60,7 @@ non-interactive terminal the command fails with an explicit message instead of i
 | `permissions` | no (**required in the official registry**) | any of `read-files`, `write-files`, `run-shell`, `network` |
 | `capabilities` | no | `{ "requires": [], "optional": [] }` |
 | `model` | no | platform → model **display name** (never a dated model id) |
+| `ecosystems` | no | kebab-case tokens for the project ecosystems this skill serves, e.g. `["java", "postgres"]`. Without it the skill is never suggested — only installed by name |
 | `effort` | no | `low`, `medium`, `high`, `max` |
 | `testedModels` | no | model display names the skill was actually tested with |
 
@@ -119,6 +121,78 @@ teammate cloning the repository gets the same layout from `mgr install`.
 
 A folder occupied by something that is neither the plugin nor a method skill is refused:
 MGR never writes over content it cannot account for.
+## Being suggested instead of hunted down
+
+A skill nobody knows about is a skill nobody installs. `mgr` reads the project, matches what
+it finds against the `ecosystems` published in the index, and proposes what fits — showing
+**why** each suggestion appeared.
+
+```
+$ mgr detect
+Detected in this project
+  java  (from pom.xml)
+
+Plugin skills available for what was detected
+  @mgr/junit-clean@1.1.0  — java, from pom.xml
+```
+
+`mgr detect` writes nothing. `mgr install` ends with the same proposal and, in an interactive
+terminal, offers to install — which goes through the ordinary confirmation, the one that
+shows origin, permissions and checksum. Accepting a suggestion is never a shortcut around it.
+
+### What is looked at, and what is not
+
+A fixed list of paths, never a tree walk: `pom.xml`, `build.gradle`, `build.gradle.kts`,
+`package.json`, `docker-compose.*`, `compose.*`, and `src/main/resources/application.*`.
+Services come from anchored markers inside those files — `image: postgres`,
+`jdbc:postgresql:`, `amqp://` — never from a loose word in a comment. There is no YAML
+parser: the file is **evidence**, not a structure to interpret.
+
+Nothing read from your files becomes a skill name, a URL, or a command. That is deliberate:
+a repository you did not write is exactly where a crafted `docker-compose.yml` would try to
+talk the tool into installing something. Matching only ever happens between tokens the CLI
+knows and the `ecosystems` field published in the index.
+
+Modules in subdirectories of a monorepo are not detected in this version.
+
+### Modes
+
+Set `detectionMode` in `.mgr-core/config.json`:
+
+| Mode | Behaviour |
+|---|---|
+| `suggest` (default) | detects and asks |
+| `manual` | never suggests; detection only when you run `mgr detect` |
+| `auto` | **not available yet** — refused with an explicit error |
+
+`auto` would install without asking. It stays out until `mgr audit` exists, because today
+`trusted` is only a flag someone typed, and that is not a basis for skipping human review.
+Configuring it and silently getting `suggest` would be worse than the error.
+
+Without a TTY — CI, for instance — `suggest` prints what it found and installs nothing.
+
+### Session hooks
+
+`mgr install` also wires a session-start hook for each engine you chose, so the next session
+already knows what is available without you running anything. The hook runs the same
+deterministic detector and hands the agent a short list of facts; **no agent reads your
+project files to detect**, and no file content ever crosses into the agent's context.
+
+Verified on 2026-08-25 against each CLI, not from documentation alone:
+
+| Engine | File (project-local, never committed) | Fires | Reaches the agent |
+|---|---|---|---|
+| Claude Code | `.claude/settings.local.json` | yes | yes, via stdout |
+| Copilot CLI | `.github/copilot/settings.local.json` | yes | yes, via `additionalContext` |
+| Copilot in VS Code | — | no hook support | — |
+
+**Copilot needs folder trust first.** Until you trust the folder, a repository hook does not
+load and nothing tells you so — no error, not even in debug logs. The first session asks;
+accept it and the hook starts working, including in `-p` mode.
+
+The hook lives in a machine-local, gitignored file, so it never changes the agent's behaviour
+for anyone else who clones the repository. `mgr` only ever touches its own entry, identified
+by a marker in the command; `--no-hooks` skips writing them, and `mgr uninstall` removes them.
 ## `mgr-skills.lock`
 
 ```json
@@ -195,3 +269,5 @@ installer uses.
   skill: one folder wins, nothing is merged.
 - Plugins are installed as published: the `{{MGR_USER_LANGUAGE}}` token of the method skills
   is resolved at export time, not per project.
+- Detection covers the repository root (plus the conventional Spring config path), not modules
+  in subdirectories, and identifies the ecosystem rather than the framework inside it.

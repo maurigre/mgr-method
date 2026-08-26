@@ -70,6 +70,23 @@ function main() {
   const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
   const work = mkdtempSync(path.join(os.tmpdir(), "mgr-baseline-"));
   const checkout = path.join(work, "src-tree");
+
+  // `working-tree` captura a arvore atual, sem worktree: e o que se usa quando a mudanca de
+  // saida e DELIBERADA e aprovada, para congelar o novo normal. Qualquer outro valor e um ref
+  // git, usado para comparar com uma versao anterior.
+  if (ref === "working-tree") {
+    const repo = mkdtempSync(path.join(work, "repo-"));
+    const home = mkdtempSync(path.join(work, "home-"));
+    try {
+      process.stdout.write("# saida da CLI congelada da arvore de trabalho - regenerar SO com mudanca deliberada,\n");
+      process.stdout.write("# com scripts/capture-cli-baseline.mjs working-tree > test/fixtures/cli-baseline.txt\n");
+      process.stdout.write(captureCli(path.join(root, "bin", "mgr.js"), { repo, home }));
+    } finally {
+      rmSync(work, { recursive: true, force: true });
+    }
+    return;
+  }
+
   try {
     execFileSync("git", ["worktree", "add", "--detach", checkout, ref], { cwd: root, stdio: "ignore" });
     symlinkSync(path.join(root, "node_modules"), path.join(checkout, "node_modules"));

@@ -7,6 +7,53 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
+## [0.7.0-beta.1] - 2026-08-26
+> Fase 2 da evolução: o MGR passa a **propor** as skills que o projeto justifica, em vez de
+> esperar que você saiba os nomes. Pré-release no dist-tag `next`.
+
+### Adicionado
+- **Detecção de ecossistema e sugestão de skills** (ADR-0009). O MGR lê uma lista fechada de
+  caminhos conhecidos — `pom.xml`, `build.gradle`, `package.json`, `docker-compose.*` e
+  `src/main/resources/application.*` — e propõe as skills publicadas que atendem ao que
+  encontrou, **mostrando o arquivo que justificou cada sugestão**.
+- **`mgr detect`**: mostra o que foi detectado e o que os registries oferecem. Não escreve
+  nada. Com `--hook <motor>`, emite o relatório que o hook de sessão consome.
+- **Sugestão ao fim do `mgr install`**, em terminal interativo. Aceitar entra no mesmo fluxo
+  do `mgr add`: a confirmação que mostra origem, permissões e checksum continua sendo a
+  última palavra. Sem terminal interativo, informa e não instala.
+- **Hook de início de sessão por motor**, gravado a partir dos motores escolhidos na
+  instalação: a próxima sessão do agente já sabe o que está disponível sem você rodar nada.
+  Verificado por experimento nos dois CLIs. Fica em arquivo local e gitignored
+  (`.claude/settings.local.json`, `.github/copilot/settings.local.json`), nunca global e
+  nunca commitado; `--no-hooks` desliga e `mgr uninstall` remove.
+- **Campo `ecosystems` no manifest** e no índice do registry: a skill declara a que
+  ecossistema serve. Vocabulário aberto — declarar um que o detector ainda não conhece é
+  válido e simplesmente não sugere. Sem o campo, a skill só é instalável por nome.
+- **Modo de detecção** em `.mgr-core/config.json`: `suggest` (default) e `manual`.
+
+### Segurança
+- **O conteúdo dos seus arquivos é evidência, nunca fonte de execução.** Serviços saem de
+  marcadores ancorados (`image: postgres`, `jdbc:postgresql:`); não há parser de YAML, e
+  nada lido do projeto vira nome de skill, URL ou comando. O casamento acontece só entre
+  tokens do CLI e o campo publicado no índice.
+- **A detecção não é feita por um agente.** Um agente precisaria ler seus arquivos para
+  dentro do contexto, que é exatamente o vetor de prompt injection que a decisão D03 nomeia.
+  O gatilho é da plataforma; a leitura é de um detector determinístico.
+- **O canal hook → contexto do agente carrega apenas fato apurado** (ecossistema, nome do
+  arquivo-evidência, nome e versão da skill). Nenhum byte de conteúdo do projeto atravessa.
+- **O modo `auto` não existe ainda** e é recusado com erro explícito. Instalar sem
+  confirmação humana depende de `mgr audit`; até lá, `trusted` é apenas uma flag digitada, e
+  isso não basta. A garantia de "toda instalação é confirmada por uma pessoa" segue inteira.
+- O MGR só toca a **própria entrada** nos arquivos de configuração de agente, identificada
+  por marcador; nunca reescreve o arquivo, e reinstalar não duplica.
+
+### Observações
+- O hook do Copilot só carrega **depois que você confia na pasta**; a primeira sessão
+  pergunta, e nada acontece até aceitar. O `mgr install` avisa.
+- Detecção cobre a raiz do repositório (mais o caminho convencional do Spring), não módulos
+  em subpastas de monorepo, e identifica o ecossistema, não o framework dentro dele.
+- `@mgr/junit-clean` foi republicada como `1.1.0` declarando `java`; `@mgr/diagnosing-bugs`
+  segue em `1.0.0`, sem ecossistema — diagnosticar bug não pertence a um.
 ## [0.6.0-beta.2] - 2026-08-25
 > Corrige um defeito destrutivo da `0.6.0-beta.1` e transforma a colisão entre skill do
 > método e plugin em decisão do usuário (ADR-0008). Pré-release no dist-tag `next`.

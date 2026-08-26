@@ -1,4 +1,5 @@
-# baseline da CLI capturada de "main" - regenerar com scripts/capture-cli-baseline.mjs
+# saida da CLI congelada da arvore de trabalho - regenerar SO com mudanca deliberada,
+# com scripts/capture-cli-baseline.mjs working-tree > test/fixtures/cli-baseline.txt
 $ mgr list
 adr-create arch-clean arch-hexagonal arch-layered arch-onion code-analyzer
 diagnosing-bugs evidence-capture junit-clean spec-create spec-execute
@@ -16,8 +17,10 @@ projeto: x escopo: project motor(es): claude-code linguagem: — arquitetura:
 hexagonal idioma: pt-BR (saída das skills: conversa e artefatos) config →
 <REPO>/.mgr-core (manifest.json + .env) skills → <REPO>/.claude/skills skills
 (7): spec-init, spec-create, spec-execute, adr-create, code-analyzer,
-diagnosing-bugs, arch-hexagonal Skills instaladas em <REPO>/.claude/skills.
-Pronto! Comece com /spec-init e depois /spec-create por feature.
+diagnosing-bugs, arch-hexagonal hooks → .claude/settings.local.json (detecção
+por sessão, por motor) Skills instaladas em <REPO>/.claude/skills. hook de
+sessão gravado em .claude/settings.local.json Pronto! Comece com /spec-init e
+depois /spec-create por feature.
 
 $ mgr status <REPO>
 [project] MGR v<VERSION> — claude-code — self-contained projeto: x config:

@@ -57,7 +57,8 @@ test("checksum do export é determinístico e o pacote casa com a entrada do ind
   assert.equal(primeiro.checksum, segundo.checksum);
 
   const files = collectFiles(primeiro.dir);
-  const entry = { name: "@mgr/diagnosing-bugs", version: "1.0.0", checksum: primeiro.checksum };
+  const versao = JSON.parse(readFileSync(path.join(primeiro.dir, MANIFEST_NAME), "utf8")).version;
+  const entry = { name: "@mgr/diagnosing-bugs", version: versao, checksum: primeiro.checksum };
   assert.equal(manifestFromFiles(files, entry).name, "@mgr/diagnosing-bugs");
 });
 
@@ -79,4 +80,16 @@ test("buildManifest reprova description fora do limite do schema", () => {
     () => buildManifest("junit-clean", { description: "curta" }, { registry: "mgr", version: "1.0.0", author: "Mauri Reis" }),
     /"description" must be a string of 40-1024 characters/,
   );
+});
+
+test("ecosystems só é declarado onde há ecossistema real de projeto", () => {
+  const outDir = tmp();
+  const junit = JSON.parse(readFileSync(path.join(exportPlugin("junit-clean", { outDir }).dir, MANIFEST_NAME), "utf8"));
+  const bugs = JSON.parse(readFileSync(path.join(exportPlugin("diagnosing-bugs", { outDir }).dir, MANIFEST_NAME), "utf8"));
+
+  assert.deepEqual(junit.ecosystems, ["java"], "junit-clean serve a projeto Java");
+  assert.equal(bugs.ecosystems, undefined,
+    "diagnosticar bug não pertence a um ecossistema; inventar um seria ruído");
+  assert.deepEqual(validateManifest(junit), []);
+  assert.deepEqual(validateManifest(bugs), []);
 });

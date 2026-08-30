@@ -5,7 +5,7 @@ Deciders: Mauri Reis
 
 ## Status
 
-Accepted
+Accepted — decisão 6 (escala de effort com 4 valores) emendada pelo ADR-0010 em 2026-08-30.
 
 ## Context
 

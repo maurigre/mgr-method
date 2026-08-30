@@ -54,7 +54,6 @@ test("validateManifest reprova cada regra com mensagem específica", () => {
     [manifest({ permissions: ["sudo"] }), /"permissions" must be an array of/],
     [manifest({ capabilities: { requires: "subagents" } }), /"capabilities" must be an object/],
     [manifest({ model: { "claude-code": "" } }), /"model" must map platform/],
-    [manifest({ effort: "xhigh" }), /"effort" must be one of/],
     [manifest({ testedModels: "sonnet" }), /"testedModels" must be an array/],
   ];
   for (const [invalid, expected] of cases) {
@@ -78,8 +77,12 @@ test("assertValidManifest lança com todos os problemas na mensagem", () => {
   );
 });
 
+test("effort aceita xhigh depois da emenda do ADR-0010 ao ADR-0004", () => {
+  assert.doesNotThrow(() => assertValidManifest(manifest({ effort: "xhigh" })));
+});
+
 test("listas fechadas da v1 conforme ADR-0004", () => {
-  assert.deepEqual(EFFORT_LEVELS, ["low", "medium", "high", "max"]);
+  assert.deepEqual(EFFORT_LEVELS, ["low", "medium", "high", "xhigh", "max"]);
   assert.ok(CATEGORIES.includes("language") && CATEGORIES.includes("database"));
   assert.deepEqual(PERMISSIONS, ["read-files", "write-files", "run-shell", "network"]);
 });

@@ -21,6 +21,7 @@ export function pkgDir(name) {
 }
 
 export const skillsDir = () => pkgDir("skills");
+export const agentsDir = () => pkgDir("agents");
 export const sharedDir = () => pkgDir("shared");
 
 export function skillNames() {

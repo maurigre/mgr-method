@@ -7,6 +7,48 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
+## [0.7.0-beta.2] - 2026-08-30
+> Gate de validação como agente: a revisão passa a rodar no modelo e no esforço que ela
+> declara, isolada da conversa que produziu o código. Pré-release no dist-tag `next`.
+
+### Adicionado
+- **O gate de validação roda em agente próprio** (ADR-0010). A revisão do `code-analyzer`
+  deixa de herdar o modelo e o esforço da sessão e passa a declarar os seus, **pela execução
+  inteira** — não por um turno. O comando `/code-analyzer` e quem o invoca continuam iguais;
+  o que muda é o motor por baixo.
+- **Agentes viram artefato instalável**, ao lado das skills: `.claude/agents/mgr-review.md` no
+  Claude Code e `.github/agents/mgr-review.agent.md` no Copilot, registrados no
+  `manifest.json` para o `update` e o `uninstall` saberem o que é deles.
+- **`reviewGate` em `.mgr-core/config.json`**: `enabled`, `effort` e `model` — este último um
+  **mapa por motor**. Ausente = ligado no default. Override parcial completa o default em vez
+  de substituí-lo, e o ajuste sobrevive ao `mgr update`.
+- **`mgr status` e o plano do `mgr install` mostram o gate por motor** — modelo, esforço, e o
+  que aquele motor não suporta.
+- **Descritor de motor (`src/engines/`)**: o que o método sabe sobre cada plataforma vira dado
+  consultável em vez de ramificação por nome.
+
+### Corrigido
+- **`effort: xhigh` passa a ser aceito** em manifest de plugin. A escala de quatro valores era
+  a decisão 6 do ADR-0004, cuja razão (*"`xhigh` não é endereçável via manifest na v1"*)
+  expirou quando o método passou a escrever arquivo de agente. A mudança está declarada como
+  emenda no ADR-0010; ela **alarga** a validação e não quebra nenhum manifest válido.
+
+### Segurança
+- **O agente da revisão não tem ferramenta de escrita.** Um revisor que não pode editar não
+  tem como "corrigir" o que deveria reprovar — a garantia vem de um campo de frontmatter, não
+  de disciplina de prompt.
+- **Prova de posse antes de escrever.** `.claude/agents/` e `.github/agents/` são diretórios
+  do usuário: arquivo de mesmo nome sem o marcador do MGR **não** é sobrescrito no install nem
+  removido no uninstall — a instalação avisa e segue.
+
+### O que degrada, declarado
+- **No Copilot o gate roda no modelo declarado, mas no esforço da sessão**: não existe campo
+  equivalente a `effort` em custom agent. A instalação diz isso uma vez, em vez de omitir.
+- **O roteamento até o agente tem qualidade diferente por motor**: no Claude Code é estrutural
+  (`context: fork`, quem roteia é a plataforma); no Copilot é instrução no corpo da skill.
+- **`COPILOT_HOME` não é tratado**: quem redireciona `$HOME/.copilot` por essa variável precisa
+  mover o arquivo do agente à mão.
+
 ## [0.7.0-beta.1] - 2026-08-26
 > Fase 2 da evolução: o MGR passa a **propor** as skills que o projeto justifica, em vez de
 > esperar que você saiba os nomes. Pré-release no dist-tag `next`.

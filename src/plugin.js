@@ -13,7 +13,10 @@ export const CATEGORIES = [
   "workflow", "other",
 ];
 export const PERMISSIONS = ["read-files", "write-files", "run-shell", "network"];
-export const EFFORT_LEVELS = ["low", "medium", "high", "max"];
+// Cinco níveis: a escala de quatro do ADR-0004 (decisão 6) foi emendada pelo ADR-0010 —
+// a razão de excluir `xhigh` ("não endereçável via manifest na v1") expirou quando o
+// método passou a escrever arquivo de agente, onde a plataforma documenta os cinco.
+export const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"];
 
 // `@registry/skill` — registry e skill em kebab-case (mesma regra de `name` do padrão
 // Agent Skills: minúsculas/dígitos, sem hífen nas pontas, sem hífen duplo).

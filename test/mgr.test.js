@@ -9,7 +9,10 @@ import { fileURLToPath } from "node:url";
 import os from "node:os";
 import path from "node:path";
 import * as bundle from "../src/bundle.js";
-import { buildRuntime, buildSkill, resolveUserLanguage } from "../src/builder.js";
+import {
+  AGENT_MARKER, agentFrontmatter, buildRuntime, buildSkill, gateSummary, installAgents,
+  installEngine, isOurAgent, resolveUserLanguage, routeReviewSkill,
+} from "../src/builder.js";
 import * as installer from "../src/installer.js";
 import * as catalog from "../src/catalog.js";
 import { collectInstallAnswers, detectUserLanguage, CANCELLED } from "../src/prompts.js";
@@ -351,8 +354,13 @@ test("CLI: comandos básicos e ciclo de vida (smoke)", () => {
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
   // Locale fixado: as mensagens da CLI seguem o idioma (flag > manifesto > locale) e o
   // ambiente do runner varia (dev pt_BR, CI C) — sem fixar, os asserts oscilariam.
+  // `cwd` em diretório vazio: o manifesto VENCE o locale, e este repositório se auto-instala
+  // para dogfooding — rodando na raiz, o .mgr-core local decidiria o idioma da CLI sob teste.
+  const neutro = tmp();
   const run = (args, env = {}) =>
-    execFileSync("node", [bin, ...args], { encoding: "utf8", env: { ...process.env, LC_ALL: "pt_BR.UTF-8", ...env } });
+    execFileSync("node", [bin, ...args], {
+      encoding: "utf8", cwd: neutro, env: { ...process.env, LC_ALL: "pt_BR.UTF-8", ...env },
+    });
 
   assert.match(run(["version"]), /mgr-method \d+\.\d+\.\d+/);
   assert.ok(run(["list"]).includes("spec-init"));
@@ -451,10 +459,11 @@ test("checkSkill cobre frontmatter, name, description e tamanho", () => {
 
 test("CLI: mgr add exige nome e terminal interativo, sem flag de bypass", () => {
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const neutro = tmp();
   const run = (args, env = {}) => {
     try {
       const stdout = execFileSync("node", [bin, ...args], {
-        encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+        encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], cwd: neutro,
         env: { ...process.env, LC_ALL: "pt_BR.UTF-8", ...env },
       });
       return { status: 0, stdout, stderr: "" };
@@ -1041,4 +1050,264 @@ test("CLI: ciclo da sugestão — detect propõe, add instala, detect para de pr
     stub.server.closeAllConnections();
     stub.server.close();
   }
+});
+
+test("o gate de validação declara modelo por motor, sem default para o copilot", () => {
+  const { agent, skill, defaults } = catalog.REVIEW_GATE;
+  assert.equal(agent, "mgr-review");
+  assert.equal(skill, "code-analyzer");
+  assert.equal(defaults.enabled, true);
+  assert.equal(defaults.effort, "max");
+  assert.equal(defaults.model["claude-code"], "opus");
+  assert.equal(
+    Object.hasOwn(defaults.model, "copilot"), false,
+    "sem default para o copilot: a lista de modelos e da conta, nao do produto (ADR-0010)",
+  );
+});
+
+test("a fonte do agente do gate existe e não duplica o procedimento de review", () => {
+  const corpo = readFileSync(path.join(bundle.agentsDir(), "mgr-review.md"), "utf8");
+  assert.ok(corpo.includes(catalog.REVIEW_SKILL_TOKEN), "aponta para a skill instalada");
+  assert.ok(corpo.includes(catalog.USER_LANGUAGE_TOKEN), "respeita o idioma do usuário");
+  assert.ok(/verbatim citation/i.test(corpo), "carrega a restrição de ancoragem");
+  assert.ok(!corpo.startsWith("---"), "o frontmatter é montado por motor, não vem da fonte");
+});
+
+// Clone raso com o mapa `model` próprio: os testes ajustam o gate sem contaminar o default.
+const gateDefaults = () => ({
+  ...catalog.REVIEW_GATE.defaults,
+  model: { ...catalog.REVIEW_GATE.defaults.model },
+});
+
+test("o agente do claude-code declara modelo, esforço e só ferramentas de leitura", () => {
+  const { frontmatter, skipped } = agentFrontmatter("claude-code", gateDefaults());
+  assert.match(frontmatter, /^---\nname: mgr-review\n/);
+  assert.match(frontmatter, /tools: Read, Grep, Glob/);
+  assert.match(frontmatter, /model: opus/);
+  assert.match(frontmatter, /effort: max/);
+  assert.deepEqual(skipped, []);
+  for (const escrita of ["Write", "Edit", "NotebookEdit"]) {
+    assert.ok(!frontmatter.includes(escrita), `ferramenta de escrita vazou: ${escrita}`);
+  }
+});
+
+test("o agente do copilot sai sem effort e sem model, e diz o que pulou", () => {
+  const { frontmatter, skipped } = agentFrontmatter("copilot", gateDefaults());
+  assert.match(frontmatter, /tools: \["view", "grep", "glob"\]/);
+  assert.ok(!frontmatter.includes("effort:"), "copilot não tem campo effort (V-3)");
+  assert.ok(!frontmatter.includes("model:"), "sem default de modelo para o copilot");
+  assert.deepEqual(
+    skipped, ["effort"],
+    "modelo sem entrada é o default de desenho, não degradação — só o effort é capacidade ausente",
+  );
+});
+
+test("modelo declarado pelo usuário chega ao agente do copilot", () => {
+  const gate = { ...gateDefaults(), model: { copilot: "claude-sonnet-5" } };
+  const { frontmatter, skipped } = agentFrontmatter("copilot", gate);
+  assert.match(frontmatter, /model: claude-sonnet-5/);
+  assert.deepEqual(skipped, ["effort"]);
+});
+
+test("instalar o agente resolve os tokens e marca a posse", () => {
+  const dir = path.join(tmp(), "agents");
+  const { written, blocked } = installAgents("claude-code", dir, gateDefaults(), {
+    reviewSkillRef: ".claude/skills/code-analyzer/SKILL.md",
+    userLanguage: "português",
+  });
+  assert.equal(written.length, 1);
+  const texto = readFileSync(written[0], "utf8");
+  assert.ok(texto.includes(".claude/skills/code-analyzer/SKILL.md"), "token da skill resolvido");
+  assert.ok(texto.includes("português"), "token de idioma resolvido");
+  assert.ok(!texto.includes(catalog.REVIEW_SKILL_TOKEN) && !texto.includes(catalog.USER_LANGUAGE_TOKEN));
+  assert.ok(isOurAgent(texto) && texto.includes(AGENT_MARKER));
+  assert.deepEqual(blocked, []);
+});
+
+test("nome do arquivo do agente segue o descritor do motor", () => {
+  const claudeDir = path.join(tmp(), "agents");
+  const copilotDir = path.join(tmp(), "agents");
+  const opts = { reviewSkillRef: "x", userLanguage: "en" };
+  assert.equal(path.basename(installAgents("claude-code", claudeDir, gateDefaults(), opts).written[0]), "mgr-review.md");
+  assert.equal(path.basename(installAgents("copilot", copilotDir, gateDefaults(), opts).written[0]), "mgr-review.agent.md");
+});
+
+test("gate desligado não escreve arquivo de agente nenhum", () => {
+  const dir = path.join(tmp(), "agents");
+  const resultado = installAgents("claude-code", dir, { ...gateDefaults(), enabled: false }, {});
+  assert.deepEqual(resultado.written, []);
+  assert.equal(existsSync(dir), false);
+});
+
+test("agente alheio de mesmo nome não é sobrescrito", () => {
+  const dir = path.join(tmp(), "agents");
+  mkdirSync(dir, { recursive: true });
+  const alheio = path.join(dir, "mgr-review.md");
+  writeFileSync(alheio, "agente do usuário, escrito à mão", "utf8");
+  const resultado = installAgents("claude-code", dir, gateDefaults(), { reviewSkillRef: "x" });
+  assert.deepEqual(resultado.written, []);
+  assert.deepEqual(resultado.blocked, [alheio]);
+  assert.equal(readFileSync(alheio, "utf8"), "agente do usuário, escrito à mão");
+});
+
+test("no claude-code o desvio até o agente é estrutural, no frontmatter", () => {
+  const skill = "---\nname: code-analyzer\ndescription: x\n---\n\ncorpo da skill\n";
+  const roteada = routeReviewSkill("claude-code", skill);
+  assert.match(roteada, /context: fork/);
+  assert.match(roteada, /agent: mgr-review/);
+  assert.match(roteada, /background: false/);
+  assert.ok(roteada.includes("corpo da skill"), "o corpo da skill é preservado");
+});
+
+test("no copilot o desvio é instrução no corpo, sem tocar no frontmatter", () => {
+  const skill = "---\nname: code-analyzer\ndescription: x\n---\n\ncorpo da skill\n";
+  const roteada = routeReviewSkill("copilot", skill);
+  assert.ok(!roteada.includes("context: fork"), "copilot não tem context: fork (V-3/ADR-0010)");
+  assert.match(roteada, /## Delegation \(copilot\)/);
+  assert.match(roteada, /mgr-review/);
+  assert.match(roteada, /`task`/);
+});
+
+test("com o gate desligado a code-analyzer instalada fica byte-idêntica à fonte", () => {
+  const comGate = path.join(tmp(), "skills");
+  const semGate = path.join(tmp(), "skills");
+  const gate = gateDefaults();
+  installEngine(semGate, ["code-analyzer"], { engineId: "claude-code", reviewGate: { ...gate, enabled: false } });
+  installEngine(comGate, ["code-analyzer"], { engineId: "claude-code", reviewGate: gate });
+
+  const fonte = readFileSync(path.join(bundle.skillsDir(), "code-analyzer", "SKILL.md"), "utf8");
+  const instaladaSemGate = readFileSync(path.join(semGate, "code-analyzer", "SKILL.md"), "utf8");
+  const instaladaComGate = readFileSync(path.join(comGate, "code-analyzer", "SKILL.md"), "utf8");
+
+  assert.equal(
+    instaladaSemGate, resolveUserLanguage(fonte, undefined),
+    "gate desligado: instalação idêntica à de hoje (CONSTITUTION §2.7)",
+  );
+  assert.notEqual(instaladaComGate, instaladaSemGate, "gate ligado: a skill é roteada");
+  assert.match(instaladaComGate, /agent: mgr-review/);
+});
+
+test("o roteamento só toca a code-analyzer, não as outras skills", () => {
+  const dir = path.join(tmp(), "skills");
+  const gate = gateDefaults();
+  installEngine(dir, ["code-analyzer", "adr-create"], { engineId: "claude-code", reviewGate: gate });
+  const outra = readFileSync(path.join(dir, "adr-create", "SKILL.md"), "utf8");
+  assert.ok(!outra.includes("agent: mgr-review"));
+});
+
+const instalarComGate = (repo, gate) => {
+  if (gate) writeFileSync(path.join(installer.coreDir("project", repo), "config.json"),
+    JSON.stringify({ registries: [], reviewGate: gate }), "utf8");
+  return installer.execute(installer.planInstall(["claude-code"], "project", repo, { names: ["code-analyzer"] }));
+};
+
+test("instalar com o default grava o agente e o registra no manifest", () => {
+  const repo = tmp();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  const resultado = instalarComGate(repo);
+
+  const agente = path.join(repo, ".claude", "agents", "mgr-review.md");
+  assert.ok(existsSync(agente), "o agente foi escrito");
+  assert.equal(resultado.agents.length, 1);
+
+  const man = JSON.parse(readFileSync(path.join(installer.coreDir("project", repo), "manifest.json"), "utf8"));
+  assert.deepEqual(man.agents, [path.join(".claude", "agents", "mgr-review.md")]);
+  assert.deepEqual(man.agentsDirs, [path.join(".claude", "agents")]);
+
+  const texto = readFileSync(agente, "utf8");
+  assert.match(texto, /model: opus/);
+  assert.match(texto, /effort: max/);
+  assert.ok(texto.includes(path.join(".claude", "skills", "code-analyzer", "SKILL.md")), "aponta para a skill instalada");
+});
+
+test("gate desligado não grava agente nem registra no manifest", () => {
+  const repo = tmp();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  instalarComGate(repo, { enabled: false });
+
+  assert.equal(existsSync(path.join(repo, ".claude", "agents")), false);
+  const man = JSON.parse(readFileSync(path.join(installer.coreDir("project", repo), "manifest.json"), "utf8"));
+  assert.equal(Object.hasOwn(man, "agents"), false);
+});
+
+test("uninstall remove o agente do MGR e limpa o diretório vazio", () => {
+  const repo = tmp();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  instalarComGate(repo);
+  const { removed, kept } = installer.uninstall("project", repo);
+
+  assert.ok(removed.some((p) => p.endsWith(path.join("agents", "mgr-review.md"))));
+  assert.equal(existsSync(path.join(repo, ".claude", "agents")), false, "diretório vazio não fica órfão");
+  assert.deepEqual(kept, []);
+});
+
+test("uninstall não toca em agente que perdeu o marcador do MGR", () => {
+  const repo = tmp();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  instalarComGate(repo);
+
+  const agente = path.join(repo, ".claude", "agents", "mgr-review.md");
+  writeFileSync(agente, "reescrito pelo usuário, sem marcador", "utf8");
+  const { removed, kept } = installer.uninstall("project", repo);
+
+  assert.deepEqual(kept, [agente]);
+  assert.ok(!removed.includes(agente));
+  assert.equal(readFileSync(agente, "utf8"), "reescrito pelo usuário, sem marcador");
+});
+
+test("install não sobrescreve agente alheio e devolve o aviso", () => {
+  const repo = tmp();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  const dir = path.join(repo, ".claude", "agents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, "mgr-review.md"), "agente do usuário", "utf8");
+
+  const resultado = instalarComGate(repo);
+  assert.deepEqual(resultado.agents, []);
+  assert.ok(resultado.gateWarnings.some((w) => w.blocked));
+  assert.equal(readFileSync(path.join(dir, "mgr-review.md"), "utf8"), "agente do usuário");
+});
+
+test("no copilot o gate instala o agente e declara o esforço não suportado", () => {
+  const repo = tmp();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  const resultado = installer.execute(
+    installer.planInstall(["copilot"], "project", repo, { names: ["code-analyzer"] }),
+  );
+
+  const agente = path.join(repo, ".github", "agents", "mgr-review.agent.md");
+  assert.ok(existsSync(agente), "o gate existe no copilot (DT-5, V-5)");
+  assert.ok(!readFileSync(agente, "utf8").includes("effort:"), "sem effort no copilot (V-3)");
+  assert.ok(resultado.gateWarnings.some((w) => w.engine === "copilot" && w.capability === "effort"));
+
+  const skill = readFileSync(path.join(repo, ".github", "skills", "code-analyzer", "SKILL.md"), "utf8");
+  assert.match(skill, /## Delegation \(copilot\)/);
+  assert.ok(!skill.includes("context: fork"));
+});
+
+test("o ajuste do gate sobrevive ao update", () => {
+  const repo = tmp();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  instalarComGate(repo, { effort: "high", model: { "claude-code": "sonnet" } });
+  installer.update("project", repo);
+
+  const texto = readFileSync(path.join(repo, ".claude", "agents", "mgr-review.md"), "utf8");
+  assert.match(texto, /effort: high/);
+  assert.match(texto, /model: sonnet/);
+});
+
+test("o resumo do gate diz o que cada motor de fato sustenta", () => {
+  assert.deepEqual(gateSummary("claude-code", gateDefaults()), {
+    engine: "claude-code", model: "opus", effort: "max", skipped: [],
+  });
+  assert.deepEqual(gateSummary("copilot", gateDefaults()), {
+    engine: "copilot", model: null, effort: null, skipped: ["effort"],
+  });
+});
+
+test("modelo declarado para um motor que não o sustenta vira degradação declarada", () => {
+  const semModelo = { ...gateDefaults(), model: { "claude-code": "opus" } };
+  // O copilot sustenta `model`; o que ele não sustenta é `effort` (V-3).
+  assert.deepEqual(gateSummary("copilot", { ...semModelo, model: { copilot: "gpt-5" } }).skipped, ["effort"]);
+  assert.equal(gateSummary("copilot", { ...semModelo, model: { copilot: "gpt-5" } }).model, "gpt-5");
 });

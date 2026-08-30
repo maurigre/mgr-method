@@ -139,6 +139,20 @@ const en = {
   hookRemoved: (file) => `  session hook removed from ${file}`,
   hookCopilotTrust: "Copilot only loads the repository hook after you trust the folder: the first session will ask, and nothing happens until you accept.",
 
+  planGate: (dir) => `gate     →   ${dir}`,
+  planGateHint: "(validation gate: the review runs in its own agent)",
+  planGateEngine: (engine, model, effort) => `  ${engine}: model=${model} effort=${effort}`,
+  gateModelInherited: "inherits the session model",
+  gateEffortInherited: "session effort",
+  gateSkipped: (engine, capability) => `  ${engine}: ${capability} not supported by this engine — declared, not applied`,
+  gateBlocked: (file) => `  not overwritten: ${file} exists and was not written by MGR`,
+  gateWritten: (file) => `  validation gate agent written to ${file}`,
+  gateKept: (file) => `  kept: ${file} lost the MGR marker and was left untouched`,
+  statusGate: (state) => `  gate:    ${state}`,
+  statusGateOff: "off (reviewGate.enabled = false)",
+  statusGateEngine: (engine, model, effort) => `    ${engine}: model=${model} effort=${effort}`,
+  statusGateSource: (source) => `    from: ${source}`,
+
   help: `MGR — Método Governado por Rastreabilidade (Traceability-Governed Method)
 
 Usage: mgr <command> [options]
@@ -300,6 +314,20 @@ const ptBR = {
   hookWritten: (file) => `  hook de sessão gravado em ${file}`,
   hookRemoved: (file) => `  hook de sessão removido de ${file}`,
   hookCopilotTrust: "O Copilot só carrega o hook do repositório depois que você confia na pasta: a primeira sessão vai perguntar, e nada acontece até você aceitar.",
+
+  planGate: (dir) => `gate     →   ${dir}`,
+  planGateHint: "(gate de validação: a revisão roda em agente próprio)",
+  planGateEngine: (engine, model, effort) => `  ${engine}: modelo=${model} esforço=${effort}`,
+  gateModelInherited: "herda o modelo da sessão",
+  gateEffortInherited: "esforço da sessão",
+  gateSkipped: (engine, capability) => `  ${engine}: ${capability} não suportado por este motor — declarado, não aplicado`,
+  gateBlocked: (file) => `  não sobrescrito: ${file} já existe e não foi escrito pelo MGR`,
+  gateWritten: (file) => `  agente do gate de validação gravado em ${file}`,
+  gateKept: (file) => `  preservado: ${file} perdeu o marcador do MGR e não foi tocado`,
+  statusGate: (state) => `  gate:    ${state}`,
+  statusGateOff: "desligado (reviewGate.enabled = false)",
+  statusGateEngine: (engine, model, effort) => `    ${engine}: modelo=${model} esforço=${effort}`,
+  statusGateSource: (source) => `    origem: ${source}`,
 
   help: `MGR — Método Governado por Rastreabilidade
 

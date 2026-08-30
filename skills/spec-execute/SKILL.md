@@ -81,10 +81,16 @@ POST/GET/PATCH/DELETE"* — **not** four controllers, no renaming, no splitting,
 ## Execution (real-time log in `05-execution.md`)
 
 - Respect the DAG: a task only starts with its `depends_on` completed; order P0 → P1 → P2.
-- Per task: implement → run tests → **self-review** (fidelity to the planned artifact;
-  premises applied; quality/language idiom per the guide) → fix or, in doubt, ask →
-  record (task, files, decisions, premises, result). Test task in a Java project →
-  invoke `junit-clean` with the scope.
+- Per task: implement → run tests → **review** (fidelity to the planned artifact; premises
+  applied; quality/language idiom per the guide) → fix or, in doubt, ask → record (task,
+  files, decisions, premises, result). Test task in a Java project → invoke `junit-clean`
+  with the scope.
+- **Who reviews is not who wrote.** Send that per-task review to the `code-analyzer`, which
+  runs in the validation gate — its own context, reloaded from disk, without the conversation
+  that produced the code. The window that wrote an artifact carries the reasoning that
+  produced its defect, and is the worst auditor of it. Where the engine cannot isolate the
+  context, review anyway and say so in the log: "reviewed in the authoring context". Declared
+  degradation is acceptable; silent degradation is the failure.
 - **Execution checkpoint:** when each priority block completes (P0, then P1), show a
   summary and wait for the user's ok.
 - Every implementation decision traces to the spec, the constitution or the real code;

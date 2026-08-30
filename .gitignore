@@ -18,6 +18,7 @@ coverage/
 
 # Auto-install do MGR (dogfooding) — conteúdo gerado por `mgr install`
 .claude/
+.mgr-core/
 
 # Cache/contexto do spec-create
 .specs-cache/

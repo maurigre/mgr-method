@@ -5,7 +5,9 @@
 // teste; a borda passa o fetch global.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { parseSkillName } from "./plugin.js";
+import { EFFORT_LEVELS, parseSkillName } from "./plugin.js";
+import { REVIEW_GATE } from "./catalog.js";
+import * as engines from "./engines/index.js";
 
 export const CONFIG_NAME = "config.json";
 
@@ -139,4 +141,50 @@ export function readDetectionMode(coreDir) {
     throw new Error(`invalid detectionMode: ${JSON.stringify(mode)} (expected ${DETECTION_MODES.join(" | ")})`);
   }
   return mode;
+}
+
+// Gate de validação (ADR-0010), guardado no mesmo config dos registries. Vai aqui e não no
+// manifest.json porque o manifest é reescrito inteiro a cada install, enquanto o writeConfig
+// preserva campos desconhecidos — é o que faz o ajuste sobreviver ao `update`.
+// Ausente = ligado no default do catálogo. Override PARCIAL completa o default, não o substitui.
+const isPlainObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+
+export function readReviewGate(coreDir) {
+  const configured = readConfig(coreDir).reviewGate;
+  if (configured === undefined) return { ...REVIEW_GATE.defaults };
+  if (!isPlainObject(configured)) {
+    throw new Error(`invalid reviewGate: ${JSON.stringify(configured)} (expected an object)`);
+  }
+
+  // O merge é de DOIS níveis por causa do `model`: override parcial COMPLETA o default, não o
+  // substitui. Merge raso faria `{"copilot": "x"}` apagar o default do claude-code em silêncio.
+  const gate = { ...REVIEW_GATE.defaults, ...configured };
+  if (configured.model !== undefined && isPlainObject(configured.model)) {
+    gate.model = { ...REVIEW_GATE.defaults.model, ...configured.model };
+  }
+
+  if (typeof gate.enabled !== "boolean") {
+    throw new Error(`invalid reviewGate.enabled: ${JSON.stringify(gate.enabled)} (expected true | false)`);
+  }
+  if (!EFFORT_LEVELS.includes(gate.effort)) {
+    throw new Error(`invalid reviewGate.effort: ${JSON.stringify(gate.effort)} (expected ${EFFORT_LEVELS.join(" | ")})`);
+  }
+
+  // `model` é mapa por motor — mesma forma do mgr-manifest.json. String é o erro provável de
+  // quem escreve à mão, então a mensagem ensina a forma em vez de só recusar.
+  const model = gate.model;
+  if (!isPlainObject(model)) {
+    throw new Error(`invalid reviewGate.model: ${JSON.stringify(model)} (expected a map of engine to model, e.g. {"claude-code": "opus"})`);
+  }
+  for (const [engine, value] of Object.entries(model)) {
+    engines.get(engine);
+    // O VALOR não é validado contra lista fechada, de propósito: os identificadores são da
+    // plataforma (e no copilot, da conta) e mudam sem o método saber. Lista nossa envelheceria
+    // e passaria a recusar modelo válido. Quem valida é a plataforma, que avisa e substitui.
+    if (typeof value !== "string" || value.length === 0) {
+      throw new Error(`invalid reviewGate.model.${engine}: ${JSON.stringify(value)} (expected a non-empty model name)`);
+    }
+  }
+
+  return gate;
 }

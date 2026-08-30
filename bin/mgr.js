@@ -5,7 +5,7 @@ import * as p from "@clack/prompts";
 import pc from "picocolors";
 import * as bundle from "../src/bundle.js";
 import * as installer from "../src/installer.js";
-import { buildRuntime } from "../src/builder.js";
+import { buildRuntime, gateSummary } from "../src/builder.js";
 import { validateAll } from "../src/validator.js";
 import { printBanner } from "../src/banner.js";
 import { collectInstallAnswers, detectUserLanguage, CANCELLED } from "../src/prompts.js";
@@ -15,7 +15,7 @@ import {
   installedPluginNames, CANCELLED_EXIT_CODE,
 } from "../src/plugin-installer.js";
 import {
-  addRegistry, fetchIndex, listRegistries, readDetectionMode, removeRegistry,
+  addRegistry, fetchIndex, listRegistries, readDetectionMode, readReviewGate, removeRegistry,
 } from "../src/registry.js";
 import { diff as lockfileDiff, readLockfile, replacedByEngine, LOCKFILE_NAME } from "../src/lockfile.js";
 import { collectSuggestions, detect, hookReport } from "../src/detector.js";
@@ -150,6 +150,9 @@ async function cmdInstall(flags, positional) {
       ...(motoresComHook.length
         ? [`${M.planHooks(motoresComHook.map((engine) => path.relative(plan.repo, hookFilePath(engine, plan.repo))).join(" · "))}  ${pc.dim(M.planHooksHint)}`]
         : []),
+      // O agente também mora em diretório do usuário: ele vê modelo e esforço por motor
+      // ANTES de confirmar, e vê o que o motor não suporta (ADR-0010).
+      ...linhasDoGate(plan),
     ].join("\n"),
     M.planTitle
   );
@@ -165,6 +168,13 @@ async function cmdInstall(flags, positional) {
   const res = installer.execute(plan);
   s.stop(M.installedAt(res.targets.map((t) => t.dir).join(" · ")));
   if (res.migrated) p.log.info(M.migrationInfo(res.migrated.removed.length));
+  // Degradação declarada, uma vez por capacidade ausente — nunca em silêncio (ADR-0010).
+  // Escrita em diretório do usuário é anunciada, como a do hook — LOG-1 do guia.
+  for (const file of res.agents || []) p.log.success(M.gateWritten(path.relative(plan.repo, file)));
+  for (const aviso of res.gateWarnings || []) {
+    if (aviso.blocked) p.log.warn(M.gateBlocked(path.relative(plan.repo, aviso.blocked)));
+    else p.log.warn(M.gateSkipped(aviso.engine, aviso.capability));
+  }
 
   for (const engine of motoresComHook) {
     const file = writeHook(engine, plan.repo, { command: mgrCommand() });
@@ -432,6 +442,26 @@ async function proposeDetected(repo, scope, targets) {
   if (!instaladas) p.log.info(M.suggestSkipped);
 }
 
+// Linhas do gate no plano de instalação: um resumo por motor, com o que não se aplica dito
+// em vez de omitido. Vazio quando o gate está desligado — o plano fica igual ao de antes.
+// Formatação de uma linha do gate. A DECISÃO de o que se aplica vem do núcleo
+// (`gateSummary`); aqui só se escolhe a palavra para o que não se aplica.
+function linhaDoMotor(engine, gate, formato = M.planGateEngine) {
+  const { model, effort } = gateSummary(engine, gate);
+  return formato(engine, model || M.gateModelInherited, effort || M.gateEffortInherited);
+}
+
+function linhasDoGate(plan) {
+  const gate = plan.reviewGate;
+  const motores = plan.engines.filter((engine) => engine !== "custom");
+  if (!gate?.enabled || !motores.length) return [];
+  const dirs = motores.map((engine) => path.relative(plan.repo, installer.engineAgentsDir(engine, plan.scope, plan.repo)));
+  return [
+    `${M.planGate([...new Set(dirs)].join(" · "))}  ${pc.dim(M.planGateHint)}`,
+    ...motores.map((engine) => linhaDoMotor(engine, gate)),
+  ];
+}
+
 function cmdStatus(_f, positional) {
   const repo = path.resolve(positional[0] || ".");
   let shown = false;
@@ -446,6 +476,17 @@ function cmdStatus(_f, positional) {
       if (man.userLanguage) console.log(M.statusOutput(man.userLanguage));
       for (const d of man.skillsDirs || [man.skillsDir]) if (d) console.log(M.statusSkillsDir(d));
       console.log(M.statusSkills((man.skills || []).join(", ")));
+      // O gate é respondido a partir do config + manifest, sem abrir o arquivo do agente.
+      const gate = readReviewGate(man.core);
+      if (!gate.enabled) {
+        console.log(M.statusGate(M.statusGateOff));
+      } else if ((man.agents || []).length) {
+        console.log(M.statusGate((man.agents || []).join(" · ")));
+        for (const engine of (man.engines || [man.engine]).filter(Boolean)) {
+          if (engine === "custom") continue;
+          console.log(linhaDoMotor(engine, gate, M.statusGateEngine));
+        }
+      }
       console.log(M.statusInstalledAt(man.installedAt));
     }
   }

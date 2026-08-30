@@ -5,8 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import {
   addRegistry, configPath, fetchIndex, listRegistries, readConfig, readDetectionMode,
-  removeRegistry, resolve, validateIndex, writeConfig,
+  readReviewGate, removeRegistry, resolve, validateIndex, writeConfig,
 } from "../src/registry.js";
+import { REVIEW_GATE } from "../src/catalog.js";
 
 const tmp = () => mkdtempSync(path.join(os.tmpdir(), "mgr-registry-"));
 
@@ -155,4 +156,82 @@ test("o modo de detecção convive com os registries no mesmo config", () => {
   addRegistry(core, { name: "mgr", url: INDEX_URL });
   assert.equal(readDetectionMode(core), "manual", "addRegistry preserva o modo");
   assert.deepEqual(listRegistries(core).map((registry) => registry.name), ["mgr"]);
+});
+
+test("gate ausente no config vale o default do catálogo", () => {
+  const core = tmp();
+  writeConfig(core, { registries: [] });
+  assert.deepEqual(readReviewGate(core), REVIEW_GATE.defaults);
+});
+
+test("override parcial do gate completa o default em vez de substituí-lo", () => {
+  const core = tmp();
+  writeConfig(core, { registries: [], reviewGate: { effort: "high" } });
+  const gate = readReviewGate(core);
+  assert.equal(gate.effort, "high");
+  assert.equal(gate.enabled, true, "o que não foi sobrescrito vem do default");
+  assert.equal(gate.model["claude-code"], "opus");
+});
+
+test("gate desligado é lido como desligado", () => {
+  const core = tmp();
+  writeConfig(core, { registries: [], reviewGate: { enabled: false } });
+  assert.equal(readReviewGate(core).enabled, false);
+});
+
+test("enabled que não é booleano reprova", () => {
+  const core = tmp();
+  writeConfig(core, { registries: [], reviewGate: { enabled: "sim" } });
+  assert.throws(() => readReviewGate(core), /invalid reviewGate\.enabled: "sim"/);
+});
+
+test("effort fora da escala reprova com o valor na mensagem", () => {
+  const core = tmp();
+  writeConfig(core, { registries: [], reviewGate: { effort: "extreme" } });
+  assert.throws(() => readReviewGate(core), /invalid reviewGate\.effort: "extreme"/);
+});
+
+test("effort xhigh é aceito depois da emenda ao ADR-0004", () => {
+  const core = tmp();
+  writeConfig(core, { registries: [], reviewGate: { effort: "xhigh" } });
+  assert.equal(readReviewGate(core).effort, "xhigh");
+});
+
+test("model como string ensina a forma de mapa em vez de só recusar", () => {
+  const core = tmp();
+  writeConfig(core, { registries: [], reviewGate: { model: "opus" } });
+  assert.throws(() => readReviewGate(core), /expected a map of engine to model.*claude-code/s);
+});
+
+test("model com motor desconhecido reprova nomeando o motor", () => {
+  const core = tmp();
+  writeConfig(core, { registries: [], reviewGate: { model: { cursor: "opus" } } });
+  assert.throws(() => readReviewGate(core), /unknown engine: cursor/);
+});
+
+test("identificador de modelo do usuário passa verbatim, sem lista fechada", () => {
+  const core = tmp();
+  writeConfig(core, { registries: [], reviewGate: { model: { copilot: "claude-sonnet-5" } } });
+  const gate = readReviewGate(core);
+  assert.equal(gate.model.copilot, "claude-sonnet-5");
+  assert.equal(gate.model["claude-code"], "opus", "o default do outro motor sobrevive");
+});
+
+test("model vazio para um motor reprova", () => {
+  const core = tmp();
+  writeConfig(core, { registries: [], reviewGate: { model: { "claude-code": "" } } });
+  assert.throws(() => readReviewGate(core), /invalid reviewGate\.model\.claude-code/);
+});
+
+test("reviewGate que não é objeto reprova", () => {
+  const core = tmp();
+  writeConfig(core, { registries: [], reviewGate: "max" });
+  assert.throws(() => readReviewGate(core), /invalid reviewGate: "max"/);
+});
+
+test("o gate sobrevive ao addRegistry, como o modo de detecção", () => {
+  const core = tmp();
+  writeConfig(core, { registries: [], reviewGate: { effort: "high" } });
+  addRegistry(core, { name: "mgr", url: INDEX_URL });
+  assert.equal(readReviewGate(core).effort, "high");
 });

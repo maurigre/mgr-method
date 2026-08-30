@@ -1042,3 +1042,16 @@ test("CLI: ciclo da sugestão — detect propõe, add instala, detect para de pr
     stub.server.close();
   }
 });
+
+test("o gate de validação declara modelo por motor, sem default para o copilot", () => {
+  const { agent, skill, defaults } = catalog.REVIEW_GATE;
+  assert.equal(agent, "mgr-review");
+  assert.equal(skill, "code-analyzer");
+  assert.equal(defaults.enabled, true);
+  assert.equal(defaults.effort, "max");
+  assert.equal(defaults.model["claude-code"], "opus");
+  assert.equal(
+    Object.hasOwn(defaults.model, "copilot"), false,
+    "sem default para o copilot: a lista de modelos e da conta, nao do produto (ADR-0010)",
+  );
+});

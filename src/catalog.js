@@ -39,6 +39,35 @@ export const ARCH_RULES_TOKEN = "{{MGR_ARCH_RULES}}";
 export const USER_LANGUAGE_TOKEN = "{{MGR_USER_LANGUAGE}}";
 export const USER_LANGUAGE_FALLBACK = "the language the user writes in";
 
+// Gate de validação (ADR-0010): a política padrão do agente que revisa. Mora aqui porque o
+// catálogo já é o lugar que sabe coisas SOBRE as skills.
+//
+// `model` é MAPA POR MOTOR, não string — mesma forma do `mgr-manifest.json`, que
+// `src/adapters.js` já lê. E a ausência de entrada para o `copilot` é deliberada, não
+// esquecimento: a lista de modelos ali é da CONTA e não do produto (a conta usada na
+// verificação de 2026-08-26 recusou seis identificadores e aceitou um), então qualquer default
+// que o método publicasse seria palpite sobre a conta de terceiro. Sem entrada, o agente é
+// escrito sem o campo e herda o modelo da sessão.
+// Token no corpo do agente, substituído no install pelo caminho da `code-analyzer` INSTALADA.
+// O agente não repete o procedimento de review — aponta para ele. Duplicar violaria a fonte
+// única (CONSTITUTION §3.5) e as duas cópias divergiriam na primeira mudança da skill.
+export const REVIEW_SKILL_TOKEN = "{{MGR_REVIEW_SKILL}}";
+// Sem caminho resolvido (ex.: `mgr build`), a linha continua legível em vez de vazar o token.
+export const REVIEW_SKILL_FALLBACK = "the installed code-analyzer skill";
+
+export const REVIEW_GATE = {
+  agent: "mgr-review",
+  description:
+    "MGR validation gate. Reviews code against the project's rules guide and its originating "
+    + "spec, anchored in verbatim citation, and reports without changing anything.",
+  skill: "code-analyzer",
+  defaults: {
+    enabled: true,
+    model: { "claude-code": "opus" },
+    effort: "max",
+  },
+};
+
 export const architectures = () => Object.keys(ARCHITECTURES);
 export const languages = () => Object.keys(LANGUAGE);
 const ARCH_SKILLS = () => Object.values(ARCHITECTURES);

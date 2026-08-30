@@ -354,8 +354,13 @@ test("CLI: comandos básicos e ciclo de vida (smoke)", () => {
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
   // Locale fixado: as mensagens da CLI seguem o idioma (flag > manifesto > locale) e o
   // ambiente do runner varia (dev pt_BR, CI C) — sem fixar, os asserts oscilariam.
+  // `cwd` em diretório vazio: o manifesto VENCE o locale, e este repositório se auto-instala
+  // para dogfooding — rodando na raiz, o .mgr-core local decidiria o idioma da CLI sob teste.
+  const neutro = tmp();
   const run = (args, env = {}) =>
-    execFileSync("node", [bin, ...args], { encoding: "utf8", env: { ...process.env, LC_ALL: "pt_BR.UTF-8", ...env } });
+    execFileSync("node", [bin, ...args], {
+      encoding: "utf8", cwd: neutro, env: { ...process.env, LC_ALL: "pt_BR.UTF-8", ...env },
+    });
 
   assert.match(run(["version"]), /mgr-method \d+\.\d+\.\d+/);
   assert.ok(run(["list"]).includes("spec-init"));
@@ -454,10 +459,11 @@ test("checkSkill cobre frontmatter, name, description e tamanho", () => {
 
 test("CLI: mgr add exige nome e terminal interativo, sem flag de bypass", () => {
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const neutro = tmp();
   const run = (args, env = {}) => {
     try {
       const stdout = execFileSync("node", [bin, ...args], {
-        encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+        encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], cwd: neutro,
         env: { ...process.env, LC_ALL: "pt_BR.UTF-8", ...env },
       });
       return { status: 0, stdout, stderr: "" };

@@ -1189,6 +1189,107 @@ test("o roteamento só toca a code-analyzer, não as outras skills", () => {
   assert.ok(!outra.includes("agent: mgr-review"));
 });
 
+const instalarComGate = (repo, gate) => {
+  if (gate) writeFileSync(path.join(installer.coreDir("project", repo), "config.json"),
+    JSON.stringify({ registries: [], reviewGate: gate }), "utf8");
+  return installer.execute(installer.planInstall(["claude-code"], "project", repo, { names: ["code-analyzer"] }));
+};
+
+test("instalar com o default grava o agente e o registra no manifest", () => {
+  const repo = tmp();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  const resultado = instalarComGate(repo);
+
+  const agente = path.join(repo, ".claude", "agents", "mgr-review.md");
+  assert.ok(existsSync(agente), "o agente foi escrito");
+  assert.equal(resultado.agents.length, 1);
+
+  const man = JSON.parse(readFileSync(path.join(installer.coreDir("project", repo), "manifest.json"), "utf8"));
+  assert.deepEqual(man.agents, [path.join(".claude", "agents", "mgr-review.md")]);
+  assert.deepEqual(man.agentsDirs, [path.join(".claude", "agents")]);
+
+  const texto = readFileSync(agente, "utf8");
+  assert.match(texto, /model: opus/);
+  assert.match(texto, /effort: max/);
+  assert.ok(texto.includes(path.join(".claude", "skills", "code-analyzer", "SKILL.md")), "aponta para a skill instalada");
+});
+
+test("gate desligado não grava agente nem registra no manifest", () => {
+  const repo = tmp();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  instalarComGate(repo, { enabled: false });
+
+  assert.equal(existsSync(path.join(repo, ".claude", "agents")), false);
+  const man = JSON.parse(readFileSync(path.join(installer.coreDir("project", repo), "manifest.json"), "utf8"));
+  assert.equal(Object.hasOwn(man, "agents"), false);
+});
+
+test("uninstall remove o agente do MGR e limpa o diretório vazio", () => {
+  const repo = tmp();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  instalarComGate(repo);
+  const { removed, kept } = installer.uninstall("project", repo);
+
+  assert.ok(removed.some((p) => p.endsWith(path.join("agents", "mgr-review.md"))));
+  assert.equal(existsSync(path.join(repo, ".claude", "agents")), false, "diretório vazio não fica órfão");
+  assert.deepEqual(kept, []);
+});
+
+test("uninstall não toca em agente que perdeu o marcador do MGR", () => {
+  const repo = tmp();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  instalarComGate(repo);
+
+  const agente = path.join(repo, ".claude", "agents", "mgr-review.md");
+  writeFileSync(agente, "reescrito pelo usuário, sem marcador", "utf8");
+  const { removed, kept } = installer.uninstall("project", repo);
+
+  assert.deepEqual(kept, [agente]);
+  assert.ok(!removed.includes(agente));
+  assert.equal(readFileSync(agente, "utf8"), "reescrito pelo usuário, sem marcador");
+});
+
+test("install não sobrescreve agente alheio e devolve o aviso", () => {
+  const repo = tmp();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  const dir = path.join(repo, ".claude", "agents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, "mgr-review.md"), "agente do usuário", "utf8");
+
+  const resultado = instalarComGate(repo);
+  assert.deepEqual(resultado.agents, []);
+  assert.ok(resultado.gateWarnings.some((w) => w.blocked));
+  assert.equal(readFileSync(path.join(dir, "mgr-review.md"), "utf8"), "agente do usuário");
+});
+
+test("no copilot o gate instala o agente e declara o esforço não suportado", () => {
+  const repo = tmp();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  const resultado = installer.execute(
+    installer.planInstall(["copilot"], "project", repo, { names: ["code-analyzer"] }),
+  );
+
+  const agente = path.join(repo, ".github", "agents", "mgr-review.agent.md");
+  assert.ok(existsSync(agente), "o gate existe no copilot (DT-5, V-5)");
+  assert.ok(!readFileSync(agente, "utf8").includes("effort:"), "sem effort no copilot (V-3)");
+  assert.ok(resultado.gateWarnings.some((w) => w.engine === "copilot" && w.capability === "effort"));
+
+  const skill = readFileSync(path.join(repo, ".github", "skills", "code-analyzer", "SKILL.md"), "utf8");
+  assert.match(skill, /## Delegation \(copilot\)/);
+  assert.ok(!skill.includes("context: fork"));
+});
+
+test("o ajuste do gate sobrevive ao update", () => {
+  const repo = tmp();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  instalarComGate(repo, { effort: "high", model: { "claude-code": "sonnet" } });
+  installer.update("project", repo);
+
+  const texto = readFileSync(path.join(repo, ".claude", "agents", "mgr-review.md"), "utf8");
+  assert.match(texto, /effort: high/);
+  assert.match(texto, /model: sonnet/);
+});
+
 test("o resumo do gate diz o que cada motor de fato sustenta", () => {
   assert.deepEqual(gateSummary("claude-code", gateDefaults()), {
     engine: "claude-code", model: "opus", effort: "max", skipped: [],

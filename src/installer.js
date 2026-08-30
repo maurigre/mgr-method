@@ -7,11 +7,13 @@
 // Convenção por motor:
 //   claude-code : <repo>/.claude/skills  |  ~/.claude/skills
 //   copilot     : <repo>/.github/skills  |  ~/.copilot/skills
-import { existsSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import * as bundle from "./bundle.js";
-import { installEngine } from "./builder.js";
+import { installAgents, installEngine, isOurAgent } from "./builder.js";
+import * as engineDescriptors from "./engines/index.js";
+import { readReviewGate } from "./registry.js";
 import { readManifest, writeManifest, writeEnv } from "./manifest.js";
 import * as catalog from "./catalog.js";
 
@@ -64,6 +66,14 @@ function archRulesRef(engineDir, scope, repo) {
   return scope === "project" ? path.relative(repo, shared) : shared;
 }
 
+// Diretório de agentes do motor, resolvido pelo descritor (ADR-0010) — mesma forma que
+// engineSkillsDir faz para skills, mas sem um segundo mapa por motor aqui dentro.
+export function engineAgentsDir(engine, scope, repo) {
+  const rel = engineDescriptors.get(engine).agentsDir[scope];
+  if (!rel) throw new Error(`escopo desconhecido: ${scope} (use project | global)`);
+  return scope === "project" ? path.join(repo, rel) : path.join(os.homedir(), rel);
+}
+
 export function planInstall(engines, scope, repo, opts = {}) {
   const { skillsDir = null, language = null, architecture = null, userLanguage = null, optional = [], all = false, names = null, projectId = null, replaced = {} } = opts;
   const skills = names || (all ? bundle.skillNames() : catalog.selectSkills({ language, architecture, optional }));
@@ -75,7 +85,8 @@ export function planInstall(engines, scope, repo, opts = {}) {
     ? [{ engine: "custom", dir: skillsDir, skills }]
     : engines.map((e) => ({ engine: e, dir: engineSkillsDir(e, scope, repo), skills: forEngine(e) }));
   const pid = projectId || path.basename(path.resolve(repo));
-  return { engines: skillsDir ? ["custom"] : engines, scope, repo, targets, skills, replaced, language, architecture, userLanguage, projectId: pid };
+  const reviewGate = readReviewGate(coreDir(scope, repo));
+  return { engines: skillsDir ? ["custom"] : engines, scope, repo, targets, skills, replaced, language, architecture, userLanguage, projectId: pid, reviewGate };
 }
 
 // Migra do modelo antigo (runtime-launcher): remove lançadores e o conteúdo de skills/shared
@@ -102,9 +113,27 @@ export function migrateOld(scope, repo) {
 
 export function execute(plan) {
   const migrated = migrateOld(plan.scope, plan.repo);
+  const gate = plan.reviewGate || readReviewGate(coreDir(plan.scope, plan.repo));
+  const agents = [];
+  const agentsDirs = [];
+  const gateWarnings = [];
   for (const t of plan.targets) {
     const ref = t.engine === "custom" ? undefined : archRulesRef(t.dir, plan.scope, plan.repo);
-    installEngine(t.dir, t.skills || plan.skills, { archRulesRef: ref, userLanguage: plan.userLanguage });
+    const engineId = t.engine === "custom" ? undefined : t.engine;
+    installEngine(t.dir, t.skills || plan.skills, {
+      archRulesRef: ref, userLanguage: plan.userLanguage, engineId, reviewGate: engineId ? gate : undefined,
+    });
+    // Motor "custom" (--skills-dir) não é plataforma: não há diretório de agentes para ele.
+    if (!engineId || !gate.enabled) continue;
+    const dir = engineAgentsDir(engineId, plan.scope, plan.repo);
+    const skillRef = path.join(t.dir, catalog.REVIEW_GATE.skill, "SKILL.md");
+    const { written, skipped, blocked } = installAgents(engineId, dir, gate, {
+      reviewSkillRef: plan.scope === "project" ? path.relative(plan.repo, skillRef) : skillRef,
+      userLanguage: plan.userLanguage,
+    });
+    if (written.length) { agents.push(...written); agentsDirs.push(dir); }
+    for (const capability of skipped) gateWarnings.push({ engine: engineId, capability });
+    for (const file of blocked) gateWarnings.push({ engine: engineId, blocked: file });
   }
   const core = coreDir(plan.scope, plan.repo);
   const rel = (p) => (plan.scope === "project" ? path.relative(plan.repo, p) : p);
@@ -122,11 +151,15 @@ export function execute(plan) {
     // está cedido a um plugin naquele motor.
     skills: plan.skills,
     ...(Object.keys(plan.replaced || {}).length ? { replaced: plan.replaced } : {}),
+    // Agentes instalados: é o que faz o uninstall saber o que remover e o update, o que
+    // reescrever — mesmo contrato que as skills já têm.
+    ...(agents.length ? { agentsDirs: agentsDirs.map(rel), agents: agents.map(rel) } : {}),
   });
   writeEnv(core, plan.projectId);
   return {
     targets: plan.targets.map((t) => ({ engine: t.engine, dir: t.dir })),
     skills: plan.skills, migrated, core, projectId: plan.projectId,
+    agents, gate, gateWarnings,
   };
 }
 
@@ -155,8 +188,24 @@ export function uninstall(scope, repo) {
     if (existsSync(sh)) { rmSync(sh, { recursive: true, force: true }); removed.push(sh); }
     if (existsSync(base) && readdirSync(base).length === 0) { rmSync(base, { recursive: true, force: true }); removed.push(base); }
   }
+  const kept = [];
+  for (const file of man.agents || []) {
+    const p = absDir(file, scope, repo);
+    if (!existsSync(p)) continue;
+    // Prova de posse: se o arquivo perdeu o marcador, alguém o reescreveu — não é nosso.
+    if (!isOurAgent(readFileSync(p, "utf8"))) { kept.push(p); continue; }
+    rmSync(p, { force: true });
+    removed.push(p);
+  }
+  for (const d of man.agentsDirs || []) {
+    const base = absDir(d, scope, repo);
+    if (existsSync(base) && readdirSync(base).length === 0) {
+      rmSync(base, { recursive: true, force: true });
+      removed.push(base);
+    }
+  }
   if (existsSync(core)) { rmSync(core, { recursive: true, force: true }); removed.push(core); }
-  return { removed };
+  return { removed, kept };
 }
 
 export function update(scope, repo, { replaced = {} } = {}) {

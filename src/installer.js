@@ -66,6 +66,22 @@ function archRulesRef(engineDir, scope, repo) {
   return scope === "project" ? path.relative(repo, shared) : shared;
 }
 
+// Referência que substitui o token {{MGR_LAWS}} nas SKILL.md do CORE (ADR-0011).
+function lawsRulesRef(engineDir, scope, repo) {
+  const shared = path.join(engineDir, ...catalog.LAWS_INSTALLED);
+  return scope === "project" ? path.relative(repo, shared) : shared;
+}
+
+// Fonte de leis JÁ INSTALADA de um motor, ou `null` se aquele motor não está instalado.
+// Mora no núcleo porque é DECISÃO sobre estado persistido (INV-5/INV-6): a borda só formata.
+// Resolvida pelo diretório do próprio motor, nunca por posição em `skillsDirs` — indexar por
+// posição fazia o hook do copilot anunciar a árvore do claude-code.
+export function installedLawsRef(engine, scope, repo) {
+  const man = readManifest(coreDir(scope, repo));
+  if (!man || !(man.engines || []).includes(engine)) return null;
+  return lawsRulesRef(engineSkillsDir(engine, scope, repo), scope, repo);
+}
+
 // Diretório de agentes do motor, resolvido pelo descritor (ADR-0010) — mesma forma que
 // engineSkillsDir faz para skills, mas sem um segundo mapa por motor aqui dentro.
 export function engineAgentsDir(engine, scope, repo) {
@@ -121,7 +137,9 @@ export function execute(plan) {
     const ref = t.engine === "custom" ? undefined : archRulesRef(t.dir, plan.scope, plan.repo);
     const engineId = t.engine === "custom" ? undefined : t.engine;
     installEngine(t.dir, t.skills || plan.skills, {
-      archRulesRef: ref, userLanguage: plan.userLanguage, engineId, reviewGate: engineId ? gate : undefined,
+      archRulesRef: ref,
+      lawsRulesRef: t.engine === "custom" ? undefined : lawsRulesRef(t.dir, plan.scope, plan.repo),
+      userLanguage: plan.userLanguage, engineId, reviewGate: engineId ? gate : undefined,
     });
     // Motor "custom" (--skills-dir) não é plataforma: não há diretório de agentes para ele.
     if (!engineId || !gate.enabled) continue;

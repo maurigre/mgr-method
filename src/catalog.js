@@ -33,6 +33,18 @@ export const OPTIONAL = ["evidence-capture"];
 export const ARCH_SHARED = "shared/arch/cross-cutting-rules.md";
 // Token nas SKILL.md das arch-*, substituído no install pelo caminho real da fonte no motor.
 export const ARCH_RULES_TOKEN = "{{MGR_ARCH_RULES}}";
+
+// Leis de execução: fonte única das regras vinculantes do método (ADR-0011). Copiada SEMPRE,
+// sem depender de arquitetura ou de skill escolhida — é núcleo, e o ponteiro existe em todas as
+// skills do CORE. Antes da fonte única, a lei de controle de contexto vivia em duas cópias que
+// já haviam divergido em quatro pontos.
+export const LAWS_SHARED = "shared/laws/execution-laws.md";
+// Token da linha-ponteiro nas SKILL.md do CORE, resolvido no install para o caminho no motor.
+export const LAWS_TOKEN = "{{MGR_LAWS}}";
+// Layout da fonte DENTRO do motor, em segmentos. Uma constante só: antes deste campo o caminho
+// era remontado em cinco pontos, e a divergência entre duas dessas cópias foi o defeito do hook
+// que anunciava a árvore do outro motor.
+export const LAWS_INSTALLED = ["_shared", "laws", "execution-laws.md"];
 // Token da linha-ponteiro de idioma presente em TODAS as SKILL.md, substituído no install
 // pelo idioma de saída do usuário (manifest.userLanguage). Sem valor (ex.: `mgr build`),
 // cai no fallback textual — a linha continua legível.

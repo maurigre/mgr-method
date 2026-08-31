@@ -1383,6 +1383,11 @@ test("o preâmbulo aponta para a fonte DO MOTOR, não para a do outro", async ()
   assert.ok(!copilot.includes(".claude"), "cada motor é autossuficiente (CONSTITUTION §2.5)");
 });
 
+// Locale fixado, como os demais testes de CLI deste arquivo: as mensagens seguem a precedência
+// flag > manifesto > locale, e sem fixar o locale a asserção passaria na máquina do autor (pt_BR)
+// e falharia no CI (C). Foi assim que a primeira versão destes testes quebrou o build.
+const ptBR = (repo) => ({ encoding: "utf8", cwd: repo, env: { ...process.env, LC_ALL: "pt_BR.UTF-8" } });
+
 const planoEm = (repo, slug, corpo) => {
   mkdirSync(path.join(repo, "specs", slug), { recursive: true });
   writeFileSync(path.join(repo, "specs", slug, "04-plan.md"), corpo, "utf8");
@@ -1402,7 +1407,7 @@ test("mgr spec validate: plano defeituoso reprova com exit 1 e ensina a corrigir
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
   const resultado = (() => {
     try {
-      return { stdout: execFileSync("node", [bin, "spec", "validate", "--all"], { encoding: "utf8", cwd: repo }), status: 0 };
+      return { stdout: execFileSync("node", [bin, "spec", "validate", "--all"], ptBR(repo)), status: 0 };
     } catch (erro) { return { stdout: erro.stdout, status: erro.status }; }
   })();
 
@@ -1423,7 +1428,7 @@ test("mgr spec validate: um plano em cada forma real passa com exit 0", () => {
       readFileSync(path.join(fixtures, nome), "utf8"), "utf8");
   }
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
-  const stdout = execFileSync("node", [bin, "spec", "validate", "--all"], { encoding: "utf8", cwd: repo });
+  const stdout = execFileSync("node", [bin, "spec", "validate", "--all"], ptBR(repo));
   assert.match(stdout, /0 erro\(s\)|0 error\(s\)/);
   assert.match(stdout, /ESTRUTURAL|STRUCTURAL/);
 });
@@ -1432,7 +1437,7 @@ test("mgr spec validate --json tem schemaVersion e o contrato estável", () => {
   const repo = tmp();
   planoEm(repo, "ok", "<!-- mgr-plan-format: 1 -->\n### P0.1 — a\n- **artifact:** 1 x\n- **done_when:** y\n");
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
-  const payload = JSON.parse(execFileSync("node", [bin, "spec", "validate", "--all", "--json"], { encoding: "utf8", cwd: repo }));
+  const payload = JSON.parse(execFileSync("node", [bin, "spec", "validate", "--all", "--json"], ptBR(repo)));
   assert.equal(payload.schemaVersion, 1);
   assert.deepEqual(Object.keys(payload).sort(), ["files", "findings", "schemaVersion", "scope", "summary"]);
   assert.equal(payload.scope, "structural", "o agente também precisa saber que o verde é estrutural (L2.4)");
@@ -1444,7 +1449,7 @@ test("mgr spec validate: --strict NÃO transforma PLAN-0 em erro", () => {
   const repo = tmp();
   planoEm(repo, "legado", "### P0.1 — a\n- **depends_on:** []\n");
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
-  const stdout = execFileSync("node", [bin, "spec", "validate", "--all", "--strict"], { encoding: "utf8", cwd: repo });
+  const stdout = execFileSync("node", [bin, "spec", "validate", "--all", "--strict"], ptBR(repo));
   assert.match(stdout, /PLAN-0/);
   assert.match(stdout, /0 erro\(s\)/, "formato legado nunca reprova, nem com --strict (RN-2)");
 });
@@ -1462,7 +1467,7 @@ test("mgr spec validate sem --all e fora de specs/ diz o que fazer", () => {
   mkdirSync(path.join(repo, "specs"), { recursive: true });
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
   const resultado = (() => {
-    try { return { stdout: execFileSync("node", [bin, "spec", "validate"], { encoding: "utf8", cwd: repo }), status: 0 }; }
+    try { return { stdout: execFileSync("node", [bin, "spec", "validate"], ptBR(repo)), status: 0 }; }
     catch (erro) { return { stdout: erro.stdout, stderr: erro.stderr, status: erro.status }; }
   })();
   assert.equal(resultado.status, 1);
@@ -1474,7 +1479,7 @@ test("mgr spec validate <slug> valida só aquele slug", () => {
   planoEm(repo, "bom", "<!-- mgr-plan-format: 1 -->\n### P0.1 — a\n- **artifact:** 1 x\n- **done_when:** y\n");
   planoEm(repo, "ruim", "<!-- mgr-plan-format: 1 -->\n### P0.1 — a\n- **depends_on:** [P9.9]\n- **artifact:** 1 x\n- **done_when:** y\n");
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
-  const stdout = execFileSync("node", [bin, "spec", "validate", "bom"], { encoding: "utf8", cwd: repo });
+  const stdout = execFileSync("node", [bin, "spec", "validate", "bom"], ptBR(repo));
   assert.match(stdout, /0 erro\(s\)|0 error\(s\)/);
   assert.ok(!stdout.includes("PLAN-1"), "o slug limita o escopo: o plano ruim não foi tocado");
 });
@@ -1483,7 +1488,7 @@ test("mgr spec <subcomando desconhecido> reprova nomeando o comando", () => {
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
   const raiz = fileURLToPath(new URL("..", import.meta.url));
   const resultado = (() => {
-    try { return { status: 0, stderr: "" , stdout: execFileSync("node", [bin, "spec", "archive"], { encoding: "utf8", cwd: raiz }) }; }
+    try { return { status: 0, stderr: "" , stdout: execFileSync("node", [bin, "spec", "archive"], ptBR(raiz)) }; }
     catch (erro) { return { status: erro.status, stderr: erro.stderr }; }
   })();
   assert.equal(resultado.status, 1);

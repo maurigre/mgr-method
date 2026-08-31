@@ -152,6 +152,17 @@ const en = {
   planPreambleOn: "  session preamble: on (the central laws enter before the first message)",
   planPreambleOff: "  session preamble: off (lawsPreamble.enabled = false)",
   statusLaws: (state) => `  laws:    ${state}`,
+  specValidateOk: (tasks, files) => `${files}: ${tasks} task(s) checked, no structural defect found.`,
+  specValidateHeader: (file) => `${file}`,
+  specValidateItem: (code, severity, task, line, message) =>
+    `  ${severity === "error" ? "x" : "!"} ${code}${task ? ` ${task}` : ""}${line ? `:${line}` : ""} — ${message}`,
+  specValidateFix: (text) => `      fix: ${text}`,
+  specValidateExample: (text) => `      like: ${text}`,
+  specValidateSummary: (errors, warnings) => `${errors} error(s), ${warnings} warning(s).`,
+  specValidateNextSteps: "Next steps: fix the errors above and run `mgr spec validate` again.",
+  specValidateScopeNote:
+    "This check is STRUCTURAL. It does not judge whether the plan is right, whether the tasks are the right ones, or whether a done criterion is good.",
+  specValidateNoSpecs: (dir) => `no spec found in ${dir}`,
   gateKept: (file) => `  kept: ${file} lost the MGR marker and was left untouched`,
   statusGate: (state) => `  gate:    ${state}`,
   statusGateOff: "off (reviewGate.enabled = false)",
@@ -169,7 +180,9 @@ Usage: mgr <command> [options]
   update [repo]    re-synchronizes (--scope)
   uninstall [repo] removes the installed skills (--scope, -y)
   build            generates a directory with the full content (--out)
-  validate         validates the SKILL.md files
+  validate         validates the SKILL.md files (skill authoring)
+  spec validate    validates this project's plan artifacts
+                   ([<slug>], --all, --strict, --json)
   list             lists the skills
   version          shows the version
 
@@ -333,6 +346,17 @@ const ptBR = {
   planPreambleOn: "  preâmbulo de sessão: ligado (as leis centrais entram antes da primeira mensagem)",
   planPreambleOff: "  preâmbulo de sessão: desligado (lawsPreamble.enabled = false)",
   statusLaws: (state) => `  leis:    ${state}`,
+  specValidateOk: (tasks, files) => `${files}: ${tasks} task(s) conferidas, nenhum defeito estrutural encontrado.`,
+  specValidateHeader: (file) => `${file}`,
+  specValidateItem: (code, severity, task, line, message) =>
+    `  ${severity === "error" ? "x" : "!"} ${code}${task ? ` ${task}` : ""}${line ? `:${line}` : ""} — ${message}`,
+  specValidateFix: (text) => `      corrija: ${text}`,
+  specValidateExample: (text) => `      assim: ${text}`,
+  specValidateSummary: (errors, warnings) => `${errors} erro(s), ${warnings} aviso(s).`,
+  specValidateNextSteps: "Próximos passos: corrija os erros acima e rode `mgr spec validate` de novo.",
+  specValidateScopeNote:
+    "Esta verificação é ESTRUTURAL. Ela não julga se o plano está certo, se as tasks são as certas, nem se um critério de done é bom.",
+  specValidateNoSpecs: (dir) => `nenhuma spec encontrada em ${dir}`,
   gateKept: (file) => `  preservado: ${file} perdeu o marcador do MGR e não foi tocado`,
   statusGate: (state) => `  gate:    ${state}`,
   statusGateOff: "desligado (reviewGate.enabled = false)",
@@ -350,7 +374,9 @@ Uso: mgr <comando> [opções]
   update [repo]    re-sincroniza (--scope)
   uninstall [repo] remove as skills instaladas (--scope, -y)
   build            gera um diretório com todo o conteúdo (--out)
-  validate         valida as SKILL.md
+  validate         valida as SKILL.md (autoria de skill)
+  spec validate    valida os planos deste projeto
+                   ([<slug>], --all, --strict, --json)
   list             lista as skills
   version          mostra a versão
 

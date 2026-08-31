@@ -80,6 +80,7 @@ code-analyzer ─ final 2-axis review: Standards (THE project's guide) + Spec (d
 
 | Skill | Role |
 |---|---|
+| **Artifact validation** | `mgr spec validate` checks a feature's **plan**: a dependency that does not exist, a cycle in the DAG, granularity, a task with no done criterion or no declared artifact. Format declared by a marker, English keys with values in your language; **no existing plan is reproved** (ADR-0012). |
 | **Execution laws** | **Single source** in `shared/laws/execution-laws.md`: 45 laws (L0–L6) binding on every skill, each declaring **who it binds, by role** (`Planner`, `Executor`, `Verifier`, `Diagnostician`, `All`). Skills point to it; none repeats a law. The central ones enter the context **before the first message**, via the session hook (ADR-0011). |
 | `spec-init` | Initializes the SDD: analyzes an existing project (phased chunking) **or** runs a guided interview on an empty project (greenfield). Generates `docs/sdd/`, the project's `CONSTITUTION.md` and the review guide. |
 | `spec-create` | Evolves the project per feature: brief → PRD → spec → plan (P0/P1/P2 + DAG), with blocking checkpoints; after plan approval, delegates the implementation to `spec-execute` and closes with the completion. |

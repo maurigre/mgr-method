@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, existsSync, readFileSync, readdirSync, mkdirSync, writeFileSync } from "node:fs";
 import { Buffer } from "node:buffer";
 import { execFile, execFileSync } from "node:child_process";
 import { createServer } from "node:http";
@@ -370,6 +370,10 @@ test("CLI: comandos básicos e ciclo de vida (smoke)", () => {
   assert.match(helpEn, /Usage: mgr/);
   assert.match(helpEn, /SDD for coding agents/);
   assert.match(helpEn, /Método Governado por Rastreabilidade/, "a marca não se traduz");
+  // O `help` NÃO entra na baseline de CLI (ela captura list/install/status/update), então a
+  // presença do subcomando novo só é protegida aqui.
+  assert.match(run(["help"]), /spec validate\s+valida os planos deste projeto/);
+  assert.match(helpEn, /spec validate\s+validates this project's plan artifacts/);
 
   const repo = tmp();
   const flags = ["--engine", "claude-code", "--arch", "hexagonal", "--project-id", "x", "-y"];
@@ -1377,4 +1381,138 @@ test("o preâmbulo aponta para a fonte DO MOTOR, não para a do outro", async ()
   const copilot = JSON.parse(run("copilot")).additionalContext;
   assert.match(copilot, /\.github[/\\]skills[/\\]_shared[/\\]laws/);
   assert.ok(!copilot.includes(".claude"), "cada motor é autossuficiente (CONSTITUTION §2.5)");
+});
+
+// Locale fixado, como os demais testes de CLI deste arquivo: as mensagens seguem a precedência
+// flag > manifesto > locale, e sem fixar o locale a asserção passaria na máquina do autor (pt_BR)
+// e falharia no CI (C). Foi assim que a primeira versão destes testes quebrou o build.
+const ptBR = (repo) => ({ encoding: "utf8", cwd: repo, env: { ...process.env, LC_ALL: "pt_BR.UTF-8" } });
+
+const planoEm = (repo, slug, corpo) => {
+  mkdirSync(path.join(repo, "specs", slug), { recursive: true });
+  writeFileSync(path.join(repo, "specs", slug, "04-plan.md"), corpo, "utf8");
+};
+
+test("mgr spec validate: plano defeituoso reprova com exit 1 e ensina a corrigir", () => {
+  const repo = tmp();
+  planoEm(repo, "quebrado", [
+    "<!-- mgr-plan-format: 1 -->",
+    "### P0.1 — a",
+    "- **depends_on:** [P9.9]",
+    "- **files:** [a, b, c, d]",
+    "- **artifact:** 1 coisa",
+    "",
+  ].join("\n"));
+
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const resultado = (() => {
+    try {
+      return { stdout: execFileSync("node", [bin, "spec", "validate", "--all"], ptBR(repo)), status: 0 };
+    } catch (erro) { return { stdout: erro.stdout, status: erro.status }; }
+  })();
+
+  assert.equal(resultado.status, 1, "erro estrutural tem de sair com exit 1");
+  assert.match(resultado.stdout, /PLAN-1/);
+  assert.match(resultado.stdout, /PLAN-3/);
+  assert.match(resultado.stdout, /PLAN-4/);
+  assert.match(resultado.stdout, /ESTRUTURAL/, "a saída declara o escopo da verificação");
+  assert.match(resultado.stdout, /Próximos passos/);
+});
+
+test("mgr spec validate: um plano em cada forma real passa com exit 0", () => {
+  const repo = tmp();
+  const fixtures = fileURLToPath(new URL("./fixtures/plans", import.meta.url));
+  for (const nome of readdirSync(fixtures)) {
+    mkdirSync(path.join(repo, "specs", nome.replace(".md", "")), { recursive: true });
+    writeFileSync(path.join(repo, "specs", nome.replace(".md", ""), "04-plan.md"),
+      readFileSync(path.join(fixtures, nome), "utf8"), "utf8");
+  }
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const stdout = execFileSync("node", [bin, "spec", "validate", "--all"], ptBR(repo));
+  assert.match(stdout, /0 erro\(s\)|0 error\(s\)/);
+  assert.match(stdout, /ESTRUTURAL|STRUCTURAL/);
+});
+
+test("mgr spec validate --json tem schemaVersion e o contrato estável", () => {
+  const repo = tmp();
+  planoEm(repo, "ok", "<!-- mgr-plan-format: 1 -->\n### P0.1 — a\n- **artifact:** 1 x\n- **done_when:** y\n");
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const payload = JSON.parse(execFileSync("node", [bin, "spec", "validate", "--all", "--json"], ptBR(repo)));
+  assert.equal(payload.schemaVersion, 1);
+  assert.deepEqual(Object.keys(payload).sort(), ["files", "findings", "schemaVersion", "scope", "summary"]);
+  assert.equal(payload.scope, "structural", "o agente também precisa saber que o verde é estrutural (L2.4)");
+  assert.deepEqual(payload.summary, { errors: 0, warnings: 0 });
+  assert.ok(!JSON.stringify(payload).includes(repo), "nenhum caminho absoluto da máquina no payload");
+});
+
+test("mgr spec validate: --strict NÃO transforma PLAN-0 em erro", () => {
+  const repo = tmp();
+  planoEm(repo, "legado", "### P0.1 — a\n- **depends_on:** []\n");
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const stdout = execFileSync("node", [bin, "spec", "validate", "--all", "--strict"], ptBR(repo));
+  assert.match(stdout, /PLAN-0/);
+  assert.match(stdout, /0 erro\(s\)/, "formato legado nunca reprova, nem com --strict (RN-2)");
+});
+
+test("mgr validate (autoria de skill) continua intacto ao lado do mgr spec validate", () => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const raiz = fileURLToPath(new URL("..", import.meta.url));
+  const stdout = execFileSync("node", [bin, "validate"], { encoding: "utf8", cwd: raiz });
+  assert.match(stdout, /spec-init/);
+  assert.ok(!stdout.includes("PLAN-"), "são contratos diferentes e não se misturam");
+});
+
+test("mgr spec validate sem --all e fora de specs/ diz o que fazer", () => {
+  const repo = tmp();
+  mkdirSync(path.join(repo, "specs"), { recursive: true });
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const resultado = (() => {
+    try { return { stdout: execFileSync("node", [bin, "spec", "validate"], ptBR(repo)), status: 0 }; }
+    catch (erro) { return { stdout: erro.stdout, stderr: erro.stderr, status: erro.status }; }
+  })();
+  assert.equal(resultado.status, 1);
+  assert.match(resultado.stderr, /nenhuma spec|no spec/);
+});
+
+test("mgr spec validate <slug> valida só aquele slug", () => {
+  const repo = tmp();
+  planoEm(repo, "bom", "<!-- mgr-plan-format: 1 -->\n### P0.1 — a\n- **artifact:** 1 x\n- **done_when:** y\n");
+  planoEm(repo, "ruim", "<!-- mgr-plan-format: 1 -->\n### P0.1 — a\n- **depends_on:** [P9.9]\n- **artifact:** 1 x\n- **done_when:** y\n");
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const stdout = execFileSync("node", [bin, "spec", "validate", "bom"], ptBR(repo));
+  assert.match(stdout, /0 erro\(s\)|0 error\(s\)/);
+  assert.ok(!stdout.includes("PLAN-1"), "o slug limita o escopo: o plano ruim não foi tocado");
+});
+
+test("mgr spec <subcomando desconhecido> reprova nomeando o comando", () => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const raiz = fileURLToPath(new URL("..", import.meta.url));
+  const resultado = (() => {
+    try { return { status: 0, stderr: "" , stdout: execFileSync("node", [bin, "spec", "archive"], ptBR(raiz)) }; }
+    catch (erro) { return { status: erro.status, stderr: erro.stderr }; }
+  })();
+  assert.equal(resultado.status, 1);
+  assert.match(resultado.stderr, /spec archive/);
+});
+
+test("mgr spec respeita o userLanguage do manifesto, como os demais comandos", () => {
+  // Regressão real, achada pelo gate e fora do alcance do regression-baseline: o primeiro
+  // posicional de `mgr spec` é SUBCOMANDO, não repositório. Sem tratar isso, o repo virava
+  // `<cwd>/validate`, o manifesto não era encontrado e a precedência
+  // flag > manifesto > locale valia para todo comando MENOS o novo.
+  const repo = tmp();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  installer.execute(installer.planInstall(["claude-code"], "project", repo, {
+    names: ["adr-create"], userLanguage: "pt-BR",
+  }));
+  planoEm(repo, "x", "<!-- mgr-plan-format: 1 -->\n### P0.1 — a\n- **artifact:** 1 x\n- **done_when:** y\n");
+
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const emIngles = { ...process.env, LC_ALL: "en_US.UTF-8" };
+  const specValidate = execFileSync("node", [bin, "spec", "validate", "--all"], { encoding: "utf8", cwd: repo, env: emIngles });
+  const status = execFileSync("node", [bin, "status"], { encoding: "utf8", cwd: repo, env: emIngles });
+
+  assert.match(status, /projeto:/, "controle: o comando antigo já respeitava o manifesto");
+  assert.match(specValidate, /erro\(s\)/, "o comando novo tem de respeitar igual");
+  assert.ok(!specValidate.includes("error(s)"), "locale en não pode vencer o manifesto pt-BR");
 });

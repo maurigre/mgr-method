@@ -6,6 +6,7 @@ import pc from "picocolors";
 import * as bundle from "../src/bundle.js";
 import * as installer from "../src/installer.js";
 import * as catalogo from "../src/catalog.js";
+import * as planValidator from "../src/plan-validator.js";
 import { buildRuntime, gateSummary } from "../src/builder.js";
 import { validateAll } from "../src/validator.js";
 import { printBanner } from "../src/banner.js";
@@ -26,6 +27,11 @@ import { hookFilePath, removeHook, writeHook } from "../src/hooks.js";
 const SCOPES = ["project", "global"];
 // Comandos de skill plugável: o posicional é o nome da skill/registry, nunca o repositório.
 const PLUGIN_COMMANDS = ["add", "remove", "registry"];
+// Comandos cujo primeiro posicional é SUBCOMANDO, não repositório. Sem isto, `mgr spec validate`
+// resolveria o repo como `<cwd>/validate`, o manifesto não seria encontrado e o `userLanguage` do
+// projeto seria descartado — quebrando, só para o comando novo, a precedência
+// flag > manifesto > locale que os demais respeitam.
+const SUBCOMMAND_COMMANDS = ["spec"];
 const isTTY = process.stdin.isTTY && process.stdout.isTTY;
 
 // Glue: junta os dados que o nucleo precisa. A decisao de como combinar e do detector.
@@ -67,6 +73,9 @@ function parseArgs(argv) {
     else if (a === "--trusted") flags.trusted = true;
     else if (a === "--hook") flags.hook = argv[++i];
     else if (a === "--no-hooks") flags.noHooks = true;
+    else if (a === "--strict") flags.strict = true;
+    else if (a === "--all") flags.all = true;
+    else if (a === "--json") flags.json = true;
     else if (a === "--out") flags.out = argv[++i];
     else if (a.startsWith("-")) { console.error(M.unknownFlag(a)); process.exit(1); }
     else positional.push(a);
@@ -460,6 +469,46 @@ async function proposeDetected(repo, scope, targets) {
 // em vez de omitido. Vazio quando o gate está desligado — o plano fica igual ao de antes.
 // Formatação de uma linha do gate. A DECISÃO de o que se aplica vem do núcleo
 // (`gateSummary`); aqui só se escolhe a palavra para o que não se aplica.
+// `mgr spec validate` — valida artefato do PROJETO do usuário. Não confundir com `mgr validate`,
+// que valida autoria de SKILL.md: são contratos diferentes (ADR-0012). Aqui só há parse de flag,
+// formatação e exit code; descoberta, leitura e política vivem em src/plan-validator.js (INV-5).
+function cmdSpecValidate(flags, positional) {
+  const repo = path.resolve(".");
+  const slug = flags.all ? null : (positional[0] || planValidator.slugFromCwd(repo, process.cwd()));
+  const resultado = planValidator.validatePlans(repo, { slug });
+
+  if (!resultado.files.length) {
+    console.error(M.errorPrefix(M.specValidateNoSpecs(slug || path.join(repo, "specs"))));
+    return 1;
+  }
+
+  const bloqueantes = planValidator.blocking(resultado.findings, { strict: flags.strict });
+
+  if (flags.json) {
+    console.log(JSON.stringify({
+      schemaVersion: 1,
+      scope: "structural",
+      files: resultado.files,
+      findings: resultado.findings,
+      summary: resultado.summary,
+    }, null, 2));
+    return bloqueantes ? 1 : 0;
+  }
+
+  let arquivoAtual = null;
+  for (const finding of resultado.findings) {
+    if (finding.file !== arquivoAtual) { console.log(M.specValidateHeader(finding.file)); arquivoAtual = finding.file; }
+    console.log(M.specValidateItem(finding.code, finding.severity, finding.task, finding.line, finding.message));
+    console.log(M.specValidateFix(finding.remediation));
+    for (const linha of finding.example.split("\n")) console.log(M.specValidateExample(linha));
+  }
+  if (!resultado.findings.length) console.log(M.specValidateOk(resultado.tasks, resultado.files.join(" · ")));
+  console.log(M.specValidateSummary(resultado.summary.errors, resultado.summary.warnings));
+  console.log(pc.dim(M.specValidateScopeNote));
+  if (bloqueantes) console.log(M.specValidateNextSteps);
+  return bloqueantes ? 1 : 0;
+}
+
 function linhasDasLeis(plan) {
   const motores = plan.targets.filter((alvo) => alvo.engine !== "custom");
   if (!motores.length) return [];
@@ -485,6 +534,14 @@ function linhasDoGate(plan) {
     `${M.planGate([...new Set(dirs)].join(" · "))}  ${pc.dim(M.planGateHint)}`,
     ...motores.map((engine) => linhaDoMotor(engine, gate)),
   ];
+}
+
+// Namespace `mgr spec <sub>`: separado do `mgr validate` de propósito (ADR-0012).
+function cmdSpec(flags, positional) {
+  const sub = positional[0];
+  if (sub === "validate") return cmdSpecValidate(flags, positional.slice(1));
+  console.error(M.errorPrefix(M.unknownCommand(`spec ${sub || ""}`.trim())));
+  return 1;
 }
 
 function cmdStatus(_f, positional) {
@@ -602,7 +659,8 @@ async function main() {
   const [, , command, ...rest] = process.argv;
   const { flags, positional } = parseArgs(rest);
   // Refina o idioma da CLI: flag > manifesto (project > global) > locale (default acima).
-  const repo = path.resolve(PLUGIN_COMMANDS.includes(command) ? "." : (positional[0] || "."));
+  const semRepoPosicional = PLUGIN_COMMANDS.includes(command) || SUBCOMMAND_COMMANDS.includes(command);
+  const repo = path.resolve(semRepoPosicional ? "." : (positional[0] || "."));
   const manifestLang = installer.detectPrior("project", repo)?.userLanguage
     || installer.detectPrior("global", repo)?.userLanguage;
   M = getMessages(flags.userLanguage || manifestLang || detectUserLanguage(process.env));
@@ -618,6 +676,7 @@ async function main() {
       case "uninstall": return await cmdUninstall(flags, positional);
       case "build": return cmdBuild(flags);
       case "validate": return cmdValidate();
+      case "spec": return cmdSpec(flags, positional);
       case "list": return await cmdList(flags, positional);
       case "version": case "--version": case "-v":
         console.log(`mgr-method ${bundle.readVersion()}`); return 0;

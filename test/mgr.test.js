@@ -372,8 +372,8 @@ test("CLI: comandos básicos e ciclo de vida (smoke)", () => {
   assert.match(helpEn, /Método Governado por Rastreabilidade/, "a marca não se traduz");
   // O `help` NÃO entra na baseline de CLI (ela captura list/install/status/update), então a
   // presença do subcomando novo só é protegida aqui.
-  assert.match(run(["help"]), /spec validate\s+valida os planos deste projeto/);
-  assert.match(helpEn, /spec validate\s+validates this project's plan artifacts/);
+  assert.match(run(["help"]), /spec validate\s+valida o plano e a spec deste projeto/);
+  assert.match(helpEn, /spec validate\s+validates this project's plan and spec artifacts/);
 
   const repo = tmp();
   const flags = ["--engine", "claude-code", "--arch", "hexagonal", "--project-id", "x", "-y"];
@@ -1515,4 +1515,80 @@ test("mgr spec respeita o userLanguage do manifesto, como os demais comandos", (
   assert.match(status, /projeto:/, "controle: o comando antigo já respeitava o manifesto");
   assert.match(specValidate, /erro\(s\)/, "o comando novo tem de respeitar igual");
   assert.ok(!specValidate.includes("error(s)"), "locale en não pode vencer o manifesto pt-BR");
+});
+
+const specEm = (repo, slug, corpo) => {
+  mkdirSync(path.join(repo, "specs", slug), { recursive: true });
+  writeFileSync(path.join(repo, "specs", slug, "03-spec.md"), corpo, "utf8");
+};
+
+test("mgr spec validate cobre plano E spec no mesmo comando", () => {
+  const repo = tmp();
+  planoEm(repo, "x", "<!-- mgr-plan-format: 1 -->\n### P0.1 — a\n- **depends_on:** [P9.9]\n- **artifact:** 1 x\n- **done_when:** y\n");
+  specEm(repo, "x", "<!-- mgr-spec-format: 1 -->\n# spec sem critério\n");
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const resultado = (() => {
+    try { return { stdout: execFileSync("node", [bin, "spec", "validate", "--all"], ptBR(repo)), status: 0 }; }
+    catch (erro) { return { stdout: erro.stdout, status: erro.status }; }
+  })();
+  assert.equal(resultado.status, 1);
+  assert.match(resultado.stdout, /PLAN-1/, "o achado do plano continua saindo");
+  assert.match(resultado.stdout, /SPEC-1/, "o achado da spec aparece ao lado");
+});
+
+test("mgr spec validate: achados PLAN-* não mudaram de forma", () => {
+  const repo = tmp();
+  planoEm(repo, "x", "<!-- mgr-plan-format: 1 -->\n### P0.1 — a\n- **files:** [a, b, c, d]\n- **artifact:** 1 x\n- **done_when:** y\n");
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const resultado = (() => {
+    try { return { stdout: execFileSync("node", [bin, "spec", "validate", "--all"], ptBR(repo)), status: 0 }; }
+    catch (erro) { return { stdout: erro.stdout, status: erro.status }; }
+  })();
+  assert.match(resultado.stdout, /x PLAN-3 P0\.1:\d+ — task com 4 arquivos; o teto é 3/);
+});
+
+// O outro lado da decisão: sem isto, a suíte não distingue "--strict funciona" de "--strict é
+// no-op". Os dois avisos abaixo NÃO são isentos, e em modo estrito o comando tem de sair com 1.
+test("mgr spec validate: --strict reprova o aviso não isento, nos dois artefatos", () => {
+  const repo = tmp();
+  const plano = [
+    "<!-- mgr-plan-format: 1 -->",
+    "### P0.1 — a", "- **depends_on:** [P1.1]", "- **artifact:** 1 x", "- **done_when:** y",
+    "### P1.1 — b", "- **depends_on:** []", "- **artifact:** 1 y", "- **done_when:** z",
+  ].join("\n");
+  planoEm(repo, "x", `${plano}\n`);
+  specEm(repo, "x", "<!-- mgr-spec-format: 1 -->\n- [ ] **CA-1:** a\n- [ ] **CA-3:** b\n");
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const rodar = (args) => {
+    try { return { stdout: execFileSync("node", [bin, ...args], ptBR(repo)), status: 0 }; }
+    catch (erro) { return { stdout: erro.stdout, status: erro.status }; }
+  };
+  const frouxo = rodar(["spec", "validate", "--all"]);
+  assert.equal(frouxo.status, 0, "aviso não reprova no modo padrão");
+  assert.match(frouxo.stdout, /0 erro\(s\), 2 aviso\(s\)/);
+
+  const estrito = rodar(["spec", "validate", "--all", "--strict"]);
+  assert.equal(estrito.status, 1, "em modo estrito o aviso não isento reprova");
+  assert.match(estrito.stdout, /PLAN-5/);
+  assert.match(estrito.stdout, /SPEC-4/);
+});
+
+test("mgr spec validate: spec sem marcador não reprova, nem com --strict", () => {
+  const repo = tmp();
+  specEm(repo, "legado", "# spec antiga\n\n1. primeiro critério sem identidade\n");
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const stdout = execFileSync("node", [bin, "spec", "validate", "--all", "--strict"], ptBR(repo));
+  assert.match(stdout, /SPEC-0/);
+  assert.match(stdout, /0 erro\(s\)/);
+});
+
+test("mgr spec validate --json soma os dois artefatos no mesmo envelope", () => {
+  const repo = tmp();
+  planoEm(repo, "x", "<!-- mgr-plan-format: 1 -->\n### P0.1 — a\n- **artifact:** 1 x\n- **done_when:** y\n");
+  specEm(repo, "x", "<!-- mgr-spec-format: 1 -->\n- [ ] **CA-1:** algo observável\n");
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const payload = JSON.parse(execFileSync("node", [bin, "spec", "validate", "--all", "--json"], ptBR(repo)));
+  assert.deepEqual(Object.keys(payload).sort(), ["files", "findings", "schemaVersion", "scope", "summary"]);
+  assert.equal(payload.files.length, 2, "plano e spec no mesmo envelope");
+  assert.deepEqual(payload.summary, { errors: 0, warnings: 0 });
 });

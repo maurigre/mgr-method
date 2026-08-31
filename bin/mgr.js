@@ -7,6 +7,8 @@ import * as bundle from "../src/bundle.js";
 import * as installer from "../src/installer.js";
 import * as catalogo from "../src/catalog.js";
 import * as planValidator from "../src/plan-validator.js";
+import * as specValidator from "../src/spec-validator.js";
+import { blocking, summarize } from "../src/findings.js";
 import { buildRuntime, gateSummary } from "../src/builder.js";
 import { validateAll } from "../src/validator.js";
 import { printBanner } from "../src/banner.js";
@@ -475,14 +477,25 @@ async function proposeDetected(repo, scope, targets) {
 function cmdSpecValidate(flags, positional) {
   const repo = path.resolve(".");
   const slug = flags.all ? null : (positional[0] || planValidator.slugFromCwd(repo, process.cwd()));
-  const resultado = planValidator.validatePlans(repo, { slug });
+  // Dois artefatos, um comando: o plano (ADR-0012) e a spec (ADR-0013).
+  const planos = planValidator.validatePlans(repo, { slug });
+  const specs = specValidator.validateSpecs(repo, { slug });
+  const arquivos = [...planos.files, ...specs.files];
+  const achados = [...planos.findings, ...specs.findings];
 
-  if (!resultado.files.length) {
+  if (!arquivos.length) {
     console.error(M.errorPrefix(M.specValidateNoSpecs(slug || path.join(repo, "specs"))));
     return 1;
   }
 
-  const bloqueantes = planValidator.blocking(resultado.findings, { strict: flags.strict });
+  const resultado = {
+    files: arquivos,
+    tasks: planos.tasks,
+    criteria: specs.criteria,
+    findings: achados,
+    summary: summarize(achados),
+  };
+  const bloqueantes = blocking(resultado.findings, { strict: flags.strict });
 
   if (flags.json) {
     console.log(JSON.stringify({
@@ -502,7 +515,7 @@ function cmdSpecValidate(flags, positional) {
     console.log(M.specValidateFix(finding.remediation));
     for (const linha of finding.example.split("\n")) console.log(M.specValidateExample(linha));
   }
-  if (!resultado.findings.length) console.log(M.specValidateOk(resultado.tasks, resultado.files.join(" · ")));
+  if (!resultado.findings.length) console.log(M.specValidateOk(resultado.tasks, resultado.criteria, resultado.files.length));
   console.log(M.specValidateSummary(resultado.summary.errors, resultado.summary.warnings));
   console.log(pc.dim(M.specValidateScopeNote));
   if (bloqueantes) console.log(M.specValidateNextSteps);

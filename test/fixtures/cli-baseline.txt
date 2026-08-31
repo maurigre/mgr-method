@@ -19,18 +19,22 @@ hexagonal idioma: pt-BR (saída das skills: conversa e artefatos) config →
 (7): spec-init, spec-create, spec-execute, adr-create, code-analyzer,
 diagnosing-bugs, arch-hexagonal hooks → .claude/settings.local.json (detecção
 por sessão, por motor) gate → .claude/agents (gate de validação: a revisão
-roda em agente próprio) claude-code: modelo=opus esforço=max Skills instaladas
-em <REPO>/.claude/skills. agente do gate de validação gravado em
-.claude/agents/mgr-review.md hook de sessão gravado em
-.claude/settings.local.json Pronto! Comece com /spec-init e depois
-/spec-create por feature.
+roda em agente próprio) claude-code: modelo=opus esforço=max leis →
+.claude/skills/_shared/laws/execution-laws.md (leis de execução: fonte única,
+apontada por toda skill do CORE) preâmbulo de sessão: ligado (as leis centrais
+entram antes da primeira mensagem) Skills instaladas em <REPO>/.claude/skills.
+agente do gate de validação gravado em .claude/agents/mgr-review.md hook de
+sessão gravado em .claude/settings.local.json Pronto! Comece com /spec-init e
+depois /spec-create por feature.
 
 $ mgr status <REPO>
 [project] MGR v<VERSION> — claude-code — self-contained projeto: x config:
 <REPO>/.mgr-core stack: linguagem=— arquitetura=hexagonal idioma: pt-BR
 skills: .claude/skills skills: spec-init, spec-create, spec-execute,
 adr-create, code-analyzer, diagnosing-bugs, arch-hexagonal gate:
-.claude/agents/mgr-review.md claude-code: modelo=opus esforço=max em: <TS>
+.claude/agents/mgr-review.md claude-code: modelo=opus esforço=max leis:
+preâmbulo de sessão: ligado (as leis centrais entram antes da primeira
+mensagem) em: <TS>
 
 $ mgr update <REPO>
 Re-sincronizado (project): 7 skills em <REPO>/.claude/skills.

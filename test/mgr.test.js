@@ -1364,3 +1364,17 @@ test("as invariantes I1, I2 e I3 sobrevivem verbatim na fonte única", () => {
     assert.ok(lei.includes(normalizar(clausula)), `invariante perdida: ${clausula}`);
   }
 });
+
+test("o preâmbulo aponta para a fonte DO MOTOR, não para a do outro", async () => {
+  const repo = tmp();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  installer.execute(installer.planInstall(["claude-code", "copilot"], "project", repo, { names: ["adr-create"] }));
+
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const run = (motor) => execFileSync("node", [bin, "detect", "--hook", motor, repo], { encoding: "utf8" });
+
+  assert.match(run("claude-code"), /\.claude[/\\]skills[/\\]_shared[/\\]laws/);
+  const copilot = JSON.parse(run("copilot")).additionalContext;
+  assert.match(copilot, /\.github[/\\]skills[/\\]_shared[/\\]laws/);
+  assert.ok(!copilot.includes(".claude"), "cada motor é autossuficiente (CONSTITUTION §2.5)");
+});

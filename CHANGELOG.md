@@ -7,6 +7,33 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
+## [0.7.0-beta.4] - 2026-08-31
+> O método passa a verificar o **plano** de uma feature. Pré-release no dist-tag `next`.
+
+### Adicionado
+- **`mgr spec validate`** (ADR-0012): o método passa a verificar o **plano** de uma feature —
+  dependência apontando para task inexistente, ciclo no DAG (inclusive indireto), granularidade
+  acima de 3 arquivos, task sem `done_when` ou sem `artifact`, e dependência fora de ordem de
+  prioridade. Namespace separado do `mgr validate`, que continua validando `SKILL.md`.
+- **Formato de plano declarado por marcador** (`<!-- mgr-plan-format: 1 -->`), com as **chaves dos
+  campos em inglês** e os **valores no idioma do usuário**. A identidade parseável nunca depende
+  do idioma em que o artefato foi escrito.
+- **O campo `artifact` no plano** torna verificável a lei **L4.3**: nome, forma, assinatura e
+  QUANTIDADE exatos, que antes viviam só como prosa dentro da task.
+- **Todo achado traz remediação e exemplo conforme** — e o construtor **recusa** achado sem eles,
+  então "revise a seção" é impossível por construção.
+
+### O que degrada, declarado
+- **Nenhum plano existente é reprovado.** Sem o marcador, as regras de **presença** não rodam —
+  nem com `--strict`. As de **consistência** rodam sobre os campos que existirem, então um plano
+  antigo que já declarava `depends_on` ganha verificação de dependência sem migrar nada.
+- **A verificação é estrutural, e a saída diz isso.** Ela não julga se o plano está certo, se as
+  tasks são as certas, nem se um critério de done é bom.
+- **Só o plano.** A verificação da spec (`SPEC-*`) e as etiquetas de proveniência (`PROV-*`) são
+  fatias próprias, ainda não entregues.
+- **Duas formas de saída de validador convivem** no repositório: o `check-laws.mjs` devolve
+  strings; este devolve objeto estruturado com `--json` versionado. Dívida declarada.
+
 ## [0.7.0-beta.3] - 2026-08-31
 > Fonte única das leis de execução e blindagem da autoridade contra conteúdo injetado em runtime.
 > Pré-release no dist-tag `next`.

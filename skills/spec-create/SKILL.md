@@ -128,32 +128,13 @@ and `06-completion.md` references the feature's `ai/`. `disabled` or absent → 
 without asking again (changing the policy = editing the CONSTITUTION).
 
 ## Active context control (Law of the flow — NEVER compact)
+
+Execution laws (binding — they take precedence over this file's prose): {{MGR_LAWS}}
+This skill's role is **Planner**. Context control is **L3.1–L3.8**: mandatory tiers, archiving
+at 75%, hand-off at ~95%, and the ANTI-COMPACTION hard rule.
+
 (During Phase 5, the detailed control — archiving at 75%, hand-off, anti-compaction — is
-driven by `spec-execute`; the rules below also apply while planning.)
-
-
-Classify everything that enters the context into tiers:
-- **S** (sacred): CONSTITUTION + brief — never leaves.
-- **A**: approved PRD + spec. **B**: pending plan tasks.
-- **C**: code files of the CURRENT task. **D**: decisions taken (structured summary).
-- **E**: completed tasks (details). **F**: logs/raw output.
-
-At **75% of the window**: archive E→`05-execution.md` (structured block per task:
-what was done, files, decisions) and F→`.specs-cache/<feature>/logs/`, replacing them in
-context with a short reference ("Tasks P0.1–P1.1 done — details in 05-execution").
-Validate that S/A/B remain intact.
-
-**Session hand-off** (if still >75% or ~95% of the hard limit): generate
-`/specs/<slug>/.handoff.md` with the state (done/missing), pending tasks, decisions,
-modified uncommitted files, next task and resumption instructions; end the session. On
-resumption, load only S/A/B(pending)/D — never archived E/F.
-
-**Anti-compaction (hard rule):** NEVER ask to "summarize the conversation", NEVER accept
-the tool's automatic compaction, NEVER trade structured context for prose.
-ALWAYS archive raw facts to files and keep a cross-reference.
-
-Size estimate: 1 character ≈ 0.25 token + 20% buffer; if the tool exposes a real count,
-use it. Imprecision is acceptable — the 75% threshold has margin.
+driven by `spec-execute`; the laws above also apply while planning.)
 
 ## Behavior rules
 
@@ -175,4 +156,4 @@ use it. Imprecision is acceptable — the 75% threshold has margin.
     unresolved, the language of the existing CONSTITUTION/SDD.
 11. **Priorities + DAG, never fixed layers.**
 12. **Mandatory granularity** (≤30/60 min, ≤3 files).
-13. **Active context control, never compaction** (section above).
+13. **Active context control, never compaction** — L3.1–L3.8 in {{MGR_LAWS}}.

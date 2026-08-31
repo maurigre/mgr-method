@@ -33,3 +33,15 @@ export function summarize(findings) {
     warnings: findings.filter((finding) => finding.severity === "warning").length,
   };
 }
+
+// Avisos isentos do `--strict`. Formato legado não reprova nem em modo estrito — vira erro só
+// numa minor futura, com prazo (ADR-0012, ADR-0013). Mora aqui, e não num validador de artefato,
+// porque bloqueio é propriedade do ACHADO (severidade e código), não do plano nem da spec.
+export const STRICT_EXEMPT = ["PLAN-0", "SPEC-0"];
+
+export function blocking(findings, { strict = false } = {}) {
+  return findings.filter((finding) => {
+    if (isError(finding)) return true;
+    return strict && !STRICT_EXEMPT.includes(finding.code);
+  }).length;
+}

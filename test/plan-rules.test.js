@@ -147,3 +147,10 @@ test("os planos vivos, quando existem, também produzem zero erros", () => {
   }
   assert.deepEqual(erros.map((f) => `${f.file}:${f.code}`), []);
 });
+
+test("o template do método passa no próprio validador — exemplo que falharia é mau exemplo", () => {
+  const template = path.join(RAIZ, "skills", "spec-create", "templates", "04-plan.md");
+  const parsed = parse(readFileSync(template, "utf8"));
+  assert.equal(parsed.format.declared, true, "o template declara o formato que ele ensina");
+  assert.deepEqual(check(parsed, "template").filter((f) => f.severity === "error").map((f) => f.code), []);
+});

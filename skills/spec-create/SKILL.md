@@ -95,7 +95,12 @@ Tasks organized by **priority P0 (blocking) / P1 (core) / P2 (complementary)** �
 NEVER by fixed architectural layers. The order within each priority comes from the
 **dependency DAG**: every task declares an explicit `depends_on`.
 **Granularity:** task ≤ 30 min (target), ≤ 60 min (hard), ≤ 3 files; anything bigger,
-split BEFORE the checkpoint. Each task lists: goal, files, dependencies, suggested helper
+split BEFORE the checkpoint.
+**Format:** the plan opens with `<!-- mgr-plan-format: 1 -->` and each task declares its fields
+with English keys — `priority`, `depends_on`, `files`, `artifact`, `done_when`, `helper_skill`.
+The keys are the parseable identity; the values are written in the user's language. `artifact`
+is the rail of L4.3: name, shape, signature and QUANTITY. Run `mgr spec validate` on the plan
+before the checkpoint — it checks structure only, never judgement. Each task lists: goal, files, dependencies, suggested helper
 skill (`junit-clean` for Java test tasks, `code-analyzer` for review), and a done
 criterion.
 **CHECKPOINT 3 (blocking):** approve plan / adjust / abort.

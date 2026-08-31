@@ -26,5 +26,9 @@ coverage/
 # Artefatos SDD mantidos apenas localmente, por decisao do autor (2026-07-14).
 # Ficam no disco (as skills spec-create/spec-execute dependem de docs/sdd/ + CONSTITUTION.md),
 # mas fora do versionamento. docs/adr/ SEGUE versionado.
-specs/
-docs/sdd/
+#
+# Ancorado na RAIZ, com a barra inicial: sem ela o padrao casa em QUALQUER profundidade, e
+# test/fixtures/specs/ — que existe justamente porque specs/ e ignorado — ficava de fora do
+# versionamento tambem. Os testes passavam aqui e falhariam em qualquer clone.
+/specs/
+/docs/sdd/

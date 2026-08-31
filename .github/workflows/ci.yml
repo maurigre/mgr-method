@@ -38,6 +38,8 @@ jobs:
         run: npm audit --audit-level=high
 
       - run: node bin/mgr.js validate
+      - name: Verifica a fonte unica de leis (ADR-0011)
+        run: npm run check:laws
 
       # Gate de cobertura: o script `coverage` traz --test-coverage-lines=95 e sai != 0 abaixo disso.
       - run: npm run coverage

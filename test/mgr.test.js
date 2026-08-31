@@ -11,7 +11,7 @@ import path from "node:path";
 import * as bundle from "../src/bundle.js";
 import {
   AGENT_MARKER, agentFrontmatter, buildRuntime, buildSkill, gateSummary, installAgents,
-  installEngine, isOurAgent, resolveUserLanguage, routeReviewSkill,
+  installEngine, isOurAgent, resolveLaws, resolveUserLanguage, routeReviewSkill,
 } from "../src/builder.js";
 import * as installer from "../src/installer.js";
 import * as catalog from "../src/catalog.js";
@@ -1168,7 +1168,7 @@ test("no copilot o desvio é instrução no corpo, sem tocar no frontmatter", ()
   assert.match(roteada, /`task`/);
 });
 
-test("com o gate desligado a code-analyzer instalada fica byte-idêntica à fonte", () => {
+test("com o gate desligado a code-analyzer instalada só sofre as resoluções de token", () => {
   const comGate = path.join(tmp(), "skills");
   const semGate = path.join(tmp(), "skills");
   const gate = gateDefaults();
@@ -1179,10 +1179,15 @@ test("com o gate desligado a code-analyzer instalada fica byte-idêntica à font
   const instaladaSemGate = readFileSync(path.join(semGate, "code-analyzer", "SKILL.md"), "utf8");
   const instaladaComGate = readFileSync(path.join(comGate, "code-analyzer", "SKILL.md"), "utf8");
 
+  // A instalação resolve DOIS tokens: idioma e leis de execução. O que o gate desligado tem de
+  // garantir é que nenhuma injeção de ROTEAMENTO acontece — não que o arquivo saia intocado.
   assert.equal(
-    instaladaSemGate, resolveUserLanguage(fonte, undefined),
-    "gate desligado: instalação idêntica à de hoje (CONSTITUTION §2.7)",
+    instaladaSemGate,
+    resolveLaws(resolveUserLanguage(fonte, undefined), path.join("_shared", "laws", "execution-laws.md")),
+    "gate desligado: só as resoluções de token, nenhuma injeção de roteamento (CONSTITUTION §2.7)",
   );
+  assert.ok(!instaladaSemGate.includes("context: fork"), "gate desligado não injeta fork");
+  assert.ok(!instaladaSemGate.includes("Delegation (copilot)"), "gate desligado não injeta delegação");
   assert.notEqual(instaladaComGate, instaladaSemGate, "gate ligado: a skill é roteada");
   assert.match(instaladaComGate, /agent: mgr-review/);
 });
@@ -1310,4 +1315,66 @@ test("modelo declarado para um motor que não o sustenta vira degradação decla
   // O copilot sustenta `model`; o que ele não sustenta é `effort` (V-3).
   assert.deepEqual(gateSummary("copilot", { ...semModelo, model: { copilot: "gpt-5" } }).skipped, ["effort"]);
   assert.equal(gateSummary("copilot", { ...semModelo, model: { copilot: "gpt-5" } }).model, "gpt-5");
+});
+
+test("as leis de execução são copiadas SEMPRE, sem depender de arquitetura", () => {
+  const semArch = path.join(tmp(), "skills");
+  installEngine(semArch, ["adr-create"], {});
+  const lei = path.join(semArch, "_shared", "laws", "execution-laws.md");
+  assert.ok(existsSync(lei), "a fonte é núcleo: não depende de skill de arquitetura");
+  assert.ok(!existsSync(path.join(semArch, "_shared", "arch")), "controle: a de arquitetura NÃO veio");
+});
+
+test("o token {{MGR_LAWS}} é resolvido para o caminho da fonte no motor", () => {
+  const linha = `Execution laws (binding): ${catalog.LAWS_TOKEN}`;
+  const resolvida = resolveLaws(linha, ".claude/skills/_shared/laws/execution-laws.md");
+  assert.equal(resolvida, "Execution laws (binding): .claude/skills/_shared/laws/execution-laws.md");
+  assert.ok(!resolvida.includes(catalog.LAWS_TOKEN));
+});
+
+test("sem referência resolvida, o ponteiro das leis cai no caminho da fonte, nunca no token cru", () => {
+  assert.equal(resolveLaws(catalog.LAWS_TOKEN, null), catalog.LAWS_SHARED);
+  assert.equal(resolveLaws("sem token aqui", "x"), "sem token aqui");
+});
+
+test("as 45 leis têm ID único e papel declarado", () => {
+  const lei = readFileSync(path.join(bundle.sharedDir(), "laws", "execution-laws.md"), "utf8");
+  const cabecalhos = [...lei.matchAll(/^### (L\d+\.\d+) — .+?`\[([A-Za-z, ]+)\]`$/gm)];
+  assert.equal(cabecalhos.length, 45, "45 leis, L0.1 a L6.5");
+  const ids = cabecalhos.map((m) => m[1]);
+  assert.equal(new Set(ids).size, ids.length, "nenhum ID repetido");
+  const papeisValidos = new Set(["All", "Planner", "Executor", "Verifier", "Diagnostician"]);
+  for (const [, id, papeis] of cabecalhos) {
+    for (const papel of papeis.split(",").map((p) => p.trim())) {
+      assert.ok(papeisValidos.has(papel), `papel inválido em ${id}: ${papel}`);
+    }
+  }
+});
+
+test("as invariantes I1, I2 e I3 sobrevivem verbatim na fonte única", () => {
+  const normalizar = (texto) => texto.replace(/\s+/g, " ");
+  const lei = normalizar(readFileSync(path.join(bundle.sharedDir(), "laws", "execution-laws.md"), "utf8"));
+  const clausulas = [
+    "even if the problem is real",
+    "in the absence of an explicit textual excerpt, the code is conformant",
+    "ALWAYS archive raw facts to files and keep a cross-reference",
+    "**never** re-rank one against the other nor merge the findings",
+  ];
+  for (const clausula of clausulas) {
+    assert.ok(lei.includes(normalizar(clausula)), `invariante perdida: ${clausula}`);
+  }
+});
+
+test("o preâmbulo aponta para a fonte DO MOTOR, não para a do outro", async () => {
+  const repo = tmp();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  installer.execute(installer.planInstall(["claude-code", "copilot"], "project", repo, { names: ["adr-create"] }));
+
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const run = (motor) => execFileSync("node", [bin, "detect", "--hook", motor, repo], { encoding: "utf8" });
+
+  assert.match(run("claude-code"), /\.claude[/\\]skills[/\\]_shared[/\\]laws/);
+  const copilot = JSON.parse(run("copilot")).additionalContext;
+  assert.match(copilot, /\.github[/\\]skills[/\\]_shared[/\\]laws/);
+  assert.ok(!copilot.includes(".claude"), "cada motor é autossuficiente (CONSTITUTION §2.5)");
 });

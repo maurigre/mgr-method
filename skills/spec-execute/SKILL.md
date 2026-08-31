@@ -116,17 +116,10 @@ POST/GET/PATCH/DELETE"* — **not** four controllers, no renaming, no splitting,
 
 ## Active context control (throughout the execution)
 
-Tiers: **S** constitution+brief (never leaves) · **A** PRD+spec · **B** pending tasks ·
-**C** code of the CURRENT task · **D** decisions (summary) · **E** completed tasks ·
-**F** raw logs.
-
-At **75% of the window**: archive E→`05-execution.md` (structured block per task) and
-F→`.specs-cache/<feature>/logs/`, replacing them with a short reference; validate S/A/B
-intact. Still high (~95% of the hard limit) → generate `/specs/<slug>/.handoff.md`
-(state, pending tasks, decisions, modified files, next task, instructions) and end the
-session. **Anti-compaction (hard rule):** never summarize the conversation, never accept
-automatic compaction, never trade structured context for prose — archive facts to disk
-and keep a reference.
+Execution laws (binding — they take precedence over this file's prose): {{MGR_LAWS}}
+This skill's role is **Executor**. Context control is **L3.1–L3.8**: mandatory tiers, archiving
+at 75% with the size estimate, hand-off at ~95%, the ANTI-COMPACTION hard rule, and the rule that
+a resumption loads only S/A/B(pending)/D — never archived E/F.
 
 ## Closing
 

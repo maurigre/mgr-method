@@ -8,6 +8,9 @@ description: Creates Architecture Decision Records (ADRs) in Michael Nygard's ca
 Output language: {{MGR_USER_LANGUAGE}} — all user-facing interaction and generated artifacts
 use this language; generated file names and rule IDs stay in English.
 
+Execution laws (binding — they take precedence over this file's prose): {{MGR_LAWS}}
+This skill's role is **Planner**.
+
 ## Directory detection (runs EVERY time, before anything)
 
 **Step 1 — Look for existing ADRs** in: `/docs/adrs/`, `/docs/adr/`,

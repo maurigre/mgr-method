@@ -38,6 +38,12 @@ export function buildRuntime(runtimeDir, names) {
   return names;
 }
 
+// Resolve a linha-ponteiro das leis de execução para o caminho da fonte no motor (ADR-0011).
+// Puro, como o resolveUserLanguage ao lado: a resolução é testável sem tocar em disco.
+export function resolveLaws(text, lawsRef) {
+  return text.replaceAll(catalog.LAWS_TOKEN, lawsRef || catalog.LAWS_SHARED);
+}
+
 // Resolve a linha-ponteiro de idioma de uma SKILL.md para o idioma de saída do usuário.
 export function resolveUserLanguage(text, userLanguage) {
   return text.replaceAll(catalog.USER_LANGUAGE_TOKEN, userLanguage || catalog.USER_LANGUAGE_FALLBACK);
@@ -47,7 +53,7 @@ export function resolveUserLanguage(text, userLanguage) {
 // Copia a fonte transversal (_shared/arch) quando há skill de arquitetura, resolve o token
 // {{MGR_ARCH_RULES}} para o caminho passado em archRulesRef e o {{MGR_USER_LANGUAGE}} de
 // todas as skills para userLanguage.
-export function installEngine(engineSkillsDir, skills, { archRulesRef, userLanguage, engineId, reviewGate } = {}) {
+export function installEngine(engineSkillsDir, skills, { archRulesRef, lawsRulesRef, userLanguage, engineId, reviewGate } = {}) {
   mkdirSync(engineSkillsDir, { recursive: true });
   const dirs = skills.map((name) => buildSkill(name, engineSkillsDir));
 
@@ -84,6 +90,20 @@ export function installEngine(engineSkillsDir, skills, { archRulesRef, userLangu
       const text = readFileSync(md, "utf8").replaceAll(catalog.ARCH_RULES_TOKEN, ref);
       writeFileSync(md, text, "utf8");
     }
+  }
+
+  // Leis de execução (ADR-0011): fonte única, copiada SEMPRE — não depende de arquitetura nem
+  // de qual skill foi escolhida. O ponteiro {{MGR_LAWS}} em cada SKILL.md do CORE é resolvido
+  // para este caminho; sem a cópia, o ponteiro apontaria para o vazio.
+  const destino = path.join(engineSkillsDir, ...catalog.LAWS_INSTALLED);
+  mkdirSync(path.dirname(destino), { recursive: true });
+  cpSync(path.join(bundle.pkgDir("shared"), "laws", "execution-laws.md"), destino);
+
+  const lawsRef = lawsRulesRef || path.join(...catalog.LAWS_INSTALLED);
+  for (const name of skills) {
+    const md = path.join(engineSkillsDir, name, "SKILL.md");
+    const text = readFileSync(md, "utf8");
+    if (text.includes(catalog.LAWS_TOKEN)) writeFileSync(md, resolveLaws(text, lawsRef), "utf8");
   }
 
   // Fonte de qualidade (co-locada) — usada pelo spec-init ao montar o guia de review.

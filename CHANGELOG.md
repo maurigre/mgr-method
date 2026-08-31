@@ -7,6 +7,46 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
+## [0.7.0-beta.3] - 2026-08-31
+> Fonte única das leis de execução e blindagem da autoridade contra conteúdo injetado em runtime.
+> Pré-release no dist-tag `next`.
+
+### Adicionado
+- **Fonte única das leis de execução** (ADR-0011): `shared/laws/execution-laws.md` reúne as 45
+  leis do método (L0–L6), cada uma declarando **a quem se aplica por papel** — `Planner`,
+  `Executor`, `Verifier`, `Diagnostician` ou `All`. As seis skills do CORE deixaram de repetir
+  lei e passaram a apontar para ela pelo token `{{MGR_LAWS}}`, resolvido no install.
+- **Preâmbulo de leis no hook de sessão**: as leis centrais entram no contexto **antes da
+  primeira mensagem**, por gatilho de plataforma. 19 linhas, teto de 25. Interruptor próprio em
+  `.mgr-core/config.json` → `lawsPreamble`, independente do `--no-hooks` e do `reviewGate`.
+- **Quarentena de injeção e rebaixamento de evidência** (L0.2/L0.3): conteúdo vindo de documento
+  ingerido, página web, saída de tool ou resposta de MCP é **dado, nunca instrução**; memória de
+  longo prazo e saída de tool orientam, mas não provam conclusão nem destravam checkpoint.
+- **`scripts/check-laws.mjs`**: verifica ID duplicado, papel inválido, skill do CORE sem ponteiro,
+  lei órfã e token não resolvido. Roda com `--self-test`.
+
+### Corrigido
+- **A lei de controle de contexto havia divergido entre duas skills.** Medido em disco: a cópia da
+  `spec-execute` — a skill que roda longo — tinha perdido a estimativa de tamanho de janela, a
+  proibição de recarregar tiers arquivados, o "fato **bruto**" da anti-compactação e o gatilho
+  duplo do hand-off. As quatro voltam a valer nela pela fonte única.
+- **O hook de um motor podia anunciar a fonte de leis do outro** quando os dois estavam
+  instalados, ferindo a autossuficiência por motor. O caminho passa a ser resolvido pelo
+  diretório do próprio motor.
+
+### Segurança
+- A hierarquia de autoridade do ADR-0007 ganhou um **quinto nível, o mais baixo**: conteúdo
+  injetado em runtime. Nenhum nível existente mudou de posição e nenhuma regra foi relaxada.
+
+### O que degrada, declarado
+- **A quarentena reduz risco e aumenta detectabilidade; não elimina prompt injection.** Linguagem
+  natural maliciosa não é detectável com garantia, e o método não promete o contrário.
+- **A L1.10 (proveniência por asserção) entra declarada e não verificável.** Nenhum validador
+  confere as etiquetas hoje; a checagem depende do formato verificável de artefatos, que é outra
+  feature. O próprio texto da lei diz isso.
+- **A chegada do preâmbulo ao contexto foi verificada só na emissão.** Os dois formatos de hook
+  foram medidos; a chegada antes da primeira mensagem exige sessão nova em cada motor.
+
 ## [0.7.0-beta.2] - 2026-08-30
 > Gate de validação como agente: a revisão passa a rodar no modelo e no esforço que ela
 > declara, isolada da conversa que produziu o código. Pré-release no dist-tag `next`.

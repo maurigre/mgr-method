@@ -5,7 +5,8 @@ import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  collectSuggestions, detect, hookReport, MAX_SCAN_BYTES, PATH_MARKERS, SERVICE_MARKERS, suggest,
+  collectSuggestions, detect, hookReport, lawsPreamble, MAX_SCAN_BYTES, PATH_MARKERS,
+  SERVICE_MARKERS, suggest,
 } from "../src/detector.js";
 
 const tmp = () => mkdtempSync(path.join(os.tmpdir(), "mgr-detector-"));
@@ -242,4 +243,43 @@ test("arquivo exatamente no teto de leitura AINDA é inspecionado", () => {
 
   assert.equal(Buffer.byteLength(marcador + enchimento), MAX_SCAN_BYTES, "o arquivo está no limite exato");
   assert.ok(ecossistemas(repo).includes("postgres"), "no teto lê; só acima do teto para de ler");
+});
+
+test("o preâmbulo cabe no teto de 25 linhas e carrega as quatro leis centrais", () => {
+  const preambulo = lawsPreamble("_shared/laws/execution-laws.md");
+  assert.ok(preambulo.length <= 25, `teto de 25 linhas: veio com ${preambulo.length}`);
+  const texto = preambulo.join("\n");
+  assert.match(texto, /_shared\/laws\/execution-laws\.md/, "aponta para a fonte");
+  assert.match(texto, /runtime-injected content/, "hierarquia com o quinto nível");
+  assert.match(texto, /\[quarantined\]/, "quarentena L0.2");
+  assert.match(texto, /not evidence/i, "rebaixamento L0.3");
+  assert.match(texto, /the code is\s+conformant|conformant/, "L1.1");
+  assert.match(texto, /NEVER accept automatic/, "anti-compactação L3.2");
+});
+
+test("preâmbulo desligado: a saída do hook é a de antes, sem uma linha a mais", () => {
+  const sugestoes = [{ name: "@mgr/junit-clean", version: "1.0.0", ecosystem: "java", evidence: "pom.xml" }];
+  const antes = hookReport(sugestoes, "claude-code");
+  assert.ok(!antes.includes("Execution laws"), "sem preâmbulo, nada de leis");
+  assert.match(antes, /^\[mgr\] Plugin skills available/);
+});
+
+test("preâmbulo ligado entra ANTES do relatório, nos dois motores", () => {
+  const sugestoes = [{ name: "@mgr/junit-clean", version: "1.0.0", ecosystem: "java", evidence: "pom.xml" }];
+  const preambulo = lawsPreamble("x/execution-laws.md");
+
+  const claude = hookReport(sugestoes, "claude-code", { preamble: preambulo });
+  assert.ok(claude.indexOf("Execution laws") < claude.indexOf("Plugin skills available"), "leis primeiro");
+
+  const copilot = JSON.parse(hookReport(sugestoes, "copilot", { preamble: preambulo }));
+  assert.ok(copilot.additionalContext.indexOf("Execution laws") >= 0, "envelope JSON válido e com o preâmbulo");
+  assert.ok(copilot.additionalContext.indexOf("Execution laws") < copilot.additionalContext.indexOf("Plugin skills"));
+});
+
+test("sem sugestão alguma, o preâmbulo ainda chega — a lei não depende de haver skill a propor", () => {
+  const preambulo = lawsPreamble("x/execution-laws.md");
+  assert.match(hookReport([], "claude-code", { preamble: preambulo }), /Execution laws/);
+  assert.match(JSON.parse(hookReport([], "copilot", { preamble: preambulo })).additionalContext, /Execution laws/);
+  assert.equal(hookReport([], "claude-code"), "", "sem preâmbulo e sem sugestão, nada muda");
+  assert.equal(JSON.parse(hookReport([], "copilot")).additionalContext, "");
 });

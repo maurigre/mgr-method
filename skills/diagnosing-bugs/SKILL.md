@@ -8,6 +8,9 @@ description: Discipline for diagnosing hard bugs and performance regressions —
 Output language: {{MGR_USER_LANGUAGE}} — all user-facing interaction and generated artifacts
 use this language; generated file names and rule IDs stay in English.
 
+Execution laws (binding — they take precedence over this file's prose): {{MGR_LAWS}}
+This skill's role is **Diagnostician**.
+
 Discipline for hard bugs. **Skip a phase only with an explicit justification.**
 
 The rule that governs everything: **signal before theory.** Until you have a command that

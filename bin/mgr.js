@@ -5,6 +5,7 @@ import * as p from "@clack/prompts";
 import pc from "picocolors";
 import * as bundle from "../src/bundle.js";
 import * as installer from "../src/installer.js";
+import * as catalogo from "../src/catalog.js";
 import { buildRuntime, gateSummary } from "../src/builder.js";
 import { validateAll } from "../src/validator.js";
 import { printBanner } from "../src/banner.js";
@@ -15,10 +16,11 @@ import {
   installedPluginNames, CANCELLED_EXIT_CODE,
 } from "../src/plugin-installer.js";
 import {
-  addRegistry, fetchIndex, listRegistries, readDetectionMode, readReviewGate, removeRegistry,
+  addRegistry, fetchIndex, lawsFallbackRef, listRegistries, readDetectionMode,
+  readLawsPreamble, readReviewGate, removeRegistry,
 } from "../src/registry.js";
 import { diff as lockfileDiff, readLockfile, replacedByEngine, LOCKFILE_NAME } from "../src/lockfile.js";
-import { collectSuggestions, detect, hookReport } from "../src/detector.js";
+import { collectSuggestions, detect, hookReport, lawsPreamble } from "../src/detector.js";
 import { hookFilePath, removeHook, writeHook } from "../src/hooks.js";
 
 const SCOPES = ["project", "global"];
@@ -153,6 +155,9 @@ async function cmdInstall(flags, positional) {
       // O agente também mora em diretório do usuário: ele vê modelo e esforço por motor
       // ANTES de confirmar, e vê o que o motor não suporta (ADR-0010).
       ...linhasDoGate(plan),
+      // A fonte de leis e o preâmbulo também são escrita em arquivo do usuário: aparecem no
+      // plano antes da confirmação, como o hook e o agente (ADR-0011).
+      ...linhasDasLeis(plan),
     ].join("\n"),
     M.planTitle
   );
@@ -385,7 +390,16 @@ async function cmdDetect(flags, positional) {
   if (flags.hook) {
     // Falha aqui nao pode poluir nem derrubar a sessao do agente: no pior caso, silencio.
     try {
-      process.stdout.write(hookReport((await suggestionsFor(repo, detected)).suggestions, flags.hook));
+      // O preâmbulo das leis entra ANTES do relatório, no mesmo canal do motor (ADR-0011).
+      // Desligado, a saída volta a ser exatamente a de antes — nem uma linha a mais.
+      const core = installer.coreDir("project", repo);
+      const ligado = readLawsPreamble(core).enabled;
+      const referencia = installer.installedLawsRef(flags.hook, "project", repo) || lawsFallbackRef();
+      process.stdout.write(hookReport(
+        (await suggestionsFor(repo, detected)).suggestions,
+        flags.hook,
+        { preamble: ligado ? lawsPreamble(referencia) : null },
+      ));
     } catch {
       return 0;
     }
@@ -446,6 +460,17 @@ async function proposeDetected(repo, scope, targets) {
 // em vez de omitido. Vazio quando o gate está desligado — o plano fica igual ao de antes.
 // Formatação de uma linha do gate. A DECISÃO de o que se aplica vem do núcleo
 // (`gateSummary`); aqui só se escolhe a palavra para o que não se aplica.
+function linhasDasLeis(plan) {
+  const motores = plan.targets.filter((alvo) => alvo.engine !== "custom");
+  if (!motores.length) return [];
+  const dirs = motores.map((alvo) => path.relative(plan.repo, path.join(alvo.dir, ...catalogo.LAWS_INSTALLED)));
+  const ligado = readLawsPreamble(installer.coreDir(plan.scope, plan.repo)).enabled;
+  return [
+    `${M.planLaws([...new Set(dirs)].join(" · "))}  ${pc.dim(M.planLawsHint)}`,
+    ligado ? M.planPreambleOn : M.planPreambleOff,
+  ];
+}
+
 function linhaDoMotor(engine, gate, formato = M.planGateEngine) {
   const { model, effort } = gateSummary(engine, gate);
   return formato(engine, model || M.gateModelInherited, effort || M.gateEffortInherited);
@@ -487,6 +512,8 @@ function cmdStatus(_f, positional) {
           console.log(linhaDoMotor(engine, gate, M.statusGateEngine));
         }
       }
+      const preambulo = readLawsPreamble(man.core);
+      console.log(M.statusLaws(preambulo.enabled ? M.planPreambleOn.trim() : M.planPreambleOff.trim()));
       console.log(M.statusInstalledAt(man.installedAt));
     }
   }

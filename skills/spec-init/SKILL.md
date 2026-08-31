@@ -8,6 +8,9 @@ description: Initializes a project's SDD (Specification-Driven Development) stru
 Output language: {{MGR_USER_LANGUAGE}} — all user-facing interaction and generated artifacts
 use this language; generated file names and rule IDs stay in English.
 
+Execution laws (binding — they take precedence over this file's prose): {{MGR_LAWS}}
+This skill's role is **Planner**.
+
 You initialize the SDD methodology in a project: analyze (brownfield) or interview
 (greenfield), and generate `/docs/sdd/` + `CONSTITUTION.md` + `docs/sdd/09-review-rules.md`.
 Skill AGNOSTIC to language and stack: detect dynamically, never assume.

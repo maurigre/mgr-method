@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   addRegistry, configPath, fetchIndex, listRegistries, readConfig, readDetectionMode,
-  readReviewGate, removeRegistry, resolve, validateIndex, writeConfig,
+  readLawsPreamble, readReviewGate, removeRegistry, resolve, validateIndex, writeConfig,
 } from "../src/registry.js";
 import { REVIEW_GATE } from "../src/catalog.js";
 
@@ -234,4 +234,34 @@ test("o gate sobrevive ao addRegistry, como o modo de detecção", () => {
   writeConfig(core, { registries: [], reviewGate: { effort: "high" } });
   addRegistry(core, { name: "mgr", url: INDEX_URL });
   assert.equal(readReviewGate(core).effort, "high");
+});
+
+test("preâmbulo ausente no config vale ligado", () => {
+  const core = tmp();
+  writeConfig(core, { registries: [] });
+  assert.deepEqual(readLawsPreamble(core), { enabled: true });
+});
+
+test("preâmbulo pode ser desligado, e sobrevive ao addRegistry", () => {
+  const core = tmp();
+  writeConfig(core, { registries: [], lawsPreamble: { enabled: false } });
+  assert.equal(readLawsPreamble(core).enabled, false);
+  addRegistry(core, { name: "mgr", url: INDEX_URL });
+  assert.equal(readLawsPreamble(core).enabled, false, "o ajuste sobrevive à escrita do config");
+});
+
+test("o interruptor do preâmbulo é independente do gate de validação", () => {
+  const core = tmp();
+  writeConfig(core, { registries: [], lawsPreamble: { enabled: false }, reviewGate: { enabled: true } });
+  assert.equal(readLawsPreamble(core).enabled, false);
+  assert.equal(readReviewGate(core).enabled, true, "desligar um não desliga o outro");
+});
+
+test("preâmbulo com valor inválido reprova com o valor na mensagem", () => {
+  const core = tmp();
+  writeConfig(core, { registries: [], lawsPreamble: { enabled: "sim" } });
+  assert.throws(() => readLawsPreamble(core), /invalid lawsPreamble\.enabled: "sim"/);
+
+  writeConfig(core, { registries: [], lawsPreamble: true });
+  assert.throws(() => readLawsPreamble(core), /invalid lawsPreamble: true/);
 });

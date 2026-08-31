@@ -6,7 +6,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { EFFORT_LEVELS, parseSkillName } from "./plugin.js";
-import { REVIEW_GATE } from "./catalog.js";
+import { LAWS_SHARED, REVIEW_GATE } from "./catalog.js";
 import * as engines from "./engines/index.js";
 
 export const CONFIG_NAME = "config.json";
@@ -188,3 +188,25 @@ export function readReviewGate(coreDir) {
 
   return gate;
 }
+
+// Preâmbulo das leis no hook de sessão (ADR-0011). Interruptor PRÓPRIO, separado do --no-hooks:
+// desligar o preâmbulo não desliga a detecção de skills, e vice-versa. Ausente = LIGADO — o hook
+// já é instalado por padrão, e um default desligado entregaria valor a ninguém que não
+// configurasse.
+export const LAWS_PREAMBLE_DEFAULTS = { enabled: true };
+
+export function readLawsPreamble(coreDir) {
+  const configured = readConfig(coreDir).lawsPreamble;
+  if (configured === undefined) return { ...LAWS_PREAMBLE_DEFAULTS };
+  if (!isPlainObject(configured)) {
+    throw new Error(`invalid lawsPreamble: ${JSON.stringify(configured)} (expected an object)`);
+  }
+  const preamble = { ...LAWS_PREAMBLE_DEFAULTS, ...configured };
+  if (typeof preamble.enabled !== "boolean") {
+    throw new Error(`invalid lawsPreamble.enabled: ${JSON.stringify(preamble.enabled)} (expected true | false)`);
+  }
+  return preamble;
+}
+
+// Caminho da fonte de leis anunciado no preâmbulo quando não há referência resolvida.
+export const lawsFallbackRef = () => LAWS_SHARED;

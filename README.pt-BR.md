@@ -85,6 +85,7 @@ code-analyzer ─ review final de 2 eixos: Standards (guia DO projeto) + Spec (c
 
 | Skill | Papel |
 |---|---|
+| **Leis de execução** | **Fonte única** em `shared/laws/execution-laws.md`: 45 leis (L0–L6) que valem para todas as skills, cada uma declarando **a quem se aplica por papel** (`Planner`, `Executor`, `Verifier`, `Diagnostician`, `All`). As skills apontam para ela; nenhuma repete lei. As centrais entram no contexto **antes da primeira mensagem**, pelo hook de sessão (ADR-0011). |
 | `spec-init` | Inicializa a SDD: analisa projeto existente (chunking em fases) **ou** entrevista guiada em projeto vazio (greenfield). Gera `docs/sdd/`, a `CONSTITUTION.md` do projeto e o guia de review. |
 | `spec-create` | Evolui o projeto por feature: brief → PRD → spec → plano (P0/P1/P2 + DAG), com checkpoints bloqueantes; após a aprovação do plano, delega a implementação ao `spec-execute` e fecha com o completion. |
 | `spec-execute` | Executa o plano aprovado task a task (DAG), aplicando as premissas de desenvolvimento (segurança, performance, recursos, clareza — "vocabulário, não checklist") e o controle ativo de contexto (tiers S–F, arquivamento a 75%, hand-off, anti-compactação). Retomada direta de execução interrompida. |

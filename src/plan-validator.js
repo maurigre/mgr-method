@@ -11,10 +11,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { SPECS_DIR, artifactFiles } from "./artifacts.js";
 import { summarize } from "./findings.js";
-import { parse } from "./plan-parser.js";
+import { PLAN_FILE, parse } from "./plan-parser.js";
 import { check } from "./plan-rules.js";
-
-const PLAN_FILE = "04-plan.md";
 
 // Slug derivado do diretório atual, quando se está dentro de `specs/<slug>/`. Devolve `null`
 // quando não dá para derivar — quem chama decide o que fazer, em vez de receber um palpite.

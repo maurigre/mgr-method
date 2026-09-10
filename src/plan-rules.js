@@ -2,13 +2,14 @@
 //
 // Duas famílias, e a distinção é o que protege quem já tem plano escrito:
 //
-//   CONSISTÊNCIA (PLAN-1, PLAN-2, PLAN-3) — rodam SEMPRE, sobre os campos que existirem. Um plano
+//   CONSISTÊNCIA (PLAN-1, PLAN-2, PLAN-3, PLAN-6) — rodam SEMPRE, sobre os campos que existirem. Um plano
 //   legado que declare `depends_on` ganha verificação de dependência de graça, sem migrar nada.
 //
 //   PRESENÇA (PLAN-4) — só rodam com o marcador de formato. Sem ele, exigir campo seria acusar
 //   ausência de algo que o autor nunca prometeu: 3 dos 9 planos em disco são mistos e nenhum tem
 //   `done_when`; inferir formato os reprovaria 35 vezes.
 import { create } from "./findings.js";
+import { STATUS_VALUES, priorityLevel } from "./plan-parser.js";
 
 const MAX_FILES = 3;
 
@@ -47,6 +48,7 @@ export function checkConsistency(parsed, file) {
   }
 
   findings.push(...detectCycles(parsed, file, gravidade));
+  findings.push(...checkStatus(parsed, file));
   return findings;
 }
 
@@ -116,20 +118,40 @@ export function checkPresence(parsed, file) {
   return findings;
 }
 
+// PLAN-6 — `status` fora do vocabulário fechado (ADR-0014). Família CONSISTÊNCIA, e não presença:
+// ela julga um campo que EXISTE, em vez de cobrar um que falta. Por isso roda também em plano
+// legado, que é onde um `status` escrito à mão tem mais chance de sair errado.
+//
+// Aviso SEMPRE, e não `gravidade`: o campo é novo, e nenhum plano escrito antes dele existir pode
+// ser reprovado por causa dele — nem quando declara o formato.
+//
+// Ignorar o valor errado em silêncio faria o `mgr spec next` responder errado sem ninguém saber —
+// que é a forma do defeito que a fatia 2 encontrou no marcador dentro de bloco cercado. O valor
+// inválido já falha para o lado seguro (nunca conta como `done`); esta regra faz o autor VER.
+function checkStatus(parsed, file) {
+  return parsed.tasks
+    .filter((task) => !STATUS_VALUES.includes(task.status))
+    .map((task) => create({
+      code: "PLAN-6", severity: "warning", file, line: task.line, task: task.id,
+      message: `status \`${task.status}\` não é \`${STATUS_VALUES.join("` nem `")}\``,
+      remediation: `O vocabulário é fechado e em inglês, como as chaves: só \`${STATUS_VALUES.join("` e `")}\`. Valor fora dele nunca conta como concluído, então a task será oferecida de novo.`,
+      example: "- **status:** done",
+    }));
+}
+
 // PLAN-5 — dependência fora de ordem de prioridade. Warning: às vezes é intencional, e reprovar
 // julgamento de sequência seria decidir por quem planejou.
 function checkPriorityOrder(parsed, file) {
-  const nivel = (id) => Number(id.match(/^P(\d+)\./)?.[1] ?? NaN);
   const porId = new Map(parsed.tasks.map((task) => [task.id, task]));
   const findings = [];
 
   for (const task of parsed.tasks) {
     for (const dependencia of task.dependsOn) {
       if (!porId.has(dependencia)) continue;
-      if (!(nivel(task.id) < nivel(dependencia))) continue;
+      if (!(priorityLevel(task.id) < priorityLevel(dependencia))) continue;
       findings.push(create({
         code: "PLAN-5", severity: "warning", file, line: task.line, task: task.id,
-        message: `task de prioridade P${nivel(task.id)} depende de \`${dependencia}\`, que é P${nivel(dependencia)}`,
+        message: `task de prioridade P${priorityLevel(task.id)} depende de \`${dependencia}\`, que é P${priorityLevel(dependencia)}`,
         remediation: "Confira se a prioridade está certa: bloqueante que espera complementar normalmente indica que uma das duas está no bloco errado.",
         example: "- **depends_on:** [P0.1]   (numa task P1.x)",
       }));

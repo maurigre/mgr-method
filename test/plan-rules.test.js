@@ -118,8 +118,11 @@ test("PLAN-5 não avisa na ordem natural", () => {
 const RAIZ = fileURLToPath(new URL("..", import.meta.url));
 const FIXTURES = path.join(RAIZ, "test", "fixtures", "plans");
 
+// Varre o diretório inteiro de propósito: fixture real nova entra na garantia sem ninguém
+// lembrar de listá-la. `invalidos/` fica de fora porque o defeito lá é DELIBERADO — é o
+// material dos testes que precisam de um plano quebrado.
 test("nenhuma das formas reais de plano produz erro", () => {
-  for (const nome of readdirSync(FIXTURES)) {
+  for (const nome of readdirSync(FIXTURES, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name)) {
     const findings = check(parse(readFileSync(path.join(FIXTURES, nome), "utf8")), nome);
     assert.deepEqual(
       findings.filter((f) => f.severity === "error").map((f) => f.code), [],
@@ -153,4 +156,46 @@ test("o template do método passa no próprio validador — exemplo que falharia
   const parsed = parse(readFileSync(template, "utf8"));
   assert.equal(parsed.format.declared, true, "o template declara o formato que ele ensina");
   assert.deepEqual(check(parsed, "template").filter((f) => f.severity === "error").map((f) => f.code), []);
+  // O template mostra `status` nos dois valores. Se um deles saísse do vocabulário, o exemplo
+  // ensinaria o erro — e a PLAN-6 acusaria o próprio template.
+  assert.deepEqual(codigos(check(parsed, "template")), [], "nem aviso: o exemplo é conforme");
+  assert.deepEqual(parsed.tasks.map((task) => task.status), ["todo", "todo"],
+    "template que já viesse com uma task `done` faria o `next` PULAR trabalho que ninguém fez");
+});
+
+// PLAN-6 (ADR-0014). Os dois lados da decisão: valor válido não avisa, valor fora do vocabulário
+// avisa. Sem o lado positivo, a regra provaria só que sabe falhar.
+test("PLAN-6 avisa sobre status fora do vocabulário, e só sobre ele", () => {
+  const plano = (status) => parse([
+    "<!-- mgr-plan-format: 1 -->",
+    "### P0.1 — a", "- **artifact:** 1 x", "- **done_when:** y", `- **status:** ${status}`,
+  ].join("\n"));
+
+  for (const valido of ["todo", "done"]) {
+    assert.deepEqual(codigos(check(plano(valido), "04-plan.md")), [], `\`${valido}\` é do vocabulário`);
+  }
+
+  const [aviso] = check(plano("concluído"), "04-plan.md");
+  assert.equal(aviso.code, "PLAN-6");
+  assert.equal(aviso.severity, "warning", "campo novo nunca reprova plano escrito antes dele");
+  assert.equal(aviso.task, "P0.1");
+  assert.match(aviso.message, /status `concluído` não é `todo` nem `done`/);
+});
+
+test("PLAN-6 vale também no plano legado, e continua aviso", () => {
+  const legado = parse("### P0.1 — a\n- **status:** wip\n");
+  assert.ok(codigos(check(legado, "04-plan.md")).includes("PLAN-6"));
+  assert.deepEqual(
+    check(legado, "04-plan.md").filter((f) => f.severity === "error").map((f) => f.code), [],
+    "nada de erro num plano sem marcador",
+  );
+});
+
+// A fixture inválida existe para ser defeituosa, e a varredura por diretório não a alcança.
+// Sem esta asserção, nada afirma o defeito que ela promete no próprio cabeçalho.
+test("a fixture de plano inválido produz exatamente o PLAN-1 que ela promete", () => {
+  const caminho = path.join(FIXTURES, "invalidos", "nada-pronto.md");
+  const findings = check(parse(readFileSync(caminho, "utf8")), "nada-pronto.md");
+  assert.deepEqual(findings.filter((f) => f.severity === "error").map((f) => f.code), ["PLAN-1"]);
+  assert.match(findings[0].message, /P9\.9/);
 });

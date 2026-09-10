@@ -8,6 +8,7 @@ import * as installer from "../src/installer.js";
 import * as catalogo from "../src/catalog.js";
 import * as planValidator from "../src/plan-validator.js";
 import * as specValidator from "../src/spec-validator.js";
+import * as planNext from "../src/plan-next.js";
 import { blocking, summarize } from "../src/findings.js";
 import { buildRuntime, gateSummary } from "../src/builder.js";
 import { validateAll } from "../src/validator.js";
@@ -550,9 +551,71 @@ function linhasDoGate(plan) {
 }
 
 // Namespace `mgr spec <sub>`: separado do `mgr validate` de propósito (ADR-0012).
+// `mgr spec next` — a próxima AÇÃO, não o estado (ADR-0014). Sem `--all`: a pergunta "o que faço
+// agora" é sobre UMA feature. Aqui só há formatação e exit code; a decisão vive em src/plan-next.js.
+function cmdSpecNext(flags, positional) {
+  const repo = path.resolve(".");
+  const slug = positional[0] || planValidator.slugFromCwd(repo, process.cwd());
+  const resultado = planNext.nextTask(repo, { slug });
+
+  if (resultado.outcome === "no-plan") {
+    console.error(M.errorPrefix(M.specNextNoPlan(slug || path.join(repo, "specs"))));
+    return 1;
+  }
+
+  if (flags.json) {
+    console.log(JSON.stringify({
+      schemaVersion: 1,
+      outcome: resultado.outcome,
+      file: resultado.file,
+      task: resultado.task,
+      blocked: resultado.blocked || [],
+      stateDeclared: resultado.stateDeclared,
+      taskCount: resultado.taskCount,
+    }, null, 2));
+    return 0;
+  }
+
+  // O arquivo, sempre: sem slug e com vários planos a descoberta escolhe um, e o leitor precisa
+  // saber de qual feature a resposta fala.
+  console.log(M.specNextFile(resultado.file));
+
+  if (resultado.outcome === "task") {
+    const { task } = resultado;
+    console.log(M.specNextTask(task.id));
+    if (task.artifact) console.log(M.specNextArtifact(task.artifact));
+    if (task.doneWhen) console.log(M.specNextDoneWhen(task.doneWhen));
+    if (task.helperSkill) console.log(M.specNextSkill(task.helperSkill));
+    if (task.dependsOn.length) console.log(M.specNextDependsOn(task.dependsOn.join(", ")));
+  } else if (resultado.outcome === "all-done") {
+    console.log(M.specNextAllDone(resultado.taskCount));
+  } else if (resultado.outcome === "nothing-ready") {
+    console.log(M.specNextNothingReady);
+    for (const item of resultado.blocked) console.log(M.specNextBlocked(item.id, item.waitingFor.join(", ")));
+    console.log(M.specNextRunValidate);
+  } else if (resultado.outcome === "no-tasks") {
+    console.log(M.specNextNoTasks);
+  } else {
+    console.log(M.specNextFormatNotDeclared);
+  }
+
+  // A base do que se afirma, em TODA resposta — a CA-6 diz "toda", e o caminho sem marcador não
+  // era exceção escrita em lugar nenhum. Sem ela, devolver P0.1 para sempre seria lido como
+  // "esta é a próxima", quando o correto é "esta é a primeira que pode começar" (ADR-0014).
+  console.log("");
+  console.log(resultado.stateDeclared
+    ? M.specNextBasis(resultado.stateDeclared, resultado.taskCount)
+    : M.specNextNoState(resultado.taskCount));
+  // A ressalva só é verdadeira quando de fato se devolveu uma task. Dizê-la em "nada pronto"
+  // seria a saída prometendo o que não fez.
+  if (!resultado.stateDeclared && resultado.outcome === "task") console.log(M.specNextFirstStartable);
+  return 0;
+}
+
 function cmdSpec(flags, positional) {
   const sub = positional[0];
   if (sub === "validate") return cmdSpecValidate(flags, positional.slice(1));
+  if (sub === "next") return cmdSpecNext(flags, positional.slice(1));
   console.error(M.errorPrefix(M.unknownCommand(`spec ${sub || ""}`.trim())));
   return 1;
 }

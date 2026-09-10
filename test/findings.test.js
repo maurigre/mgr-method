@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { SEVERITIES, create, isError, summarize } from "../src/findings.js";
+import { SEVERITIES, STRICT_EXEMPT, blocking, create, isError, summarize } from "../src/findings.js";
 
 const valido = {
   code: "PLAN-1", severity: "error", file: "04-plan.md", line: 12, task: "P0.1",
@@ -47,4 +47,24 @@ test("summarize conta por severidade e isError distingue", () => {
   assert.deepEqual(summarize(findings), { errors: 2, warnings: 1 });
   assert.equal(isError(findings[1]), false);
   assert.deepEqual(SEVERITIES, ["error", "warning"]);
+});
+
+// A decisão de `blocking` tem duas condições que só importam juntas: o modo estrito e a isenção
+// do código. Os testes de CLI exercitavam só o lado isento — trocar a expressão inteira por
+// `false` mantinha a suíte verde, e a política mudou de módulo nesta fatia.
+const erro = (code) => create({ ...valido, code, severity: "error" });
+const aviso = (code) => create({ ...valido, code, severity: "warning" });
+
+test("blocking: erro bloqueia nos dois modos, e o modo frouxo ignora todo aviso", () => {
+  assert.equal(blocking([erro("PLAN-1")]), 1);
+  assert.equal(blocking([erro("PLAN-1")], { strict: true }), 1);
+  assert.equal(blocking([aviso("PLAN-5"), aviso("SPEC-4"), aviso("PLAN-0")]), 0);
+});
+
+test("blocking: --strict bloqueia o aviso NÃO isento, e só ele", () => {
+  assert.equal(blocking([aviso("PLAN-5")], { strict: true }), 1, "aviso comum reprova em modo estrito");
+  assert.equal(blocking([aviso("SPEC-4")], { strict: true }), 1);
+  assert.equal(blocking([aviso("PLAN-0")], { strict: true }), 0, "formato legado é isento (RN-2)");
+  assert.equal(blocking([aviso("SPEC-0")], { strict: true }), 0);
+  assert.deepEqual(STRICT_EXEMPT, ["PLAN-0", "SPEC-0"]);
 });

@@ -152,7 +152,7 @@ const en = {
   planPreambleOn: "  session preamble: on (the central laws enter before the first message)",
   planPreambleOff: "  session preamble: off (lawsPreamble.enabled = false)",
   statusLaws: (state) => `  laws:    ${state}`,
-  specValidateOk: (tasks, files) => `${files}: ${tasks} task(s) checked, no structural defect found.`,
+  specValidateOk: (tasks, criteria, files) => `${files} artifact(s): ${tasks} task(s) and ${criteria} acceptance criteria checked, no structural defect found.`,
   specValidateHeader: (file) => `${file}`,
   specValidateItem: (code, severity, task, line, message) =>
     `  ${severity === "error" ? "x" : "!"} ${code}${task ? ` ${task}` : ""}${line ? `:${line}` : ""} — ${message}`,
@@ -161,7 +161,7 @@ const en = {
   specValidateSummary: (errors, warnings) => `${errors} error(s), ${warnings} warning(s).`,
   specValidateNextSteps: "Next steps: fix the errors above and run `mgr spec validate` again.",
   specValidateScopeNote:
-    "This check is STRUCTURAL. It does not judge whether the plan is right, whether the tasks are the right ones, or whether a done criterion is good.",
+    "This check is STRUCTURAL. It does not judge whether the plan is right, whether the tasks are the right ones, whether a done criterion is good, nor whether an acceptance criterion is testable or covers the spec.",
   specValidateNoSpecs: (dir) => `no spec found in ${dir}`,
   gateKept: (file) => `  kept: ${file} lost the MGR marker and was left untouched`,
   statusGate: (state) => `  gate:    ${state}`,
@@ -181,7 +181,7 @@ Usage: mgr <command> [options]
   uninstall [repo] removes the installed skills (--scope, -y)
   build            generates a directory with the full content (--out)
   validate         validates the SKILL.md files (skill authoring)
-  spec validate    validates this project's plan artifacts
+  spec validate    validates this project's plan and spec artifacts
                    ([<slug>], --all, --strict, --json)
   list             lists the skills
   version          shows the version
@@ -346,7 +346,7 @@ const ptBR = {
   planPreambleOn: "  preâmbulo de sessão: ligado (as leis centrais entram antes da primeira mensagem)",
   planPreambleOff: "  preâmbulo de sessão: desligado (lawsPreamble.enabled = false)",
   statusLaws: (state) => `  leis:    ${state}`,
-  specValidateOk: (tasks, files) => `${files}: ${tasks} task(s) conferidas, nenhum defeito estrutural encontrado.`,
+  specValidateOk: (tasks, criteria, files) => `${files} artefato(s): ${tasks} task(s) e ${criteria} critérios de aceitação conferidos, nenhum defeito estrutural encontrado.`,
   specValidateHeader: (file) => `${file}`,
   specValidateItem: (code, severity, task, line, message) =>
     `  ${severity === "error" ? "x" : "!"} ${code}${task ? ` ${task}` : ""}${line ? `:${line}` : ""} — ${message}`,
@@ -355,7 +355,7 @@ const ptBR = {
   specValidateSummary: (errors, warnings) => `${errors} erro(s), ${warnings} aviso(s).`,
   specValidateNextSteps: "Próximos passos: corrija os erros acima e rode `mgr spec validate` de novo.",
   specValidateScopeNote:
-    "Esta verificação é ESTRUTURAL. Ela não julga se o plano está certo, se as tasks são as certas, nem se um critério de done é bom.",
+    "Esta verificação é ESTRUTURAL. Ela não julga se o plano está certo, se as tasks são as certas, se um critério de done é bom, nem se um critério de aceitação é testável ou cobre a spec.",
   specValidateNoSpecs: (dir) => `nenhuma spec encontrada em ${dir}`,
   gateKept: (file) => `  preservado: ${file} perdeu o marcador do MGR e não foi tocado`,
   statusGate: (state) => `  gate:    ${state}`,
@@ -375,7 +375,7 @@ Uso: mgr <comando> [opções]
   uninstall [repo] remove as skills instaladas (--scope, -y)
   build            gera um diretório com todo o conteúdo (--out)
   validate         valida as SKILL.md (autoria de skill)
-  spec validate    valida os planos deste projeto
+  spec validate    valida o plano e a spec deste projeto
                    ([<slug>], --all, --strict, --json)
   list             lista as skills
   version          mostra a versão

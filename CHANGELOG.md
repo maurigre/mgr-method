@@ -7,6 +7,44 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
+## [0.7.0-beta.5] - 2026-08-31
+> O método passa a verificar também a **spec** de uma feature. Pré-release no dist-tag `next`.
+
+### Adicionado
+- **`mgr spec validate` passa a cobrir a spec, além do plano** (ADR-0013). Cinco regras `SPEC-*`:
+  spec declarada sem nenhum critério de aceitação, identidade duplicada, critério vazio e buraco
+  na numeração.
+- **O critério de aceitação vira unidade verificável, identificado por `CA-<n>`** — a identidade é
+  o que uma reprovação cita, e o texto fica no idioma de quem escreve. Sem detecção de seção: o
+  título é prosa e varia com o idioma.
+
+### Corrigido
+- **Marcador de formato dentro de exemplo deixou de declarar o formato.** Uma spec que documenta
+  o próprio formato passava a declará-lo por acidente, e as tasks do exemplo viravam tasks. O
+  defeito existia nos dois parsers desde a fatia anterior; a correção é única e vale para ambos.
+  O fechamento de bloco cercado segue o CommonMark — mesmo caractere e comprimento maior ou igual —
+  então `~~~` não fecha um bloco aberto com crase, e uma cerca interna não fecha a externa.
+- **`CA-1` e `CA-01` deixaram de escapar da checagem de duplicidade.** A identidade passa a ser
+  comparada pelo número, não pela string: os dois são o mesmo critério para quem lê, e a citação
+  numa reprovação ficava ambígua.
+- **As fixtures de teste voltaram a ser versionadas.** O padrão `specs/` do `.gitignore` casava em
+  qualquer profundidade e engolia `test/fixtures/specs/` — as fixtures que existem justamente para
+  o teste não depender da máquina de quem escreve. Ancorado na raiz (`/specs/`, `/docs/sdd/`).
+- **O texto de escopo nomeia os dois artefatos.** Ele dizia não julgar o plano, as tasks e o
+  critério de done; passa a dizer também que não julga se um critério de aceitação é testável nem
+  se os critérios cobrem a spec — que é justamente a leitura errada que um verde convidava.
+
+### O que degrada, declarado
+- **Nenhuma spec existente é reprovada.** Sem marcador, **nenhuma** regra roda — só o aviso, nem
+  com `--strict`. Diferente do plano, onde as regras de consistência valem sobre o que existir:
+  aqui todas dependem da presença do critério, e exigi-lo de quem nunca prometeu seria acusar
+  ausência.
+- **A verificação é estrutural.** Ela não julga se o critério é testável, se os critérios cobrem a
+  spec, nem se o critério é bom — a segunda é o eixo Spec do `code-analyzer`, e fundir os dois
+  eixos é proibido.
+- **O formato `Requirement`/`Scenario`/`SHALL` foi rejeitado**, com a medição registrada no
+  ADR-0013: 10 de 10 specs usam critérios de aceitação, 0 de 10 usam requisito com cenário.
+
 ## [0.7.0-beta.4] - 2026-08-31
 > O método passa a verificar o **plano** de uma feature. Pré-release no dist-tag `next`.
 

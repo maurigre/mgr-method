@@ -9,8 +9,11 @@
 // chave em inglês reprovaria 35 tasks: 3 dos 9 planos são mistos — usam `depends_on` em inglês ao
 // lado de campos em português, e nenhum deles tem `done_when`.
 
-// `<!-- mgr-plan-format: 1 -->`, em qualquer lugar do arquivo (convenção: primeira linha).
-const FORMAT_MARKER = /<!--\s*mgr-plan-format:\s*(\d+)\s*-->/;
+import { stripFencedBlocks } from "./markdown.js";
+
+// Linha inteira, de propósito: `<!-- mgr-plan-format: 1 -->` citado no meio de uma frase
+// é documentação. Só declara o formato quem o põe sozinho numa linha.
+const FORMAT_MARKER = /^[ \t]*<!--\s*mgr-plan-format:\s*(\d+)\s*-->[ \t]*$/m;
 // `### P0.1 — título livre`. O ID é o que identifica; o resto do cabeçalho é prosa do usuário.
 const TASK_HEADER = /^#{2,4}\s+(P\d+\.\d+)\b/;
 // `- **chave:** valor` — só as chaves conhecidas entram; chave desconhecida é ignorada, não é erro.
@@ -25,7 +28,8 @@ function parseList(raw) {
   return limpo.split(",").map((item) => item.trim().replace(/^`|`$/g, "")).filter(Boolean);
 }
 
-export function parse(text) {
+export function parse(rawText) {
+  const text = stripFencedBlocks(rawText);
   const linhas = text.split("\n");
   const marcador = text.match(FORMAT_MARKER);
   const tasks = [];

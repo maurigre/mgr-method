@@ -83,6 +83,11 @@ testable acceptance criteria. Every technical decision MUST respect the constitu
 declare a justified override, cite the project pattern it follows, and flag breaking
 changes.
 
+**Format:** the spec opens with `<!-- mgr-spec-format: 1 -->` and each acceptance criterion is
+identified as `CA-<n>` — the identity is what a reproval cites (L1.1); the text is written in the
+user's language. Run `mgr spec validate` before the checkpoint; it checks structure only, never
+whether a criterion is good.
+
 **Architectural change detection (mandatory):** if the spec introduces a new communication
 style, new persistence/messaging technology, new layering pattern, a public contract
 break, or a new external dependency → propose an ADR and invoke `adr-create` in invoked
@@ -100,7 +105,8 @@ split BEFORE the checkpoint.
 with English keys — `priority`, `depends_on`, `files`, `artifact`, `done_when`, `helper_skill`.
 The keys are the parseable identity; the values are written in the user's language. `artifact`
 is the rail of L4.3: name, shape, signature and QUANTITY. Run `mgr spec validate` on the plan
-before the checkpoint — it checks structure only, never judgement. Each task lists: goal, files, dependencies, suggested helper
+before the checkpoint — it checks structure only, never judgement.
+Each task lists: goal, files, dependencies, suggested helper
 skill (`junit-clean` for Java test tasks, `code-analyzer` for review), and a done
 criterion.
 **CHECKPOINT 3 (blocking):** approve plan / adjust / abort.

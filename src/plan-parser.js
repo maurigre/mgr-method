@@ -19,7 +19,29 @@ const TASK_HEADER = /^#{2,4}\s+(P\d+\.\d+)\b/;
 // `- **chave:** valor` — só as chaves conhecidas entram; chave desconhecida é ignorada, não é erro.
 const FIELD = /^\s*[-*]\s+\*\*([a-z_]+):\*\*\s*(.*)$/;
 
-const KNOWN_FIELDS = new Set(["priority", "depends_on", "files", "artifact", "done_when", "helper_skill"]);
+const KNOWN_FIELDS = new Set(["priority", "depends_on", "files", "artifact", "done_when", "helper_skill", "status"]);
+
+// Vocabulário FECHADO do estado da task (ADR-0014). Em inglês porque aqui o valor é IDENTIDADE,
+// não prosa — a mesma regra que o ADR-0012 aplicou às chaves. `status: concluído` não pode
+// funcionar pela mesma razão que `depends_on` não virou `depende_de`.
+//
+// Fonte única: a `PLAN-6` valida contra esta lista e o `plan-next` decide por ela. Duas listas
+// divergiriam, e divergir é o defeito que este projeto já mediu duas vezes.
+export const STATUS_VALUES = ["todo", "done"];
+export const STATUS_DONE = "done";
+
+// Nome do artefato e derivação de prioridade moram aqui, com o resto do conhecimento de FORMATO.
+// Estavam duplicados em `plan-validator` e `plan-next`, e as duas cópias de `nivel` já divergiam
+// no fallback — que é como toda duplicação começa a mentir.
+export const PLAN_FILE = "04-plan.md";
+
+// Prioridade vem do ID, nunca do campo `priority`: duas fontes divergiriam (ADR-0014). ID fora da
+// forma `P<n>.<n>` vai para o fim em vez de virar `NaN` e envenenar comparação. Inalcançável pelo
+// parser, que só cria task a partir de `TASK_HEADER`, e explícito de propósito.
+export const priorityLevel = (id) => {
+  const encontrado = String(id).match(/^P(\d+)\./);
+  return encontrado ? Number(encontrado[1]) : Number.MAX_SAFE_INTEGER;
+};
 
 // `[a, b]` ou `a, b` ou vazio — o autor escreve à mão, então as duas formas valem.
 function parseList(raw) {
@@ -47,6 +69,13 @@ export function parse(rawText) {
         artifact: "",
         doneWhen: "",
         helperSkill: "",
+        // Ausência vale `todo`: 100% dos planos em disco não têm a chave, e ausência jamais
+        // pode virar `done` — falha para o lado seguro (ADR-0014).
+        status: "todo",
+        // Presença é diferente de default. Quem escreve `status: todo` DECLAROU o estado, e a
+        // resposta do `mgr spec next` afirma quantas tasks declararam — contar por `!== "todo"`
+        // faria a ferramenta dizer "não sei o que você já fez" a um plano que diz exatamente isso.
+        statusDeclared: false,
       };
       tasks.push(atual);
       continue;
@@ -64,6 +93,9 @@ export function parse(rawText) {
     else if (chave === "artifact") atual.artifact = valor.trim();
     else if (chave === "done_when") atual.doneWhen = valor.trim();
     else if (chave === "helper_skill") atual.helperSkill = valor.trim();
+    // O valor entra CRU, sem normalizar: quem julga se ele é válido é a `PLAN-6`. Normalizar aqui
+    // apagaria o defeito antes de alguém poder apontá-lo.
+    else if (chave === "status") { atual.status = valor.trim(); atual.statusDeclared = true; }
   }
 
   // Tipo explícito em vez de `null` como sentinela: "formato não declarado" é decisão de

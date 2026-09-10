@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { parse } from "../src/plan-parser.js";
+import { parse, STATUS_VALUES, STATUS_DONE } from "../src/plan-parser.js";
 
 const RAIZ = fileURLToPath(new URL("..", import.meta.url));
 
@@ -77,7 +77,8 @@ test("o parser lê as três formas de plano que existem no mundo real", () => {
   assert.equal(fixture("legado-puro.md").format.declared, false);
   assert.equal(fixture("misto.md").format.declared, false, "misto sem marcador continua legado");
   assert.deepEqual(fixture("formato-1.md").format, { declared: true, version: 1 });
-  for (const nome of readdirSync(FIXTURES)) {
+  // `invalidos/` fica de fora: o defeito lá é deliberado, e este teste afirma sobre forma real.
+  for (const nome of readdirSync(FIXTURES, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name)) {
     assert.ok(fixture(nome).tasks.length > 0, `nenhuma task reconhecida em ${nome}`);
   }
 });
@@ -99,4 +100,26 @@ test("os planos vivos, quando existem, também são lidos sem quebra", () => {
   for (const plano of planos) {
     assert.doesNotThrow(() => parse(readFileSync(plano, "utf8")), `quebrou em ${plano}`);
   }
+});
+
+// ADR-0014 — o estado da task. Ausência vale `todo` e NUNCA vira `done`: é o que separa
+// "reofereço algo já feito" de "pulo algo que falta", e só o primeiro é aceitável.
+test("status ausente vale todo; presente entra cru, para a regra julgar", () => {
+  const { tasks } = parse([
+    "<!-- mgr-plan-format: 1 -->",
+    "### P0.1 — feita", "- **status:** done",
+    "### P0.2 — sem a chave",
+    "### P0.3 — valor no idioma do usuário", "- **status:** concluído",
+  ].join("\n"));
+  assert.deepEqual(tasks.map((task) => task.status), ["done", "todo", "concluído"]);
+  assert.equal(STATUS_DONE, "done");
+  assert.deepEqual(STATUS_VALUES, ["todo", "done"], "vocabulário fechado, fonte única");
+});
+
+test("os planos reais continuam sem estado declarado — a chave é nova", () => {
+  const semEstado = ["formato-1.md", "legado-puro.md", "misto.md"].every((nome) => {
+    const { tasks } = parse(readFileSync(path.join(RAIZ, "test", "fixtures", "plans", nome), "utf8"));
+    return tasks.every((task) => task.status === "todo");
+  });
+  assert.ok(semEstado, "nenhuma fixture usa `status`, então o parse delas não pode ter mudado");
 });

@@ -27,10 +27,17 @@ formato significaria substituir uma convenção viva e universal por uma que nin
 a reescrever dez specs para satisfazer o validador — o custo que o ADR-0012 já pagou para
 descobrir, quando mediu que nenhum cabeçalho do template aparecia em nenhuma spec.
 
-Uma segunda medição mostrou que a convenção viva tem **duas formas**: lista numerada na maioria, e
-checkbox com identidade (`- [ ] **CA-1:** …`) numa spec — inventada pelo autor sem que nenhuma
-regra pedisse. É o mesmo padrão que o ADR-0012 encontrou no `depends_on`: a convenção certa já
-existia, esperando ser reconhecida em vez de substituída.
+Uma segunda medição mostrou que a convenção viva tem **duas formas**: lista numerada em sete
+specs, e checkbox com identidade (`- [ ] **CA-1:** …`) em **três** — `skill-diagnosing-bugs`,
+`gates-de-qualidade` e `eixo-spec-code-analyzer`, somando **31 critérios identificados** —
+inventada pelo autor sem que nenhuma regra pedisse. É o mesmo padrão que o ADR-0012 encontrou no
+`depends_on`: a convenção certa já existia, esperando ser reconhecida em vez de substituída.
+
+> **Correção de medição, 2026-08-31.** A versão original deste parágrafo dizia "numa spec". O
+> número certo é três, re-medido com o parser entregue por esta decisão, sobre os mesmos arquivos —
+> nenhum deles foi alterado desde julho. Só o fato medido muda: a decisão, as alternativas e as
+> consequências abaixo permanecem como aprovadas, e três specs sustentam a rejeição do formato
+> importado melhor do que uma.
 
 **Reference:** Spec técnica em specs/mgr-spec-requirements/03-spec.md.
 

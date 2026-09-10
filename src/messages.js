@@ -163,6 +163,23 @@ const en = {
   specValidateScopeNote:
     "This check is STRUCTURAL. It does not judge whether the plan is right, whether the tasks are the right ones, whether a done criterion is good, nor whether an acceptance criterion is testable or covers the spec.",
   specValidateNoSpecs: (dir) => `no spec found in ${dir}`,
+  specNextTask: (id) => id,
+  specNextFile: (file) => `${file}`,
+  specNextArtifact: (text) => `  artifact:  ${text}`,
+  specNextDoneWhen: (text) => `  done when: ${text}`,
+  specNextSkill: (skill) => `  skill:     ${skill}`,
+  specNextDependsOn: (ids) => `  after:     ${ids}`,
+  specNextAllDone: (count) => `Nothing to do: all ${count} task(s) are marked done.`,
+  specNextNothingReady: "Nothing is ready to start. Every pending task waits on something.",
+  specNextBlocked: (id, waiting) => `  ${id} waits on ${waiting}`,
+  specNextRunValidate: "In a valid plan this cannot happen: some task has no dependency and is ready. Run `mgr spec validate`.",
+  specNextNoTasks: "The plan declares the format but has no task.",
+  specNextFormatNotDeclared:
+    "This plan does not declare the format, so there is nothing to answer from. Add the marker on the first line and the fields the tasks already have become readable.",
+  specNextBasis: (declared, total) => `State declared in ${declared} of ${total} task(s).`,
+  specNextNoState: (total) => `State declared in 0 of ${total} task(s): this tool does NOT know what you have already done.`,
+  specNextFirstStartable: "So this is the first task that CAN start, not necessarily the next one.",
+  specNextNoPlan: (dir) => `no plan found in ${dir}`,
   gateKept: (file) => `  kept: ${file} lost the MGR marker and was left untouched`,
   statusGate: (state) => `  gate:    ${state}`,
   statusGateOff: "off (reviewGate.enabled = false)",
@@ -183,6 +200,7 @@ Usage: mgr <command> [options]
   validate         validates the SKILL.md files (skill authoring)
   spec validate    validates this project's plan and spec artifacts
                    ([<slug>], --all, --strict, --json)
+  spec next        the next action from the plan ([<slug>], --json)
   list             lists the skills
   version          shows the version
 
@@ -357,6 +375,23 @@ const ptBR = {
   specValidateScopeNote:
     "Esta verificação é ESTRUTURAL. Ela não julga se o plano está certo, se as tasks são as certas, se um critério de done é bom, nem se um critério de aceitação é testável ou cobre a spec.",
   specValidateNoSpecs: (dir) => `nenhuma spec encontrada em ${dir}`,
+  specNextTask: (id) => id,
+  specNextFile: (file) => `${file}`,
+  specNextArtifact: (text) => `  artefato:  ${text}`,
+  specNextDoneWhen: (text) => `  pronta em: ${text}`,
+  specNextSkill: (skill) => `  skill:     ${skill}`,
+  specNextDependsOn: (ids) => `  depois de: ${ids}`,
+  specNextAllDone: (count) => `Nada a fazer: as ${count} task(s) estão marcadas como concluídas.`,
+  specNextNothingReady: "Nada pronto para começar. Toda task pendente espera por algo.",
+  specNextBlocked: (id, waiting) => `  ${id} espera por ${waiting}`,
+  specNextRunValidate: "Num plano válido isto não acontece: alguma task não depende de nada e está pronta. Rode `mgr spec validate`.",
+  specNextNoTasks: "O plano declara o formato mas não tem nenhuma task.",
+  specNextFormatNotDeclared:
+    "Este plano não declara o formato, então não há de onde responder. Acrescente o marcador na primeira linha e os campos que as tasks já têm passam a ser lidos.",
+  specNextBasis: (declared, total) => `Estado declarado em ${declared} de ${total} task(s).`,
+  specNextNoState: (total) => `Estado declarado em 0 de ${total} task(s): esta ferramenta NÃO sabe o que você já fez.`,
+  specNextFirstStartable: "Então esta é a primeira task que PODE começar, não necessariamente a próxima.",
+  specNextNoPlan: (dir) => `nenhum plano encontrado em ${dir}`,
   gateKept: (file) => `  preservado: ${file} perdeu o marcador do MGR e não foi tocado`,
   statusGate: (state) => `  gate:    ${state}`,
   statusGateOff: "desligado (reviewGate.enabled = false)",
@@ -377,6 +412,7 @@ Uso: mgr <comando> [opções]
   validate         valida as SKILL.md (autoria de skill)
   spec validate    valida o plano e a spec deste projeto
                    ([<slug>], --all, --strict, --json)
+  spec next        a próxima ação a partir do plano ([<slug>], --json)
   list             lista as skills
   version          mostra a versão
 

@@ -1422,7 +1422,7 @@ test("mgr spec validate: plano defeituoso reprova com exit 1 e ensina a corrigir
 test("mgr spec validate: um plano em cada forma real passa com exit 0", () => {
   const repo = tmp();
   const fixtures = fileURLToPath(new URL("./fixtures/plans", import.meta.url));
-  for (const nome of readdirSync(fixtures)) {
+  for (const nome of readdirSync(fixtures, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name)) {
     mkdirSync(path.join(repo, "specs", nome.replace(".md", "")), { recursive: true });
     writeFileSync(path.join(repo, "specs", nome.replace(".md", ""), "04-plan.md"),
       readFileSync(path.join(fixtures, nome), "utf8"), "utf8");
@@ -1591,4 +1591,94 @@ test("mgr spec validate --json soma os dois artefatos no mesmo envelope", () => 
   assert.deepEqual(Object.keys(payload).sort(), ["files", "findings", "schemaVersion", "scope", "summary"]);
   assert.equal(payload.files.length, 2, "plano e spec no mesmo envelope");
   assert.deepEqual(payload.summary, { errors: 0, warnings: 0 });
+});
+
+// `mgr spec next` (ADR-0014). Locale fixado: foi o locale que quebrou o CI da fatia 1.
+const planoDeFixture = (repo, slug, nome) => {
+  const fixtures = fileURLToPath(new URL("./fixtures/plans", import.meta.url));
+  mkdirSync(path.join(repo, "specs", slug), { recursive: true });
+  writeFileSync(path.join(repo, "specs", slug, "04-plan.md"), readFileSync(path.join(fixtures, nome), "utf8"));
+};
+const rodarNext = (repo, args) => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  try { return { stdout: execFileSync("node", [bin, "spec", "next", ...args], ptBR(repo)), status: 0 }; }
+  catch (erro) { return { stdout: erro.stdout, status: erro.status }; }
+};
+
+test("mgr spec next: devolve a task pronta, com artefato e skill", () => {
+  const repo = tmp();
+  planoDeFixture(repo, "demo", "com-estado.md");
+  const { stdout, status } = rodarNext(repo, ["demo"]);
+  assert.equal(status, 0);
+  assert.match(stdout, /^P0\.2$/m);
+  assert.match(stdout, /1 função escolher\(plano\)/);
+  assert.match(stdout, /code-analyzer/);
+  assert.match(stdout, /Estado declarado em 1 de 3/);
+});
+
+test("mgr spec next: com tudo concluído não devolve task, e sai com 0", () => {
+  const repo = tmp();
+  planoDeFixture(repo, "demo", "tudo-concluido.md");
+  const { stdout, status } = rodarNext(repo, ["demo"]);
+  assert.equal(status, 0, "ausência de trabalho pronto é resposta verdadeira, não falha");
+  assert.match(stdout, /Nada a fazer/);
+  assert.ok(!/^P\d/m.test(stdout), "nenhuma task oferecida");
+});
+
+test("mgr spec next: nada pronto lista o que bloqueia e manda validar", () => {
+  const repo = tmp();
+  const fixtures = fileURLToPath(new URL("./fixtures/plans/invalidos", import.meta.url));
+  mkdirSync(path.join(repo, "specs", "demo"), { recursive: true });
+  writeFileSync(path.join(repo, "specs", "demo", "04-plan.md"),
+    readFileSync(path.join(fixtures, "nada-pronto.md"), "utf8"));
+  const { stdout, status } = rodarNext(repo, ["demo"]);
+  assert.equal(status, 0);
+  assert.match(stdout, /P0\.1 espera por P9\.9/);
+  assert.match(stdout, /mgr spec validate/);
+  assert.ok(!/PODE começar/.test(stdout), "não promete task quando não devolveu nenhuma");
+});
+
+test("mgr spec next: plano sem marcador explica o que falta e não reprova", () => {
+  const repo = tmp();
+  planoDeFixture(repo, "demo", "legado-puro.md");
+  const { stdout, status } = rodarNext(repo, ["demo"]);
+  assert.equal(status, 0, "plano escrito antes da feature nunca é reprovado por ela");
+  assert.match(stdout, /não declara o formato/);
+  assert.match(stdout, /Estado declarado em/, "a CA-6 diz TODA resposta, sem exceção");
+  assert.match(stdout, /04-plan\.md/, "a resposta diz de qual plano fala");
+});
+
+test("mgr spec next: sem estado declarado, admite que não sabe o que já foi feito", () => {
+  const repo = tmp();
+  planoDeFixture(repo, "demo", "formato-1.md");
+  const { stdout } = rodarNext(repo, ["demo"]);
+  assert.match(stdout, /NÃO sabe o que você já fez/);
+  assert.match(stdout, /PODE começar, não necessariamente a próxima/);
+});
+
+test("mgr spec next: sem plano nenhum sai com 1", () => {
+  const repo = tmp();
+  mkdirSync(path.join(repo, "specs"), { recursive: true });
+  assert.equal(rodarNext(repo, ["inexistente"]).status, 1);
+});
+
+test("mgr spec next --json tem o envelope estável e nenhum caminho absoluto", () => {
+  const repo = tmp();
+  planoDeFixture(repo, "demo", "com-estado.md");
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const payload = JSON.parse(execFileSync("node", [bin, "spec", "next", "demo", "--json"], ptBR(repo)));
+  assert.deepEqual(Object.keys(payload).sort(),
+    ["blocked", "file", "outcome", "schemaVersion", "stateDeclared", "task", "taskCount"]);
+  assert.equal(payload.outcome, "task");
+  assert.equal(payload.task.id, "P0.2");
+  assert.ok(!JSON.stringify(payload).includes(repo), "nenhum caminho absoluto da máquina no payload");
+});
+
+test("mgr spec validate continua idêntico ao lado do next", () => {
+  const repo = tmp();
+  planoDeFixture(repo, "demo", "com-estado.md");
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const stdout = execFileSync("node", [bin, "spec", "validate", "--all"], ptBR(repo));
+  assert.match(stdout, /0 erro\(s\)/);
+  assert.ok(!stdout.includes("PLAN-6"), "status válido não produz aviso");
 });

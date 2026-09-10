@@ -7,6 +7,33 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
+## [0.7.0-beta.6] - 2026-09-10
+> O plano passa a responder o que fazer agora. Pré-release no dist-tag `next`.
+
+### Adicionado
+- **`mgr spec next`** (ADR-0014): o plano deixa de só descrever e passa a responder **o que fazer
+  agora** — a task, o artefato exato que ela exige, a skill auxiliar e o que ela espera. Devolver
+  ação em vez de estado tira do agente a inferência que é onde ele erra.
+- **Campo `status` na task do plano**, opcional, com vocabulário fechado em `todo` e `done`. É a
+  primeira fonte mecânica de conclusão de task: antes disso o progresso vivia em prosa no log de
+  execução, e nenhum dos 11 planos em disco marcava conclusão de forma legível.
+- **Regra `PLAN-6`**, aviso, para `status` com valor fora do vocabulário.
+
+### O que degrada, declarado
+- **Nenhum plano existente é reprovado nem precisa migrar.** O campo é opcional, o parser já
+  ignorava chave desconhecida, e nenhum dos planos em disco usa `status` — por isso a extensão é
+  aditiva e **não** exige uma versão 2 do marcador de formato.
+- **A resposta declara sempre o que sabe.** Num plano sem `status`, ela diz que não sabe o que
+  você já fez e que está devolvendo a primeira task que **pode** começar, não necessariamente a
+  próxima. Sem isso, `P0.1` para sempre seria lido como aprovação.
+- **`status` com valor inválido nunca conta como concluído.** Falha para o lado seguro: no máximo
+  reoferece algo já feito, jamais pula algo que falta.
+- **"Nada pronto para começar" é, por natureza, um plano defeituoso.** Num plano válido alguma
+  task tem `depends_on` vazio e portanto está pronta; esse caminho existe para dependência
+  apontando para id inexistente, e a resposta manda rodar o `mgr spec validate`.
+- **As etiquetas de proveniência (`PROV-*`) continuam fora.** A adesão a elas foi medida em zero
+  ocorrências em 63 arquivos de artefato, e a L1.10 segue declarando-se "not yet enforceable".
+
 ## [0.7.0-beta.5] - 2026-08-31
 > O método passa a verificar também a **spec** de uma feature. Pré-release no dist-tag `next`.
 

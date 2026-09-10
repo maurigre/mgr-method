@@ -102,7 +102,8 @@ NEVER by fixed architectural layers. The order within each priority comes from t
 **Granularity:** task ≤ 30 min (target), ≤ 60 min (hard), ≤ 3 files; anything bigger,
 split BEFORE the checkpoint.
 **Format:** the plan opens with `<!-- mgr-plan-format: 1 -->` and each task declares its fields
-with English keys — `priority`, `depends_on`, `files`, `artifact`, `done_when`, `helper_skill`.
+with English keys — `priority`, `depends_on`, `files`, `artifact`, `done_when`, `helper_skill`
+and the optional `status` (`todo` or `done`), which `mgr spec next` reads.
 The keys are the parseable identity; the values are written in the user's language. `artifact`
 is the rail of L4.3: name, shape, signature and QUANTITY. Run `mgr spec validate` on the plan
 before the checkpoint — it checks structure only, never judgement.

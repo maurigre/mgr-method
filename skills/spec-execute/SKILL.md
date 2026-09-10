@@ -81,6 +81,10 @@ POST/GET/PATCH/DELETE"* — **not** four controllers, no renaming, no splitting,
 ## Execution (real-time log in `05-execution.md`)
 
 - Respect the DAG: a task only starts with its `depends_on` completed; order P0 → P1 → P2.
+- **Record the state as you go.** When a task is finished, set `- **status:** done` on it in
+  `04-plan.md`. It is the only mechanical record that the task closed: without it `mgr spec next`
+  can only offer the first task that *can* start, and says so. The vocabulary is closed — `todo`
+  or `done`, in English — and anything else is reported as `PLAN-6`.
 - Per task: implement → run tests → **review** (fidelity to the planned artifact; premises
   applied; quality/language idiom per the guide) → fix or, in doubt, ask → record (task,
   files, decisions, premises, result). Test task in a Java project → invoke `junit-clean`

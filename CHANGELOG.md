@@ -7,6 +7,41 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
+## [0.7.0-beta.7] - 2026-09-11
+> O plano e a spec passam a dizer ONDE estão. Pré-release no dist-tag `next`.
+
+### Adicionado
+- **`mgr spec status`** (ADR-0015): responde quais artefatos existem numa feature, **onde cada um
+  está**, o que falta escrever e se há `.handoff.md` em disco. Aceita `--all` e `--json`.
+- **As skills `spec-create` e `spec-execute` param de assumir caminho** no caminho feliz: passam a
+  consultar o comando, com o caminho literal de hoje mantido como **fallback declarado** para quem
+  não tem a CLI instalada.
+- **`slugs(repo)` em `src/artifacts.js`**, fonte única da listagem de features. O `artifactFiles`
+  passou a consumi-la, então há um `readdirSync` só **sobre `specs/`** no projeto.
+
+### Corrigido
+- **Os comandos `spec` deixaram de tratar o diretório atual como raiz do repositório.** Rodados de
+  dentro de `specs/<slug>/`, `validate`, `next` e `status` procuravam artefato em
+  `specs/<slug>/specs` e a derivação do slug pelo diretório nunca funcionou. O defeito vem da
+  primeira fatia do runtime e atingia os três. A raiz passa a ser resolvida subindo até o diretório
+  com `specs/`, parando na fronteira do projeto para não atravessar para um repositório de cima.
+
+### O que degrada, declarado
+- **Existência de arquivo não é progresso, e o comando diz isso.** O vocabulário é `present`,
+  `ready` e `blocked` — **sem `done`**, que o documento de origem propunha e que afirmaria
+  conclusão de etapa a partir da presença de um arquivo. O aviso vai no payload, com um token
+  estável (`basis`) ao lado da frase.
+- **`approved` e `checkpoint` não existem no payload.** A aprovação de checkpoint não tem registro
+  mecânico; preencher seria inventar e preencher com nulo seria lido como negativa.
+- **`.handoff.md` é reportado como fato do arquivo, nunca como trabalho pendente.** Medido: os
+  quatro handoffs em disco pertencem a features concluídas, e chamá-los de pendentes seria falso
+  em 4 de 4 casos. O comando também não infere obsolescência cruzando com o `06-completion`, o que
+  seria julgamento disfarçado de dado.
+- **O método continua operável sem a CLI instalada.** O fallback está escrito nas duas skills, e um
+  teste próprio quebra se alguém o remover — inclusive conferindo a skill já instalada nos dois
+  motores.
+- **As regras `PROV-*` continuam fora**, com a medição de adesão zero registrada.
+
 ## [0.7.0-beta.6] - 2026-09-10
 > O plano passa a responder o que fazer agora. Pré-release no dist-tag `next`.
 

@@ -1674,6 +1674,99 @@ test("mgr spec next --json tem o envelope estável e nenhum caminho absoluto", (
   assert.ok(!JSON.stringify(payload).includes(repo), "nenhum caminho absoluto da máquina no payload");
 });
 
+test("mgr spec next: `--all` é RECUSADO, em vez de aceito e ignorado", () => {
+  const repo = tmp();
+  planoDeFixture(repo, "demo", "com-estado.md");
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  let erro = null;
+  try { execFileSync("node", [bin, "spec", "next", "--all"], ptBR(repo)); } catch (e) { erro = e; }
+  assert.ok(erro, "a flag é recusada, não aceita e ignorada");
+  assert.equal(erro.status, 1, "a pergunta `o que faço agora` é sobre UMA feature");
+  assert.match(erro.stderr + "", /não aceita `--all`/);
+  assert.equal(erro.stdout + "", "", "a recusa vai para stderr, e nenhuma task é oferecida");
+});
+
+test("mgr spec next: da raiz e sem slug, NÃO escolhe em silêncio", () => {
+  const repo = tmp();
+  planoDeFixture(repo, "alfa", "com-estado.md");
+  planoDeFixture(repo, "beta", "formato-1.md");
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  let erro = null;
+  try { execFileSync("node", [bin, "spec", "next"], ptBR(repo)); } catch (e) { erro = e; }
+  assert.ok(erro, "sem slug e da raiz, o comando recusa");
+  assert.equal(erro.status, 1);
+  assert.match(erro.stderr + "", /2 feature\(s\) em specs\//, "diz quantas existem");
+  assert.match(erro.stderr + "", /specs\/<slug>\//, "diz a outra saída: rodar de dentro da feature");
+  assert.ok(!/^P\d/m.test(erro.stdout + ""), "nenhuma task foi oferecida");
+});
+
+test("mgr spec next: de dentro de specs/<slug>/ continua respondendo sem slug", () => {
+  const repo = tmp();
+  planoDeFixture(repo, "alfa", "com-estado.md");
+  planoDeFixture(repo, "beta", "formato-1.md");
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const dentro = { ...ptBR(repo), cwd: path.join(repo, "specs", "beta") };
+  const stdout = execFileSync("node", [bin, "spec", "next"], dentro);
+  assert.match(stdout, /beta/, "responde sobre a feature de onde foi rodado");
+});
+
+// `mgr spec validate` com proveniência (ADR-0016). Locale fixado, como as fatias anteriores exigem.
+const artefatoComTexto = (repo, slug, nome, texto) => {
+  mkdirSync(path.join(repo, "specs", slug), { recursive: true });
+  writeFileSync(path.join(repo, "specs", slug, nome), texto);
+};
+const rodarValidate = (repo, args) => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  try { return { stdout: execFileSync("node", [bin, "spec", "validate", ...args], ptBR(repo)), status: 0 }; }
+  catch (erro) { return { stdout: erro.stdout + "", status: erro.status }; }
+};
+
+test("mgr spec validate: o ponteiro quebrado entra no MESMO comando, como erro", () => {
+  const repo = tmp();
+  artefatoComTexto(repo, "demo", "01-brief.md", "a origem disto [code:src/sumiu.js:1]\n");
+  const { stdout, status } = rodarValidate(repo, ["demo"]);
+  assert.equal(status, 1, "PROV-2 é erro e bloqueia");
+  assert.match(stdout, /PROV-2/);
+  assert.match(stdout, /01-brief\.md/, "a proveniência vale para QUALQUER artefato, não só plano e spec");
+});
+
+test("mgr spec validate: ponteiro que resolve e etiqueta em prosa não produzem achado", () => {
+  const repo = tmp();
+  writeFileSync(path.join(repo, "existe.js"), "uma linha\n");
+  artefatoComTexto(repo, "demo", "01-brief.md",
+    "resolve [code:existe.js:1]\no ponteiro `[code:src/sumiu.js:1]` citado no meio da frase.\n");
+  const { stdout, status } = rodarValidate(repo, ["demo"]);
+  assert.equal(status, 0);
+  assert.ok(!stdout.includes("PROV-"), "nem o que resolve nem a citação em prosa produzem achado");
+});
+
+test("mgr spec validate: a marca de pendência só vira aviso em feature com 06-completion.md", () => {
+  const aberta = tmp();
+  artefatoComTexto(aberta, "demo", "01-brief.md", "o prazo [A DEFINIR]\n");
+  assert.ok(!rodarValidate(aberta, ["demo"]).stdout.includes("PROV-3"), "feature aberta pode ter pendência");
+
+  const fechada = tmp();
+  artefatoComTexto(fechada, "demo", "01-brief.md", "o prazo [A DEFINIR]\n");
+  artefatoComTexto(fechada, "demo", "06-completion.md", "fechada\n");
+  const { stdout, status } = rodarValidate(fechada, ["demo"]);
+  assert.equal(status, 0, "PROV-3 é aviso: não bloqueia");
+  assert.match(stdout, /PROV-3/);
+  assert.match(stdout, /não distingue uma pendência real de uma citação/, "a mensagem declara o que não sabe");
+});
+
+test("mgr spec validate: o envelope --json não mudou de forma", () => {
+  const repo = tmp();
+  artefatoComTexto(repo, "demo", "01-brief.md", "a origem disto [code:src/sumiu.js:1]\n");
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  let saida = null;
+  try { execFileSync("node", [bin, "spec", "validate", "demo", "--json"], ptBR(repo)); }
+  catch (erro) { saida = erro.stdout + ""; }
+  const payload = JSON.parse(saida);
+  assert.deepEqual(Object.keys(payload).sort(), ["files", "findings", "schemaVersion", "scope", "summary"]);
+  assert.equal(payload.summary.errors, 1);
+  assert.ok(!JSON.stringify(payload).includes(repo), "nenhum caminho absoluto da máquina no payload");
+});
+
 test("mgr spec validate continua idêntico ao lado do next", () => {
   const repo = tmp();
   planoDeFixture(repo, "demo", "com-estado.md");

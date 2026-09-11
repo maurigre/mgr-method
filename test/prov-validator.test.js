@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { validateProvenance } from "../src/prov-validator.js";
 
-const repoTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-prov-"));
+const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-prov-"));
 
 const feature = (repo, slug, arquivos) => {
   mkdirSync(path.join(repo, "specs", slug), { recursive: true });
@@ -16,7 +16,7 @@ const feature = (repo, slug, arquivos) => {
 };
 
 test("a proveniência é lida em TODOS os artefatos canônicos, não só no plano e na spec", () => {
-  const repo = feature(repoTemporario(), "demo", {
+  const repo = feature(diretorioTemporario(), "demo", {
     "01-brief.md": "sumiu [code:src/a.js:1]\n",
     "02-prd.md": "sumiu também [code:src/b.js:1]\n",
     "05-execution.md": "e aqui [code:src/c.js:1]\n",
@@ -27,7 +27,7 @@ test("a proveniência é lida em TODOS os artefatos canônicos, não só no plan
 });
 
 test("arquivo que não é artefato canônico não é lido", () => {
-  const repo = feature(repoTemporario(), "demo", {
+  const repo = feature(diretorioTemporario(), "demo", {
     "01-brief.md": "ok\n",
     "risk-closure.md": "sumiu [code:src/a.js:1]\n",
     "regression-baseline.json": "{}\n",
@@ -38,10 +38,10 @@ test("arquivo que não é artefato canônico não é lido", () => {
 });
 
 test("`closed` vem da existência de 06-completion.md, e nada mais", () => {
-  const aberta = feature(repoTemporario(), "demo", { "01-brief.md": "o prazo [A DEFINIR]\n" });
+  const aberta = feature(diretorioTemporario(), "demo", { "01-brief.md": "o prazo [A DEFINIR]\n" });
   assert.deepEqual(validateProvenance(aberta, { slug: "demo" }).findings, []);
 
-  const fechada = feature(repoTemporario(), "demo", {
+  const fechada = feature(diretorioTemporario(), "demo", {
     "01-brief.md": "o prazo [A DEFINIR]\n",
     "06-completion.md": "fechada\n",
   });
@@ -51,7 +51,7 @@ test("`closed` vem da existência de 06-completion.md, e nada mais", () => {
 });
 
 test("sem slug, varre todas as features, cada uma com o próprio estado de fechamento", () => {
-  const repo = repoTemporario();
+  const repo = diretorioTemporario();
   feature(repo, "alfa", { "01-brief.md": "o prazo [A DEFINIR]\n" });
   feature(repo, "beta", { "01-brief.md": "o prazo [A DEFINIR]\n", "06-completion.md": "fechada\n" });
   const { files, findings } = validateProvenance(repo);
@@ -60,18 +60,18 @@ test("sem slug, varre todas as features, cada uma com o próprio estado de fecha
 });
 
 test("slug que não existe devolve vazio, sem lançar", () => {
-  const repo = feature(repoTemporario(), "demo", { "01-brief.md": "ok\n" });
+  const repo = feature(diretorioTemporario(), "demo", { "01-brief.md": "ok\n" });
   assert.deepEqual(validateProvenance(repo, { slug: "nao-existe" }), {
     files: [], findings: [], summary: { errors: 0, warnings: 0 },
   });
 });
 
 test("repositório sem specs/ devolve vazio, sem lançar", () => {
-  assert.deepEqual(validateProvenance(repoTemporario()).files, []);
+  assert.deepEqual(validateProvenance(diretorioTemporario()).files, []);
 });
 
 test("o caminho do achado é relativo à raiz — nenhum caminho absoluto da máquina", () => {
-  const repo = feature(repoTemporario(), "demo", { "01-brief.md": "sumiu [code:src/a.js:1]\n" });
+  const repo = feature(diretorioTemporario(), "demo", { "01-brief.md": "sumiu [code:src/a.js:1]\n" });
   const { findings } = validateProvenance(repo, { slug: "demo" });
   assert.equal(findings[0].file, "specs/demo/01-brief.md");
   assert.ok(!JSON.stringify(findings).includes(repo));

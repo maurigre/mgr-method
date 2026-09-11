@@ -24,7 +24,7 @@ import { addRegistry } from "../src/registry.js";
 import { readLockfile } from "../src/lockfile.js";
 import { captureCli } from "../scripts/capture-cli-baseline.mjs";
 
-const tmp = () => mkdtempSync(path.join(os.tmpdir(), "mgr-"));
+const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-"));
 const CORE = ["spec-init", "spec-create", "spec-execute", "adr-create", "code-analyzer", "diagnosing-bugs"];
 
 test("skills do fluxo SDD presentes e válidas", () => {
@@ -50,7 +50,7 @@ test("selectSkills monta o subconjunto por linguagem/arquitetura", () => {
 });
 
 test("install autossuficiente: só o subconjunto na pasta do motor, sem .mgr-core", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   installer.execute(installer.planInstall(["claude-code"], "project", repo, { language: "java", architecture: "hexagonal" }));
   const sk = path.join(repo, ".claude", "skills");
 
@@ -80,7 +80,7 @@ test("install autossuficiente: só o subconjunto na pasta do motor, sem .mgr-cor
 });
 
 test("dois motores: cada um autossuficiente e independente", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   installer.execute(installer.planInstall(["claude-code", "copilot"], "project", repo, { architecture: "onion" }));
   for (const dir of [".claude/skills", ".github/skills"]) {
     assert.ok(existsSync(path.join(repo, dir, "spec-init", "SKILL.md")), dir);
@@ -91,7 +91,7 @@ test("dois motores: cada um autossuficiente e independente", () => {
 });
 
 test("migra instalação antiga (runtime-launcher) para o novo layout", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const core = path.join(repo, ".mgr-core");
   mkdirSync(path.join(core, "skills"), { recursive: true });
   mkdirSync(path.join(repo, ".claude", "skills", "spec-init"), { recursive: true });
@@ -111,7 +111,7 @@ test("migra instalação antiga (runtime-launcher) para o novo layout", () => {
 });
 
 test("uninstall remove skills e preserva docs/specs", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   installer.execute(installer.planInstall(["claude-code"], "project", repo, { architecture: "hexagonal" }));
   mkdirSync(path.join(repo, "docs", "sdd"), { recursive: true });
   mkdirSync(path.join(repo, "specs", "keep"), { recursive: true });
@@ -125,7 +125,7 @@ test("uninstall remove skills e preserva docs/specs", () => {
 });
 
 test("projectId explícito vai para o manifest e o .env", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   installer.execute(installer.planInstall(["claude-code"], "project", repo, { architecture: "hexagonal", projectId: "nestapp-workspace" }));
   const man = JSON.parse(readFileSync(path.join(repo, ".mgr-core", "manifest.json"), "utf8"));
   assert.equal(man.projectId, "nestapp-workspace");
@@ -133,7 +133,7 @@ test("projectId explícito vai para o manifest e o .env", () => {
 });
 
 test("update re-sincroniza preservando o conjunto instalado", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   installer.execute(installer.planInstall(["claude-code"], "project", repo, { architecture: "clean", language: "java" }));
   const res = installer.update("project", repo);
   assert.ok(res.skills.includes("arch-clean") && res.skills.includes("junit-clean"));
@@ -141,7 +141,7 @@ test("update re-sincroniza preservando o conjunto instalado", () => {
 });
 
 test("userLanguage atravessa o plano até o manifesto; update preserva o valor existente", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   installer.execute(installer.planInstall(["claude-code"], "project", repo, { architecture: "clean", userLanguage: "en" }));
   const manPath = path.join(repo, ".mgr-core", "manifest.json");
   assert.equal(JSON.parse(readFileSync(manPath, "utf8")).userLanguage, "en");
@@ -150,7 +150,7 @@ test("userLanguage atravessa o plano até o manifesto; update preserva o valor e
 });
 
 test("update backfilla userLanguage pt-BR em manifesto da era anterior", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   installer.execute(installer.planInstall(["claude-code"], "project", repo, { architecture: "clean" }));
   const manPath = path.join(repo, ".mgr-core", "manifest.json");
   const man = JSON.parse(readFileSync(manPath, "utf8"));
@@ -163,14 +163,14 @@ test("update backfilla userLanguage pt-BR em manifesto da era anterior", () => {
 });
 
 test("copilot vai para .github/skills sem tocar .claude", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   installer.execute(installer.planInstall(["copilot"], "project", repo, { architecture: "hexagonal" }));
   assert.ok(existsSync(path.join(repo, ".github/skills/code-analyzer/SKILL.md")));
   assert.ok(!existsSync(path.join(repo, ".claude")));
 });
 
 test("instalação com --skills-dir (custom) resolve o token do shared", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const custom = path.join(repo, "meus-skills");
   const plan = installer.planInstall([], "project", repo, { skillsDir: custom, names: ["spec-init", "arch-clean"] });
   assert.deepEqual(plan.engines, ["custom"]);
@@ -181,7 +181,7 @@ test("instalação com --skills-dir (custom) resolve o token do shared", () => {
 });
 
 test("detect, installs e detectPrior enxergam a instalação", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   assert.equal(installer.detectPrior("project", repo), null);
   assert.deepEqual(installer.installs("project", repo), []);
   installer.execute(installer.planInstall(["claude-code"], "project", repo, { architecture: "hexagonal" }));
@@ -193,7 +193,7 @@ test("detect, installs e detectPrior enxergam a instalação", () => {
 });
 
 test("update e uninstall exigem instalação existente", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   assert.throws(() => installer.update("project", repo), /rode `mgr install`/);
   assert.throws(() => installer.uninstall("project", repo), /nada a desinstalar/);
 });
@@ -217,7 +217,7 @@ test("as tabelas en e pt-BR têm exatamente as mesmas chaves", () => {
 });
 
 test("collectInstallAnswers usa a tabela de mensagens injetada (pt-BR)", async () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const vistas = [];
   const ask = {
     multiselect: async ({ message }) => { vistas.push(message); return ["claude-code"]; },
@@ -244,7 +244,7 @@ test("resolveUserLanguage troca o token pelo idioma ou pelo fallback", () => {
 });
 
 test("install limpa a fonte co-locada legada (nomes pt) e não deixa token de idioma", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const sk = path.join(repo, ".claude", "skills");
   mkdirSync(path.join(sk, "_shared", "arch"), { recursive: true });
   mkdirSync(path.join(sk, "_shared", "quality"), { recursive: true });
@@ -276,7 +276,7 @@ test("detectUserLanguage: parse do locale com precedência LC_ALL > LC_MESSAGES 
 });
 
 test("collectInstallAnswers: coleta completa via prompter injetado", async () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const ask = {
     multiselect: async () => ["claude-code"],
     select: async ({ message }) =>
@@ -296,7 +296,7 @@ test("collectInstallAnswers: coleta completa via prompter injetado", async () =>
 });
 
 test("collectInstallAnswers: linguagem 'outra' vira null; projectId vazio cai no nome da pasta", async () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const ask = {
     multiselect: async () => ["copilot"],
     select: async ({ message }) =>
@@ -313,7 +313,7 @@ test("collectInstallAnswers: linguagem 'outra' vira null; projectId vazio cai no
 });
 
 test("collectInstallAnswers: cancelamento em qualquer prompt retorna CANCELLED", async () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const CANCEL = Symbol("cancel");
   const cancelando = (onde) => ({
     multiselect: async () => (onde === "engines" ? CANCEL : ["claude-code"]),
@@ -335,7 +335,7 @@ test("collectInstallAnswers: cancelamento em qualquer prompt retorna CANCELLED",
 });
 
 test("collectInstallAnswers: não pergunta o que já veio por flag (--all-skills pula arch/lang/opcional)", async () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const naoPergunta = { isCancel: () => false };
   const out = await collectInstallAnswers(
     naoPergunta,
@@ -356,7 +356,7 @@ test("CLI: comandos básicos e ciclo de vida (smoke)", () => {
   // ambiente do runner varia (dev pt_BR, CI C) — sem fixar, os asserts oscilariam.
   // `cwd` em diretório vazio: o manifesto VENCE o locale, e este repositório se auto-instala
   // para dogfooding — rodando na raiz, o .mgr-core local decidiria o idioma da CLI sob teste.
-  const neutro = tmp();
+  const neutro = diretorioTemporario();
   const run = (args, env = {}) =>
     execFileSync("node", [bin, ...args], {
       encoding: "utf8", cwd: neutro, env: { ...process.env, LC_ALL: "pt_BR.UTF-8", ...env },
@@ -375,7 +375,7 @@ test("CLI: comandos básicos e ciclo de vida (smoke)", () => {
   assert.match(run(["help"]), /spec validate\s+valida o plano e a spec deste projeto/);
   assert.match(helpEn, /spec validate\s+validates this project's plan and spec artifacts/);
 
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const flags = ["--engine", "claude-code", "--arch", "hexagonal", "--project-id", "x", "-y"];
 
   run(["install", ...flags, "--dry-run", repo]);
@@ -391,7 +391,7 @@ test("CLI: comandos básicos e ciclo de vida (smoke)", () => {
   assert.match(run(["update", repo]), /Re-sincronizado/);
   assert.match(run(["uninstall", "-y", repo]), /Desinstalado/);
 
-  const out = path.join(tmp(), "rt");
+  const out = path.join(diretorioTemporario(), "rt");
   run(["build", "--out", out]);
   assert.ok(existsSync(path.join(out, "skills")));
 
@@ -400,7 +400,7 @@ test("CLI: comandos básicos e ciclo de vida (smoke)", () => {
 });
 
 test("CLI: install migra instalação antiga sem crash (smoke)", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   mkdirSync(path.join(repo, ".mgr-core", "skills"), { recursive: true });
   mkdirSync(path.join(repo, ".claude", "skills", "spec-init"), { recursive: true });
   writeFileSync(path.join(repo, ".claude", "skills", "spec-init", "SKILL.md"), "antigo", "utf8");
@@ -417,11 +417,11 @@ test("CLI: install migra instalação antiga sem crash (smoke)", () => {
 });
 
 test("planInstall rejeita motor desconhecido", () => {
-  assert.throws(() => installer.planInstall(["motor-x"], "project", tmp(), { architecture: "hexagonal" }), /motor inválido/);
+  assert.throws(() => installer.planInstall(["motor-x"], "project", diretorioTemporario(), { architecture: "hexagonal" }), /motor inválido/);
 });
 
 test("buildRuntime gera skills + shared num diretório", () => {
-  const dir = path.join(tmp(), "rt");
+  const dir = path.join(diretorioTemporario(), "rt");
   buildRuntime(dir, ["spec-init"]);
   assert.ok(existsSync(path.join(dir, "skills", "spec-init", "SKILL.md")));
   assert.ok(existsSync(path.join(dir, "shared", "arch", "cross-cutting-rules.md")));
@@ -434,7 +434,7 @@ test("bundle.pkgDir lança para recurso ausente e readVersion retorna semver", (
 });
 
 test("buildSkill lança para skill inexistente", () => {
-  assert.throws(() => buildSkill("nao-existe", path.join(tmp(), "skills")), /skill inexistente/);
+  assert.throws(() => buildSkill("nao-existe", path.join(diretorioTemporario(), "skills")), /skill inexistente/);
 });
 
 test("validateSkill reporta SKILL.md ausente", () => {
@@ -463,7 +463,7 @@ test("checkSkill cobre frontmatter, name, description e tamanho", () => {
 
 test("CLI: mgr add exige nome e terminal interativo, sem flag de bypass", () => {
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
-  const neutro = tmp();
+  const neutro = diretorioTemporario();
   const run = (args, env = {}) => {
     try {
       const stdout = execFileSync("node", [bin, ...args], {
@@ -489,7 +489,7 @@ test("CLI: mgr add exige nome e terminal interativo, sem flag de bypass", () => 
 
 test("CLI: mgr registry add/list/remove persiste em .mgr-core/config.json", () => {
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const run = (args) => execFileSync("node", [bin, ...args], {
     encoding: "utf8", cwd: repo, stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env, LC_ALL: "pt_BR.UTF-8" },
@@ -516,7 +516,7 @@ test("CLI: mgr registry add/list/remove persiste em .mgr-core/config.json", () =
 
 test("CLI: list e status ganham as seções de plugin só quando há lockfile ou registry", () => {
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const run = (args) => execFileSync("node", [bin, ...args], {
     encoding: "utf8", cwd: repo, stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env, LC_ALL: "pt_BR.UTF-8" },
@@ -549,7 +549,7 @@ test("CLI: list e status ganham as seções de plugin só quando há lockfile ou
 
 test("CLI: install e update restauram o conjunto travado no lockfile (registry HTTP local)", async () => {
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const skillMd = "---\nname: junit-clean\ndescription: Standardizes Java unit tests with JUnit 5 following strict rules.\n---\n\n# junit-clean\n";
   const manifest = {
     name: "@mgr/junit-clean", version: "1.0.0", author: "Mauri Reis",
@@ -615,7 +615,7 @@ test("CLI: install e update restauram o conjunto travado no lockfile (registry H
     assert.ok(!existsSync(path.join(repo, ".claude/skills/junit-clean")));
     assert.ok(existsSync(path.join(repo, ".claude/skills/spec-init/SKILL.md")), "skills do método intactas");
 
-    const adulterado = tmp();
+    const adulterado = diretorioTemporario();
     writeFileSync(path.join(adulterado, "mgr-skills.lock"), JSON.stringify({
       ...lockfile,
       skills: { "@mgr/junit-clean": { ...lockfile.skills["@mgr/junit-clean"], checksum: `sha256-${"0".repeat(64)}` } },
@@ -633,8 +633,8 @@ test("CLI: install e update restauram o conjunto travado no lockfile (registry H
 
 test("regressão §2.7: a saída da CLI só muda por decisão deliberada", () => {
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
-  const repo = tmp();
-  const home = tmp();
+  const repo = diretorioTemporario();
+  const home = diretorioTemporario();
 
   const atual = captureCli(bin, { repo, home });
   const arquivo = readFileSync(fileURLToPath(new URL("./fixtures/cli-baseline.txt", import.meta.url)), "utf8");
@@ -655,7 +655,7 @@ test("regressão §2.7: a saída da CLI só muda por decisão deliberada", () =>
 
 test("CLI: status de projeto só com plugin não se contradiz nem falha", () => {
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const run = (args) => {
     try {
       return { status: 0, stdout: execFileSync("node", [bin, ...args], {
@@ -689,7 +689,7 @@ test("CLI: status de projeto só com plugin não se contradiz nem falha", () => 
 });
 
 test("planInstall exclui a skill substituída só do motor indicado e registra replaced", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const replaced = { "claude-code": { "junit-clean": "@acme/junit-clean" } };
   const plan = installer.planInstall(["claude-code", "copilot"], "project", repo, {
     language: "java", architecture: "hexagonal", replaced,
@@ -709,7 +709,7 @@ test("planInstall exclui a skill substituída só do motor indicado e registra r
 });
 
 test("planInstall sem replaced mantém o conjunto e o manifesto de hoje", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const plan = installer.planInstall(["claude-code"], "project", repo, { language: "java", architecture: "hexagonal" });
   assert.deepEqual(plan.targets[0].skills, plan.skills);
   installer.execute(plan);
@@ -760,7 +760,7 @@ function stubDeColisao(nome = "junit-clean", registry = "acme") {
 
 test("ciclo completo da substituição: add substitui, install respeita, remove avisa, update devolve", async () => {
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const stub = stubDeColisao();
   const { indexUrl } = await stub.pronto;
   const run = async (args, options = {}) => (await promisify(execFile)("node", [bin, ...args], {
@@ -809,7 +809,7 @@ test("ciclo completo da substituição: add substitui, install respeita, remove 
 
 test("registry fora do ar não devolve a skill do método fingindo ser o plugin", async () => {
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const stub = stubDeColisao();
   const { indexUrl } = await stub.pronto;
   const flags = ["install", "--engine", "claude-code", "--language", "java", "--arch", "hexagonal", "--project-id", "fora", "-y", repo];
@@ -838,7 +838,7 @@ test("registry fora do ar não devolve a skill do método fingindo ser o plugin"
 
 test("status reporta divergência entre o lockfile e o disco, sem corrigir", () => {
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const run = () => execFileSync("node", [bin, "status", repo], {
     encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env, LC_ALL: "pt_BR.UTF-8" },
@@ -869,7 +869,7 @@ test("status reporta divergência entre o lockfile e o disco, sem corrigir", () 
 
 test("clone limpo reproduz a substituição sem perguntar (critério 4 da spec)", async () => {
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
-  const origem = tmp();
+  const origem = diretorioTemporario();
   const stub = stubDeColisao();
   const { indexUrl } = await stub.pronto;
   const flags = (repo, id) => ["install", "--engine", "claude-code", "--language", "java", "--arch", "hexagonal", "--project-id", id, "-y", repo];
@@ -887,7 +887,7 @@ test("clone limpo reproduz a substituição sem perguntar (critério 4 da spec)"
     });
 
     // O colega clona: só o lockfile viaja (o .mgr-core fica na máquina de quem instalou).
-    const clone = tmp();
+    const clone = diretorioTemporario();
     writeFileSync(path.join(clone, "mgr-skills.lock"), readFileSync(path.join(origem, "mgr-skills.lock"), "utf8"), "utf8");
 
     const saida = await run(flags(clone, "clone"));
@@ -951,7 +951,7 @@ function stubComEcossistema(nome = "junit-clean", ecosystems = ["java"]) {
 
 test("CLI: install grava o hook dos motores escolhidos, sem duplicar, e uninstall remove", () => {
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const run = (args) => execFileSync("node", [bin, ...args], {
     encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env, LC_ALL: "pt_BR.UTF-8" },
@@ -977,7 +977,7 @@ test("CLI: install grava o hook dos motores escolhidos, sem duplicar, e uninstal
 
 test("CLI: --no-hooks não grava hook nenhum e o plano não promete o que não vai fazer", () => {
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const saida = execFileSync("node", [bin, "install", "--engine", "claude-code", "--arch", "hexagonal",
     "--project-id", "nh", "--no-hooks", "-y", repo], {
     encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
@@ -990,7 +990,7 @@ test("CLI: --no-hooks não grava hook nenhum e o plano não promete o que não v
 
 test("CLI: modo manual não sugere e detectionMode inválido falha antes de escrever", () => {
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
-  const repo = tmp();
+  const repo = diretorioTemporario();
   writeFileSync(path.join(repo, "pom.xml"), "<project/>", "utf8");
   mkdirSync(path.join(repo, ".mgr-core"), { recursive: true });
   const config = path.join(repo, ".mgr-core", "config.json");
@@ -1004,7 +1004,7 @@ test("CLI: modo manual não sugere e detectionMode inválido falha antes de escr
   assert.doesNotMatch(run(flags), /Skills plugáveis disponíveis/, "manual não sugere");
 
   writeFileSync(config, JSON.stringify({ registries: [], detectionMode: "auto" }), "utf8");
-  const semAuto = tmp();
+  const semAuto = diretorioTemporario();
   writeFileSync(path.join(semAuto, "marcador"), "x", "utf8");
   mkdirSync(path.join(semAuto, ".mgr-core"), { recursive: true });
   writeFileSync(path.join(semAuto, ".mgr-core", "config.json"),
@@ -1018,7 +1018,7 @@ test("CLI: modo manual não sugere e detectionMode inválido falha antes de escr
 
 test("CLI: ciclo da sugestão — detect propõe, add instala, detect para de propor", async () => {
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const stub = stubComEcossistema();
   const { indexUrl } = await stub.pronto;
   const run = async (args, options = {}) => (await promisify(execFile)("node", [bin, ...args], {
@@ -1114,7 +1114,7 @@ test("modelo declarado pelo usuário chega ao agente do copilot", () => {
 });
 
 test("instalar o agente resolve os tokens e marca a posse", () => {
-  const dir = path.join(tmp(), "agents");
+  const dir = path.join(diretorioTemporario(), "agents");
   const { written, blocked } = installAgents("claude-code", dir, gateDefaults(), {
     reviewSkillRef: ".claude/skills/code-analyzer/SKILL.md",
     userLanguage: "português",
@@ -1129,22 +1129,22 @@ test("instalar o agente resolve os tokens e marca a posse", () => {
 });
 
 test("nome do arquivo do agente segue o descritor do motor", () => {
-  const claudeDir = path.join(tmp(), "agents");
-  const copilotDir = path.join(tmp(), "agents");
+  const claudeDir = path.join(diretorioTemporario(), "agents");
+  const copilotDir = path.join(diretorioTemporario(), "agents");
   const opts = { reviewSkillRef: "x", userLanguage: "en" };
   assert.equal(path.basename(installAgents("claude-code", claudeDir, gateDefaults(), opts).written[0]), "mgr-review.md");
   assert.equal(path.basename(installAgents("copilot", copilotDir, gateDefaults(), opts).written[0]), "mgr-review.agent.md");
 });
 
 test("gate desligado não escreve arquivo de agente nenhum", () => {
-  const dir = path.join(tmp(), "agents");
+  const dir = path.join(diretorioTemporario(), "agents");
   const resultado = installAgents("claude-code", dir, { ...gateDefaults(), enabled: false }, {});
   assert.deepEqual(resultado.written, []);
   assert.equal(existsSync(dir), false);
 });
 
 test("agente alheio de mesmo nome não é sobrescrito", () => {
-  const dir = path.join(tmp(), "agents");
+  const dir = path.join(diretorioTemporario(), "agents");
   mkdirSync(dir, { recursive: true });
   const alheio = path.join(dir, "mgr-review.md");
   writeFileSync(alheio, "agente do usuário, escrito à mão", "utf8");
@@ -1173,8 +1173,8 @@ test("no copilot o desvio é instrução no corpo, sem tocar no frontmatter", ()
 });
 
 test("com o gate desligado a code-analyzer instalada só sofre as resoluções de token", () => {
-  const comGate = path.join(tmp(), "skills");
-  const semGate = path.join(tmp(), "skills");
+  const comGate = path.join(diretorioTemporario(), "skills");
+  const semGate = path.join(diretorioTemporario(), "skills");
   const gate = gateDefaults();
   installEngine(semGate, ["code-analyzer"], { engineId: "claude-code", reviewGate: { ...gate, enabled: false } });
   installEngine(comGate, ["code-analyzer"], { engineId: "claude-code", reviewGate: gate });
@@ -1197,7 +1197,7 @@ test("com o gate desligado a code-analyzer instalada só sofre as resoluções d
 });
 
 test("o roteamento só toca a code-analyzer, não as outras skills", () => {
-  const dir = path.join(tmp(), "skills");
+  const dir = path.join(diretorioTemporario(), "skills");
   const gate = gateDefaults();
   installEngine(dir, ["code-analyzer", "adr-create"], { engineId: "claude-code", reviewGate: gate });
   const outra = readFileSync(path.join(dir, "adr-create", "SKILL.md"), "utf8");
@@ -1211,7 +1211,7 @@ const instalarComGate = (repo, gate) => {
 };
 
 test("instalar com o default grava o agente e o registra no manifest", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   mkdirSync(installer.coreDir("project", repo), { recursive: true });
   const resultado = instalarComGate(repo);
 
@@ -1230,7 +1230,7 @@ test("instalar com o default grava o agente e o registra no manifest", () => {
 });
 
 test("gate desligado não grava agente nem registra no manifest", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   mkdirSync(installer.coreDir("project", repo), { recursive: true });
   instalarComGate(repo, { enabled: false });
 
@@ -1240,7 +1240,7 @@ test("gate desligado não grava agente nem registra no manifest", () => {
 });
 
 test("uninstall remove o agente do MGR e limpa o diretório vazio", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   mkdirSync(installer.coreDir("project", repo), { recursive: true });
   instalarComGate(repo);
   const { removed, kept } = installer.uninstall("project", repo);
@@ -1251,7 +1251,7 @@ test("uninstall remove o agente do MGR e limpa o diretório vazio", () => {
 });
 
 test("uninstall não toca em agente que perdeu o marcador do MGR", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   mkdirSync(installer.coreDir("project", repo), { recursive: true });
   instalarComGate(repo);
 
@@ -1265,7 +1265,7 @@ test("uninstall não toca em agente que perdeu o marcador do MGR", () => {
 });
 
 test("install não sobrescreve agente alheio e devolve o aviso", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   mkdirSync(installer.coreDir("project", repo), { recursive: true });
   const dir = path.join(repo, ".claude", "agents");
   mkdirSync(dir, { recursive: true });
@@ -1278,7 +1278,7 @@ test("install não sobrescreve agente alheio e devolve o aviso", () => {
 });
 
 test("no copilot o gate instala o agente e declara o esforço não suportado", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   mkdirSync(installer.coreDir("project", repo), { recursive: true });
   const resultado = installer.execute(
     installer.planInstall(["copilot"], "project", repo, { names: ["code-analyzer"] }),
@@ -1295,7 +1295,7 @@ test("no copilot o gate instala o agente e declara o esforço não suportado", (
 });
 
 test("o ajuste do gate sobrevive ao update", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   mkdirSync(installer.coreDir("project", repo), { recursive: true });
   instalarComGate(repo, { effort: "high", model: { "claude-code": "sonnet" } });
   installer.update("project", repo);
@@ -1322,7 +1322,7 @@ test("modelo declarado para um motor que não o sustenta vira degradação decla
 });
 
 test("as leis de execução são copiadas SEMPRE, sem depender de arquitetura", () => {
-  const semArch = path.join(tmp(), "skills");
+  const semArch = path.join(diretorioTemporario(), "skills");
   installEngine(semArch, ["adr-create"], {});
   const lei = path.join(semArch, "_shared", "laws", "execution-laws.md");
   assert.ok(existsSync(lei), "a fonte é núcleo: não depende de skill de arquitetura");
@@ -1370,7 +1370,7 @@ test("as invariantes I1, I2 e I3 sobrevivem verbatim na fonte única", () => {
 });
 
 test("o preâmbulo aponta para a fonte DO MOTOR, não para a do outro", async () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   mkdirSync(installer.coreDir("project", repo), { recursive: true });
   installer.execute(installer.planInstall(["claude-code", "copilot"], "project", repo, { names: ["adr-create"] }));
 
@@ -1394,7 +1394,7 @@ const planoEm = (repo, slug, corpo) => {
 };
 
 test("mgr spec validate: plano defeituoso reprova com exit 1 e ensina a corrigir", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   planoEm(repo, "quebrado", [
     "<!-- mgr-plan-format: 1 -->",
     "### P0.1 — a",
@@ -1420,7 +1420,7 @@ test("mgr spec validate: plano defeituoso reprova com exit 1 e ensina a corrigir
 });
 
 test("mgr spec validate: um plano em cada forma real passa com exit 0", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const fixtures = fileURLToPath(new URL("./fixtures/plans", import.meta.url));
   for (const nome of readdirSync(fixtures, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name)) {
     mkdirSync(path.join(repo, "specs", nome.replace(".md", "")), { recursive: true });
@@ -1434,7 +1434,7 @@ test("mgr spec validate: um plano em cada forma real passa com exit 0", () => {
 });
 
 test("mgr spec validate --json tem schemaVersion e o contrato estável", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   planoEm(repo, "ok", "<!-- mgr-plan-format: 1 -->\n### P0.1 — a\n- **artifact:** 1 x\n- **done_when:** y\n");
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
   const payload = JSON.parse(execFileSync("node", [bin, "spec", "validate", "--all", "--json"], ptBR(repo)));
@@ -1446,7 +1446,7 @@ test("mgr spec validate --json tem schemaVersion e o contrato estável", () => {
 });
 
 test("mgr spec validate: --strict NÃO transforma PLAN-0 em erro", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   planoEm(repo, "legado", "### P0.1 — a\n- **depends_on:** []\n");
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
   const stdout = execFileSync("node", [bin, "spec", "validate", "--all", "--strict"], ptBR(repo));
@@ -1463,7 +1463,7 @@ test("mgr validate (autoria de skill) continua intacto ao lado do mgr spec valid
 });
 
 test("mgr spec validate sem --all e fora de specs/ diz o que fazer", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   mkdirSync(path.join(repo, "specs"), { recursive: true });
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
   const resultado = (() => {
@@ -1475,7 +1475,7 @@ test("mgr spec validate sem --all e fora de specs/ diz o que fazer", () => {
 });
 
 test("mgr spec validate <slug> valida só aquele slug", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   planoEm(repo, "bom", "<!-- mgr-plan-format: 1 -->\n### P0.1 — a\n- **artifact:** 1 x\n- **done_when:** y\n");
   planoEm(repo, "ruim", "<!-- mgr-plan-format: 1 -->\n### P0.1 — a\n- **depends_on:** [P9.9]\n- **artifact:** 1 x\n- **done_when:** y\n");
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
@@ -1500,7 +1500,7 @@ test("mgr spec respeita o userLanguage do manifesto, como os demais comandos", (
   // posicional de `mgr spec` é SUBCOMANDO, não repositório. Sem tratar isso, o repo virava
   // `<cwd>/validate`, o manifesto não era encontrado e a precedência
   // flag > manifesto > locale valia para todo comando MENOS o novo.
-  const repo = tmp();
+  const repo = diretorioTemporario();
   mkdirSync(installer.coreDir("project", repo), { recursive: true });
   installer.execute(installer.planInstall(["claude-code"], "project", repo, {
     names: ["adr-create"], userLanguage: "pt-BR",
@@ -1523,7 +1523,7 @@ const specEm = (repo, slug, corpo) => {
 };
 
 test("mgr spec validate cobre plano E spec no mesmo comando", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   planoEm(repo, "x", "<!-- mgr-plan-format: 1 -->\n### P0.1 — a\n- **depends_on:** [P9.9]\n- **artifact:** 1 x\n- **done_when:** y\n");
   specEm(repo, "x", "<!-- mgr-spec-format: 1 -->\n# spec sem critério\n");
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
@@ -1537,7 +1537,7 @@ test("mgr spec validate cobre plano E spec no mesmo comando", () => {
 });
 
 test("mgr spec validate: achados PLAN-* não mudaram de forma", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   planoEm(repo, "x", "<!-- mgr-plan-format: 1 -->\n### P0.1 — a\n- **files:** [a, b, c, d]\n- **artifact:** 1 x\n- **done_when:** y\n");
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
   const resultado = (() => {
@@ -1550,7 +1550,7 @@ test("mgr spec validate: achados PLAN-* não mudaram de forma", () => {
 // O outro lado da decisão: sem isto, a suíte não distingue "--strict funciona" de "--strict é
 // no-op". Os dois avisos abaixo NÃO são isentos, e em modo estrito o comando tem de sair com 1.
 test("mgr spec validate: --strict reprova o aviso não isento, nos dois artefatos", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const plano = [
     "<!-- mgr-plan-format: 1 -->",
     "### P0.1 — a", "- **depends_on:** [P1.1]", "- **artifact:** 1 x", "- **done_when:** y",
@@ -1574,7 +1574,7 @@ test("mgr spec validate: --strict reprova o aviso não isento, nos dois artefato
 });
 
 test("mgr spec validate: spec sem marcador não reprova, nem com --strict", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   specEm(repo, "legado", "# spec antiga\n\n1. primeiro critério sem identidade\n");
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
   const stdout = execFileSync("node", [bin, "spec", "validate", "--all", "--strict"], ptBR(repo));
@@ -1583,7 +1583,7 @@ test("mgr spec validate: spec sem marcador não reprova, nem com --strict", () =
 });
 
 test("mgr spec validate --json soma os dois artefatos no mesmo envelope", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   planoEm(repo, "x", "<!-- mgr-plan-format: 1 -->\n### P0.1 — a\n- **artifact:** 1 x\n- **done_when:** y\n");
   specEm(repo, "x", "<!-- mgr-spec-format: 1 -->\n- [ ] **CA-1:** algo observável\n");
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
@@ -1606,7 +1606,7 @@ const rodarNext = (repo, args) => {
 };
 
 test("mgr spec next: devolve a task pronta, com artefato e skill", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   planoDeFixture(repo, "demo", "com-estado.md");
   const { stdout, status } = rodarNext(repo, ["demo"]);
   assert.equal(status, 0);
@@ -1617,7 +1617,7 @@ test("mgr spec next: devolve a task pronta, com artefato e skill", () => {
 });
 
 test("mgr spec next: com tudo concluído não devolve task, e sai com 0", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   planoDeFixture(repo, "demo", "tudo-concluido.md");
   const { stdout, status } = rodarNext(repo, ["demo"]);
   assert.equal(status, 0, "ausência de trabalho pronto é resposta verdadeira, não falha");
@@ -1626,7 +1626,7 @@ test("mgr spec next: com tudo concluído não devolve task, e sai com 0", () => 
 });
 
 test("mgr spec next: nada pronto lista o que bloqueia e manda validar", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const fixtures = fileURLToPath(new URL("./fixtures/plans/invalidos", import.meta.url));
   mkdirSync(path.join(repo, "specs", "demo"), { recursive: true });
   writeFileSync(path.join(repo, "specs", "demo", "04-plan.md"),
@@ -1639,7 +1639,7 @@ test("mgr spec next: nada pronto lista o que bloqueia e manda validar", () => {
 });
 
 test("mgr spec next: plano sem marcador explica o que falta e não reprova", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   planoDeFixture(repo, "demo", "legado-puro.md");
   const { stdout, status } = rodarNext(repo, ["demo"]);
   assert.equal(status, 0, "plano escrito antes da feature nunca é reprovado por ela");
@@ -1649,7 +1649,7 @@ test("mgr spec next: plano sem marcador explica o que falta e não reprova", () 
 });
 
 test("mgr spec next: sem estado declarado, admite que não sabe o que já foi feito", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   planoDeFixture(repo, "demo", "formato-1.md");
   const { stdout } = rodarNext(repo, ["demo"]);
   assert.match(stdout, /NÃO sabe o que você já fez/);
@@ -1657,13 +1657,13 @@ test("mgr spec next: sem estado declarado, admite que não sabe o que já foi fe
 });
 
 test("mgr spec next: sem plano nenhum sai com 1", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   mkdirSync(path.join(repo, "specs"), { recursive: true });
   assert.equal(rodarNext(repo, ["inexistente"]).status, 1);
 });
 
 test("mgr spec next --json tem o envelope estável e nenhum caminho absoluto", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   planoDeFixture(repo, "demo", "com-estado.md");
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
   const payload = JSON.parse(execFileSync("node", [bin, "spec", "next", "demo", "--json"], ptBR(repo)));
@@ -1675,7 +1675,7 @@ test("mgr spec next --json tem o envelope estável e nenhum caminho absoluto", (
 });
 
 test("mgr spec next: `--all` é RECUSADO, em vez de aceito e ignorado", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   planoDeFixture(repo, "demo", "com-estado.md");
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
   let erro = null;
@@ -1687,7 +1687,7 @@ test("mgr spec next: `--all` é RECUSADO, em vez de aceito e ignorado", () => {
 });
 
 test("mgr spec next: da raiz e sem slug, NÃO escolhe em silêncio", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   planoDeFixture(repo, "alfa", "com-estado.md");
   planoDeFixture(repo, "beta", "formato-1.md");
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
@@ -1701,7 +1701,7 @@ test("mgr spec next: da raiz e sem slug, NÃO escolhe em silêncio", () => {
 });
 
 test("mgr spec next: de dentro de specs/<slug>/ continua respondendo sem slug", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   planoDeFixture(repo, "alfa", "com-estado.md");
   planoDeFixture(repo, "beta", "formato-1.md");
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
@@ -1722,7 +1722,7 @@ const rodarValidate = (repo, args) => {
 };
 
 test("mgr spec validate: o ponteiro quebrado entra no MESMO comando, como erro", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   artefatoComTexto(repo, "demo", "01-brief.md", "a origem disto [code:src/sumiu.js:1]\n");
   const { stdout, status } = rodarValidate(repo, ["demo"]);
   assert.equal(status, 1, "PROV-2 é erro e bloqueia");
@@ -1731,7 +1731,7 @@ test("mgr spec validate: o ponteiro quebrado entra no MESMO comando, como erro",
 });
 
 test("mgr spec validate: ponteiro que resolve e etiqueta em prosa não produzem achado", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   writeFileSync(path.join(repo, "existe.js"), "uma linha\n");
   artefatoComTexto(repo, "demo", "01-brief.md",
     "resolve [code:existe.js:1]\no ponteiro `[code:src/sumiu.js:1]` citado no meio da frase.\n");
@@ -1741,11 +1741,11 @@ test("mgr spec validate: ponteiro que resolve e etiqueta em prosa não produzem 
 });
 
 test("mgr spec validate: a marca de pendência só vira aviso em feature com 06-completion.md", () => {
-  const aberta = tmp();
+  const aberta = diretorioTemporario();
   artefatoComTexto(aberta, "demo", "01-brief.md", "o prazo [A DEFINIR]\n");
   assert.ok(!rodarValidate(aberta, ["demo"]).stdout.includes("PROV-3"), "feature aberta pode ter pendência");
 
-  const fechada = tmp();
+  const fechada = diretorioTemporario();
   artefatoComTexto(fechada, "demo", "01-brief.md", "o prazo [A DEFINIR]\n");
   artefatoComTexto(fechada, "demo", "06-completion.md", "fechada\n");
   const { stdout, status } = rodarValidate(fechada, ["demo"]);
@@ -1755,7 +1755,7 @@ test("mgr spec validate: a marca de pendência só vira aviso em feature com 06-
 });
 
 test("mgr spec validate: o envelope --json não mudou de forma", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   artefatoComTexto(repo, "demo", "01-brief.md", "a origem disto [code:src/sumiu.js:1]\n");
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
   let saida = null;
@@ -1768,7 +1768,7 @@ test("mgr spec validate: o envelope --json não mudou de forma", () => {
 });
 
 test("mgr spec validate continua idêntico ao lado do next", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   planoDeFixture(repo, "demo", "com-estado.md");
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
   const stdout = execFileSync("node", [bin, "spec", "validate", "--all"], ptBR(repo));
@@ -1778,7 +1778,7 @@ test("mgr spec validate continua idêntico ao lado do next", () => {
 
 // `mgr spec status` (ADR-0015). Locale fixado, como o CI exige.
 const repoComArtefatos = (arvore) => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   for (const [slug, arquivos] of Object.entries(arvore)) {
     mkdirSync(path.join(repo, "specs", slug), { recursive: true });
     for (const nome of arquivos) writeFileSync(path.join(repo, "specs", slug, nome), "x");
@@ -1833,7 +1833,7 @@ test("mgr spec status: slug inexistente sai com 1", () => {
 });
 
 test("mgr spec status --all sem feature nenhuma sai com 1", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   mkdirSync(path.join(repo, "specs"), { recursive: true });
   assert.equal(rodarStatus(repo, ["--all"]).status, 1);
 });
@@ -1856,7 +1856,7 @@ test("mgr spec status --json: envelope estável, com basis e warning, e sem camp
 });
 
 test("mgr spec validate e mgr spec next continuam idênticos ao lado do status", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   planoDeFixture(repo, "demo", "com-estado.md");
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
   assert.match(execFileSync("node", [bin, "spec", "validate", "--all"], ptBR(repo)), /0 erro\(s\)/);

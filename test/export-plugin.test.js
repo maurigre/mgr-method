@@ -9,13 +9,13 @@ import { manifestFromFiles } from "../src/plugin-installer.js";
 import { ARCH_RULES_TOKEN, USER_LANGUAGE_FALLBACK, USER_LANGUAGE_TOKEN } from "../src/catalog.js";
 import { fileURLToPath } from "node:url";
 
-const tmp = () => mkdtempSync(path.join(os.tmpdir(), "mgr-export-"));
+const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-export-"));
 
 const POC = ["junit-clean", "diagnosing-bugs"];
 const skillSource = (skill) => fileURLToPath(new URL(`../skills/${skill}/SKILL.md`, import.meta.url));
 
 test("export das PoC gera plugins válidos com o manifest do formato", () => {
-  const outDir = tmp();
+  const outDir = diretorioTemporario();
   for (const skill of POC) {
     const result = exportPlugin(skill, { outDir });
     assert.equal(result.name, `@mgr/${skill}`);
@@ -33,7 +33,7 @@ test("export das PoC gera plugins válidos com o manifest do formato", () => {
 });
 
 test("export resolve o token de idioma e mantém a SKILL.md instalável", () => {
-  const outDir = tmp();
+  const outDir = diretorioTemporario();
   const { dir } = exportPlugin("junit-clean", { outDir });
   const skillMd = readFileSync(path.join(dir, "SKILL.md"), "utf8");
   assert.ok(!skillMd.includes(USER_LANGUAGE_TOKEN), "token de idioma não pode vazar para o plugin");
@@ -42,7 +42,7 @@ test("export resolve o token de idioma e mantém a SKILL.md instalável", () => 
 });
 
 test("junit-clean declara model/effort e diagnosing-bugs não (degradação por motor)", () => {
-  const outDir = tmp();
+  const outDir = diretorioTemporario();
   const junit = JSON.parse(readFileSync(path.join(exportPlugin("junit-clean", { outDir }).dir, MANIFEST_NAME), "utf8"));
   const bugs = JSON.parse(readFileSync(path.join(exportPlugin("diagnosing-bugs", { outDir }).dir, MANIFEST_NAME), "utf8"));
   assert.equal(junit.model["claude-code"], "sonnet");
@@ -52,8 +52,8 @@ test("junit-clean declara model/effort e diagnosing-bugs não (degradação por 
 });
 
 test("checksum do export é determinístico e o pacote casa com a entrada do index", () => {
-  const primeiro = exportPlugin("diagnosing-bugs", { outDir: tmp() });
-  const segundo = exportPlugin("diagnosing-bugs", { outDir: tmp() });
+  const primeiro = exportPlugin("diagnosing-bugs", { outDir: diretorioTemporario() });
+  const segundo = exportPlugin("diagnosing-bugs", { outDir: diretorioTemporario() });
   assert.equal(primeiro.checksum, segundo.checksum);
 
   const files = collectFiles(primeiro.dir);
@@ -63,8 +63,8 @@ test("checksum do export é determinístico e o pacote casa com a entrada do ind
 });
 
 test("export recusa skill sem metadados e skill que depende de _shared", () => {
-  const outDir = tmp();
-  const skillsDir = tmp();
+  const outDir = diretorioTemporario();
+  const skillsDir = diretorioTemporario();
   mkdirSync(path.join(skillsDir, "arch-hexagonal"), { recursive: true });
   writeFileSync(
     path.join(skillsDir, "arch-hexagonal", "SKILL.md"),
@@ -83,7 +83,7 @@ test("buildManifest reprova description fora do limite do schema", () => {
 });
 
 test("ecosystems só é declarado onde há ecossistema real de projeto", () => {
-  const outDir = tmp();
+  const outDir = diretorioTemporario();
   const junit = JSON.parse(readFileSync(path.join(exportPlugin("junit-clean", { outDir }).dir, MANIFEST_NAME), "utf8"));
   const bugs = JSON.parse(readFileSync(path.join(exportPlugin("diagnosing-bugs", { outDir }).dir, MANIFEST_NAME), "utf8"));
 

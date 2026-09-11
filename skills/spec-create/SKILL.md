@@ -49,6 +49,20 @@ Feature slug: kebab-case of the brief, no accents, ≤ 50 chars — confirm with
 ```
 (Templates in this skill's `templates/`.)
 
+## Resolving artifact paths — ask, do not assume
+
+`mgr spec status <slug> --json` returns `specRoot` and the resolved `path` of every artifact that
+exists, plus `handoff` and `nextReady`. **Prefer it over building paths from the convention
+above** — assuming structure is a class of hallucination, and the resolved path is a fact.
+
+**Fallback — when the `mgr` CLI is NOT installed:** use the layout above literally
+(`/specs/<slug>/01-brief.md` and the rest, `/specs/<slug>/.handoff.md`,
+`/specs/<slug>/.context.json`). The method MUST keep working with the skills alone, so this is a
+supported path, not a failure. Say in the log which of the two you used.
+
+The payload's `basis` is `file-existence`: an artifact on disk is **not** an approved artifact, and
+this command never says a phase is done or a checkpoint was approved.
+
 ## Flow — 6 phases with checkpoints
 
 ### Phase 0 — Versioning (if the policy is enabled in the CONSTITUTION)
@@ -62,13 +76,14 @@ A spec with pending execution does not enter the queue. Then create this spec's 
 project → skip this whole phase, no questions.
 
 ### Phase 1 — Contextualization (no interaction)
-**1a. Resumption:** if `/specs/<slug>/.handoff.md` exists, load ONLY the saved state
+**1a. Resumption:** resolve the path first (see *Resolving artifact paths*); if the feature's
+`.handoff.md` exists, load ONLY the saved state
 (tiers S/A/B + decisions), skip already-approved phases and completed tasks, and warn:
 "Resuming <slug> from task <id>." Otherwise, normal load:
 CONSTITUTION → 01-architecture → 02-domain → 03-contracts → 08-glossary → inventory of
 available skills (built-in + custom in `.claude/skills/` and `~/.claude/skills/`;
 for each one, read the SKILL.md and note when it would be useful). Save to
-`/specs/<slug>/.context.json` (gitignored).
+`.context.json` under the resolved `specRoot` (gitignored; fallback `/specs/<slug>/.context.json`).
 
 ### Phase 2 — PRD (`02-prd.md`)
 Context and motivation · goal · use cases (actors + flow) · business rules ·
@@ -106,7 +121,7 @@ with English keys — `priority`, `depends_on`, `files`, `artifact`, `done_when`
 and the optional `status` (`todo` or `done`), which `mgr spec next` reads.
 The keys are the parseable identity; the values are written in the user's language. `artifact`
 is the rail of L4.3: name, shape, signature and QUANTITY. Run `mgr spec validate` on the plan
-before the checkpoint — it checks structure only, never judgement.
+before the checkpoint when the CLI is installed — it checks structure only, never judgement.
 Each task lists: goal, files, dependencies, suggested helper
 skill (`junit-clean` for Java test tasks, `code-analyzer` for review), and a done
 criterion.

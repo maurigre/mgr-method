@@ -180,6 +180,17 @@ const en = {
   specNextNoState: (total) => `State declared in 0 of ${total} task(s): this tool does NOT know what you have already done.`,
   specNextFirstStartable: "So this is the first task that CAN start, not necessarily the next one.",
   specNextNoPlan: (dir) => `no plan found in ${dir}`,
+  specStatusRoot: (root) => `${root}`,
+  specStatusArtifacts: (linha) => `  artifacts: ${linha}`,
+  specStatusNextReady: (ids) => `  to write:  ${ids}`,
+  specStatusNothingReady: "  to write:  nothing — every artifact is on disk",
+  specStatusHandoffNone: "  handoff:   none",
+  specStatusHandoffOn: (file) => `  handoff:   ${file} (on disk; it is never removed automatically)`,
+  specStatusLine: (slug, resumo) => `  ${slug.padEnd(26)} ${resumo}`,
+  specStatusWarning:
+    "This is FILE EXISTENCE, not progress. It does not know which checkpoint you approved, and an artifact on disk is not an approved artifact.",
+  specStatusNotFound: (slug) => `no feature \`${slug}\` in specs/`,
+  specStatusEmpty: (dir) => `no feature found in ${dir}`,
   gateKept: (file) => `  kept: ${file} lost the MGR marker and was left untouched`,
   statusGate: (state) => `  gate:    ${state}`,
   statusGateOff: "off (reviewGate.enabled = false)",
@@ -201,6 +212,7 @@ Usage: mgr <command> [options]
   spec validate    validates this project's plan and spec artifacts
                    ([<slug>], --all, --strict, --json)
   spec next        the next action from the plan ([<slug>], --json)
+  spec status      which artifacts exist ([<slug>], --all, --json)
   list             lists the skills
   version          shows the version
 
@@ -392,6 +404,17 @@ const ptBR = {
   specNextNoState: (total) => `Estado declarado em 0 de ${total} task(s): esta ferramenta NÃO sabe o que você já fez.`,
   specNextFirstStartable: "Então esta é a primeira task que PODE começar, não necessariamente a próxima.",
   specNextNoPlan: (dir) => `nenhum plano encontrado em ${dir}`,
+  specStatusRoot: (root) => `${root}`,
+  specStatusArtifacts: (linha) => `  artefatos: ${linha}`,
+  specStatusNextReady: (ids) => `  escrever:  ${ids}`,
+  specStatusNothingReady: "  escrever:  nada — todos os artefatos estão em disco",
+  specStatusHandoffNone: "  handoff:   nenhum",
+  specStatusHandoffOn: (file) => `  handoff:   ${file} (em disco; ele nunca é removido automaticamente)`,
+  specStatusLine: (slug, resumo) => `  ${slug.padEnd(26)} ${resumo}`,
+  specStatusWarning:
+    "Isto é EXISTÊNCIA DE ARQUIVO, não progresso. Ele não sabe qual checkpoint você aprovou, e artefato em disco não é artefato aprovado.",
+  specStatusNotFound: (slug) => `não há a feature \`${slug}\` em specs/`,
+  specStatusEmpty: (dir) => `nenhuma feature encontrada em ${dir}`,
   gateKept: (file) => `  preservado: ${file} perdeu o marcador do MGR e não foi tocado`,
   statusGate: (state) => `  gate:    ${state}`,
   statusGateOff: "desligado (reviewGate.enabled = false)",
@@ -413,6 +436,7 @@ Uso: mgr <comando> [opções]
   spec validate    valida o plano e a spec deste projeto
                    ([<slug>], --all, --strict, --json)
   spec next        a próxima ação a partir do plano ([<slug>], --json)
+  spec status      quais artefatos existem ([<slug>], --all, --json)
   list             lista as skills
   version          mostra a versão
 

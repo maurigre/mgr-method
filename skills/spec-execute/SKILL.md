@@ -14,6 +14,11 @@ confirmation, at closing).
 
 ## Initial load (hand-off via disk — never via conversation memory)
 
+0. **Resolve the paths, do not assume them.** `mgr spec status <slug> --json` returns `specRoot`,
+   the resolved `path` of each artifact and `handoff`. **Fallback — when the `mgr` CLI is NOT
+   installed:** use the literal layout below (`/specs/<slug>/04-plan.md`, `/specs/<slug>/.handoff.md`).
+   The method MUST keep working with the skills alone; say in the log which of the two you used.
+   The payload's `basis` is `file-existence`: an artifact on disk is not an approved artifact.
 1. **Resumption first:** if `/specs/<slug>/.handoff.md` exists, load ONLY the saved
    state, skip completed tasks and warn: "Resuming <slug> from task <id>."
 2. Otherwise, load the tiers from disk:

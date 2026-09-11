@@ -9,6 +9,8 @@ import * as catalogo from "../src/catalog.js";
 import * as planValidator from "../src/plan-validator.js";
 import * as specValidator from "../src/spec-validator.js";
 import * as planNext from "../src/plan-next.js";
+import * as specStatus from "../src/spec-status.js";
+import { repoRoot } from "../src/artifacts.js";
 import { blocking, summarize } from "../src/findings.js";
 import { buildRuntime, gateSummary } from "../src/builder.js";
 import { validateAll } from "../src/validator.js";
@@ -476,7 +478,7 @@ async function proposeDetected(repo, scope, targets) {
 // que valida autoria de SKILL.md: são contratos diferentes (ADR-0012). Aqui só há parse de flag,
 // formatação e exit code; descoberta, leitura e política vivem em src/plan-validator.js (INV-5).
 function cmdSpecValidate(flags, positional) {
-  const repo = path.resolve(".");
+  const repo = repoRoot(process.cwd());
   const slug = flags.all ? null : (positional[0] || planValidator.slugFromCwd(repo, process.cwd()));
   // Dois artefatos, um comando: o plano (ADR-0012) e a spec (ADR-0013).
   const planos = planValidator.validatePlans(repo, { slug });
@@ -554,7 +556,7 @@ function linhasDoGate(plan) {
 // `mgr spec next` — a próxima AÇÃO, não o estado (ADR-0014). Sem `--all`: a pergunta "o que faço
 // agora" é sobre UMA feature. Aqui só há formatação e exit code; a decisão vive em src/plan-next.js.
 function cmdSpecNext(flags, positional) {
-  const repo = path.resolve(".");
+  const repo = repoRoot(process.cwd());
   const slug = positional[0] || planValidator.slugFromCwd(repo, process.cwd());
   const resultado = planNext.nextTask(repo, { slug });
 
@@ -612,10 +614,67 @@ function cmdSpecNext(flags, positional) {
   return 0;
 }
 
+// `mgr spec status` — o que EXISTE em disco, e o aviso de que existência não é progresso
+// (ADR-0015). Aqui só há formatação e exit code; o modelo e o IO vivem em src/spec-status.js.
+function cmdSpecStatus(flags, positional) {
+  const repo = repoRoot(process.cwd());
+
+  if (flags.all) {
+    const todas = specStatus.statusAll(repo);
+    if (!todas.length) {
+      console.error(M.errorPrefix(M.specStatusEmpty(path.join(repo, "specs"))));
+      return 1;
+    }
+    if (flags.json) {
+      console.log(JSON.stringify({ schemaVersion: 1, basis: specStatus.BASIS, warning: M.specStatusWarning, features: todas }, null, 2));
+      return 0;
+    }
+    for (const feature of todas) console.log(M.specStatusLine(feature.slug, resumoDeStatus(feature)));
+    console.log("");
+    console.log(M.specStatusWarning);
+    return 0;
+  }
+
+  const slug = positional[0] || planValidator.slugFromCwd(repo, process.cwd());
+  const resultado = specStatus.statusFor(repo, { slug });
+
+  if (!resultado.found) {
+    console.error(M.errorPrefix(M.specStatusNotFound(slug || "")));
+    return 1;
+  }
+
+  if (flags.json) {
+    console.log(JSON.stringify({ schemaVersion: 1, ...resultado, warning: M.specStatusWarning }, null, 2));
+    return 0;
+  }
+
+  console.log(M.specStatusRoot(resultado.specRoot));
+  console.log(M.specStatusArtifacts(resultado.artifacts.map(marcaDeArtefato).join(" ")));
+  console.log(resultado.nextReady.length
+    ? M.specStatusNextReady(resultado.nextReady.join(", "))
+    : M.specStatusNothingReady);
+  console.log(resultado.handoff.exists
+    ? M.specStatusHandoffOn(resultado.handoff.path)
+    : M.specStatusHandoffNone);
+  console.log("");
+  console.log(M.specStatusWarning);
+  return 0;
+}
+
+// `brief` vira `brief`, ausente vira `-brief`. O traço marca o que NÃO está lá sem inventar
+// palavra nova, e o aviso logo abaixo diz o que a marca significa e o que ela não significa.
+const marcaDeArtefato = (artefato) =>
+  (artefato.status === specStatus.PRESENT ? "" : "-") + artefato.id;
+
+const resumoDeStatus = (feature) =>
+  `${feature.artifacts.filter((a) => a.status === specStatus.PRESENT).length}/${feature.artifacts.length}`
+  + (feature.handoff.exists ? "  handoff" : "");
+
 function cmdSpec(flags, positional) {
   const sub = positional[0];
   if (sub === "validate") return cmdSpecValidate(flags, positional.slice(1));
   if (sub === "next") return cmdSpecNext(flags, positional.slice(1));
+  if (sub === "status") return cmdSpecStatus(flags, positional.slice(1));
   console.error(M.errorPrefix(M.unknownCommand(`spec ${sub || ""}`.trim())));
   return 1;
 }

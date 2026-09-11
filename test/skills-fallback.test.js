@@ -10,18 +10,24 @@ import { fileURLToPath } from "node:url";
 // instalada — hoje ele funciona. As skills passaram a preferir `mgr spec status --json`, e a
 // única coisa que impede isso de virar dependência dura é o fallback estar ESCRITO.
 //
-// Este arquivo é o gate disso. Remover o fallback de qualquer uma das duas skills quebra aqui.
+// Este arquivo é o gate disso. Remover o fallback de qualquer uma das três skills quebra aqui.
 const RAIZ = fileURLToPath(new URL("..", import.meta.url));
 const BIN = path.join(RAIZ, "bin", "mgr.js");
 
-const SKILLS_DO_FLUXO = ["spec-create", "spec-execute"];
+// O alvo do fallback é POR SKILL: as duas do fluxo retomam por `.handoff.md`; o `code-analyzer`
+// não retoma nada — ele carrega a spec de origem. Exigir o mesmo alvo das três faria o teste cobrar
+// da terceira um caminho que ela não tem razão de citar.
+const SKILLS_DO_FLUXO = {
+  "spec-create": /\/specs\/<slug>\/\.handoff\.md/,
+  "spec-execute": /\/specs\/<slug>\/\.handoff\.md/,
+  "code-analyzer": /\/specs\/<slug>\/03-spec\.md/,
+};
 
 // Os três sinais, medidos separadamente: a consulta, o fallback e o alvo do fallback.
 // Sem limite de distância isto viraria `.*` depois de `semQuebras`, que remove todo `\n`:
 // a asserção passaria com a consulta e o `--json` em pontas opostas do arquivo.
 const CONSULTA = /mgr spec status[^.]{0,40}--json/;
 const FALLBACK = /Fallback — when the `mgr` CLI is NOT installed/;
-const ALVO_DO_FALLBACK = /\/specs\/<slug>\/\.handoff\.md/;
 
 
 // Normaliza o espaço em branco antes de casar: as skills quebram linha em ~95 colunas, e uma
@@ -31,17 +37,17 @@ const semQuebras = (texto) => texto.replace(/\s+/g, " ");
 const fonteDa = (skill) =>
   semQuebras(readFileSync(path.join(RAIZ, "skills", skill, "SKILL.md"), "utf8"));
 
-test("as duas skills do fluxo consultam o comando E declaram o fallback", () => {
-  for (const skill of SKILLS_DO_FLUXO) {
+test("as três skills consultam o comando E declaram o fallback", () => {
+  for (const [skill, alvoDoFallback] of Object.entries(SKILLS_DO_FLUXO)) {
     const texto = fonteDa(skill);
     assert.match(texto, CONSULTA, `${skill}: precisa preferir o caminho resolvido`);
     assert.match(texto, FALLBACK, `${skill}: sem o fallback escrito, a CLI vira dependência dura`);
-    assert.match(texto, ALVO_DO_FALLBACK, `${skill}: o fallback precisa dizer QUAL caminho usar`);
+    assert.match(texto, alvoDoFallback, `${skill}: o fallback precisa dizer QUAL caminho usar`);
   }
 });
 
 test("o fallback aparece junto da consulta, não numa seção esquecida do arquivo", () => {
-  for (const skill of SKILLS_DO_FLUXO) {
+  for (const skill of Object.keys(SKILLS_DO_FLUXO)) {
     const texto = fonteDa(skill);
     const distancia = Math.abs(texto.search(FALLBACK) - texto.search(CONSULTA));
     assert.ok(distancia < 600,
@@ -49,8 +55,8 @@ test("o fallback aparece junto da consulta, não numa seção esquecida do arqui
   }
 });
 
-test("nenhuma das duas afirma que a CLI é obrigatória", () => {
-  for (const skill of SKILLS_DO_FLUXO) {
+test("nenhuma das três afirma que a CLI é obrigatória", () => {
+  for (const skill of Object.keys(SKILLS_DO_FLUXO)) {
     const texto = fonteDa(skill);
     assert.match(texto, /MUST keep working with the skills alone/,
       `${skill}: a promessa de operar sem a CLI é explícita, não subentendida`);
@@ -72,7 +78,7 @@ test("o fallback sobrevive à instalação, nos dois motores", () => {
     [".github", "skills"],
   ];
   for (const base of instalados) {
-    for (const skill of SKILLS_DO_FLUXO) {
+    for (const skill of Object.keys(SKILLS_DO_FLUXO)) {
       const texto = semQuebras(readFileSync(path.join(repo, ...base, skill, "SKILL.md"), "utf8"));
       assert.match(texto, CONSULTA, `${base[0]}/${skill}`);
       assert.match(texto, FALLBACK, `${base[0]}/${skill}: o usuário sem CLI depende desta frase`);
@@ -83,7 +89,7 @@ test("o fallback sobrevive à instalação, nos dois motores", () => {
 // O aviso do payload também é contrato com quem lê a skill: ela não pode ensinar que
 // existência de arquivo é aprovação.
 test("as skills repetem que artefato em disco não é artefato aprovado", () => {
-  for (const skill of SKILLS_DO_FLUXO) {
+  for (const skill of Object.keys(SKILLS_DO_FLUXO)) {
     // `\*{0,2}` porque uma das duas põe `not` em negrito. O contrato é a frase, não a ênfase.
     assert.match(fonteDa(skill), /\bnot\*{0,2} an approved artifact/,
       `${skill}: sem isto, o verde do comando seria lido como aprovação`);

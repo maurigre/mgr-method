@@ -9,7 +9,7 @@ import {
 } from "../src/registry.js";
 import { REVIEW_GATE } from "../src/catalog.js";
 
-const tmp = () => mkdtempSync(path.join(os.tmpdir(), "mgr-registry-"));
+const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-registry-"));
 
 const INDEX_URL = "https://raw.githubusercontent.com/maurigre/mgr-registry/main/index.json";
 
@@ -38,7 +38,7 @@ const fetchStub = (body, { ok = true, status = 200 } = {}) => async () => ({
 });
 
 test("config de registries: add/list/remove persistem em .mgr-core/config.json", () => {
-  const core = tmp();
+  const core = diretorioTemporario();
   assert.deepEqual(readConfig(core), { registries: [] });
 
   addRegistry(core, { name: "mgr", url: INDEX_URL, trusted: true });
@@ -55,7 +55,7 @@ test("config de registries: add/list/remove persistem em .mgr-core/config.json",
 });
 
 test("addRegistry valida nome, url e duplicidade", () => {
-  const core = tmp();
+  const core = diretorioTemporario();
   assert.throws(() => addRegistry(core, { name: "MGR", url: INDEX_URL }), /invalid registry name/);
   assert.throws(() => addRegistry(core, { name: "mgr", url: "ftp://x" }), /invalid registry url/);
   addRegistry(core, { name: "mgr", url: INDEX_URL });
@@ -63,11 +63,11 @@ test("addRegistry valida nome, url e duplicidade", () => {
 });
 
 test("removeRegistry de nome não configurado é erro explícito", () => {
-  assert.throws(() => removeRegistry(tmp(), "ghost"), /registry not configured: ghost/);
+  assert.throws(() => removeRegistry(diretorioTemporario(), "ghost"), /registry not configured: ghost/);
 });
 
 test("writeConfig preserva campos desconhecidos do config", () => {
-  const core = tmp();
+  const core = diretorioTemporario();
   writeConfig(core, { registries: [], detectionMode: "suggest" });
   addRegistry(core, { name: "mgr", url: INDEX_URL });
   removeRegistry(core, "mgr");
@@ -134,7 +134,7 @@ test("resolve falha com registry não configurado ou skill ausente", async () =>
 });
 
 test("readDetectionMode: ausente é suggest, manual é aceito, auto é recusado com o motivo", () => {
-  const core = tmp();
+  const core = diretorioTemporario();
   assert.equal(readDetectionMode(core), "suggest", "sem config, o default de D03");
 
   writeConfig(core, { registries: [], detectionMode: "manual" });
@@ -151,7 +151,7 @@ test("readDetectionMode: ausente é suggest, manual é aceito, auto é recusado 
 });
 
 test("o modo de detecção convive com os registries no mesmo config", () => {
-  const core = tmp();
+  const core = diretorioTemporario();
   writeConfig(core, { registries: [], detectionMode: "manual" });
   addRegistry(core, { name: "mgr", url: INDEX_URL });
   assert.equal(readDetectionMode(core), "manual", "addRegistry preserva o modo");
@@ -159,13 +159,13 @@ test("o modo de detecção convive com os registries no mesmo config", () => {
 });
 
 test("gate ausente no config vale o default do catálogo", () => {
-  const core = tmp();
+  const core = diretorioTemporario();
   writeConfig(core, { registries: [] });
   assert.deepEqual(readReviewGate(core), REVIEW_GATE.defaults);
 });
 
 test("override parcial do gate completa o default em vez de substituí-lo", () => {
-  const core = tmp();
+  const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { effort: "high" } });
   const gate = readReviewGate(core);
   assert.equal(gate.effort, "high");
@@ -174,43 +174,43 @@ test("override parcial do gate completa o default em vez de substituí-lo", () =
 });
 
 test("gate desligado é lido como desligado", () => {
-  const core = tmp();
+  const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { enabled: false } });
   assert.equal(readReviewGate(core).enabled, false);
 });
 
 test("enabled que não é booleano reprova", () => {
-  const core = tmp();
+  const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { enabled: "sim" } });
   assert.throws(() => readReviewGate(core), /invalid reviewGate\.enabled: "sim"/);
 });
 
 test("effort fora da escala reprova com o valor na mensagem", () => {
-  const core = tmp();
+  const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { effort: "extreme" } });
   assert.throws(() => readReviewGate(core), /invalid reviewGate\.effort: "extreme"/);
 });
 
 test("effort xhigh é aceito depois da emenda ao ADR-0004", () => {
-  const core = tmp();
+  const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { effort: "xhigh" } });
   assert.equal(readReviewGate(core).effort, "xhigh");
 });
 
 test("model como string ensina a forma de mapa em vez de só recusar", () => {
-  const core = tmp();
+  const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { model: "opus" } });
   assert.throws(() => readReviewGate(core), /expected a map of engine to model.*claude-code/s);
 });
 
 test("model com motor desconhecido reprova nomeando o motor", () => {
-  const core = tmp();
+  const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { model: { cursor: "opus" } } });
   assert.throws(() => readReviewGate(core), /unknown engine: cursor/);
 });
 
 test("identificador de modelo do usuário passa verbatim, sem lista fechada", () => {
-  const core = tmp();
+  const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { model: { copilot: "claude-sonnet-5" } } });
   const gate = readReviewGate(core);
   assert.equal(gate.model.copilot, "claude-sonnet-5");
@@ -218,32 +218,32 @@ test("identificador de modelo do usuário passa verbatim, sem lista fechada", ()
 });
 
 test("model vazio para um motor reprova", () => {
-  const core = tmp();
+  const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { model: { "claude-code": "" } } });
   assert.throws(() => readReviewGate(core), /invalid reviewGate\.model\.claude-code/);
 });
 
 test("reviewGate que não é objeto reprova", () => {
-  const core = tmp();
+  const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: "max" });
   assert.throws(() => readReviewGate(core), /invalid reviewGate: "max"/);
 });
 
 test("o gate sobrevive ao addRegistry, como o modo de detecção", () => {
-  const core = tmp();
+  const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { effort: "high" } });
   addRegistry(core, { name: "mgr", url: INDEX_URL });
   assert.equal(readReviewGate(core).effort, "high");
 });
 
 test("preâmbulo ausente no config vale ligado", () => {
-  const core = tmp();
+  const core = diretorioTemporario();
   writeConfig(core, { registries: [] });
   assert.deepEqual(readLawsPreamble(core), { enabled: true });
 });
 
 test("preâmbulo pode ser desligado, e sobrevive ao addRegistry", () => {
-  const core = tmp();
+  const core = diretorioTemporario();
   writeConfig(core, { registries: [], lawsPreamble: { enabled: false } });
   assert.equal(readLawsPreamble(core).enabled, false);
   addRegistry(core, { name: "mgr", url: INDEX_URL });
@@ -251,14 +251,14 @@ test("preâmbulo pode ser desligado, e sobrevive ao addRegistry", () => {
 });
 
 test("o interruptor do preâmbulo é independente do gate de validação", () => {
-  const core = tmp();
+  const core = diretorioTemporario();
   writeConfig(core, { registries: [], lawsPreamble: { enabled: false }, reviewGate: { enabled: true } });
   assert.equal(readLawsPreamble(core).enabled, false);
   assert.equal(readReviewGate(core).enabled, true, "desligar um não desliga o outro");
 });
 
 test("preâmbulo com valor inválido reprova com o valor na mensagem", () => {
-  const core = tmp();
+  const core = diretorioTemporario();
   writeConfig(core, { registries: [], lawsPreamble: { enabled: "sim" } });
   assert.throws(() => readLawsPreamble(core), /invalid lawsPreamble\.enabled: "sim"/);
 

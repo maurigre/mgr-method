@@ -7,7 +7,7 @@ import path from "node:path";
 import { CORE_ROLES, LAWS_TOKEN, checkLaws, checkResolved, parseLaws } from "../scripts/check-laws.mjs";
 import { existsSync } from "node:fs";
 
-const tmp = () => mkdtempSync(path.join(os.tmpdir(), "mgr-laws-"));
+const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-laws-"));
 const ponteirosOk = Object.fromEntries(
   Object.keys(CORE_ROLES).map((skill) => [skill, { hasPointer: true, declaresRole: true }]),
 );
@@ -57,7 +57,7 @@ test("LAW-4 acusa lei órfã: papel válido que nenhuma skill do CORE carrega", 
 });
 
 test("LAW-5 acusa token cru sobrando numa skill instalada", () => {
-  const dir = path.join(tmp(), "skills");
+  const dir = path.join(diretorioTemporario(), "skills");
   mkdirSync(path.join(dir, "spec-create"), { recursive: true });
   writeFileSync(path.join(dir, "spec-create", "SKILL.md"), `ponteiro: ${LAWS_TOKEN}\n`, "utf8");
   const problemas = checkResolved(dir);
@@ -66,7 +66,7 @@ test("LAW-5 acusa token cru sobrando numa skill instalada", () => {
 });
 
 test("LAW-5 não acusa quando o token já foi resolvido", () => {
-  const dir = path.join(tmp(), "skills");
+  const dir = path.join(diretorioTemporario(), "skills");
   mkdirSync(path.join(dir, "spec-create"), { recursive: true });
   writeFileSync(path.join(dir, "spec-create", "SKILL.md"), "ponteiro: _shared/laws/execution-laws.md\n", "utf8");
   assert.deepEqual(checkResolved(dir), []);

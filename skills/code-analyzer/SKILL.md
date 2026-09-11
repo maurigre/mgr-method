@@ -46,9 +46,17 @@ written (whatever their language); the report itself follows the output language
 Locate the **originating spec** of what is being reviewed, in this order:
 
 1. **Slug/path given at invocation** — when `spec-create` calls the review at the end of the
-   feature (Phase 6), it passes the slug: use `specs/<slug>/03-spec.md` and `02-prd.md`.
+   feature (Phase 6), it passes the slug. **Resolve the paths, do not assume them:**
+   `mgr spec status <slug> --json` returns `specRoot` and the resolved `path` of each artifact.
+   **Fallback — when the `mgr` CLI is NOT installed:** use the literal layout
+   (`/specs/<slug>/03-spec.md` and `/specs/<slug>/02-prd.md`). The method MUST keep working with
+   the skills alone; say in the report which of the two you used. The payload's `basis` is
+   `file-existence`: an artifact on disk is **not** an approved artifact, and a resolved path is
+   not an approved spec.
 2. **Path passed by the user** as an argument.
-3. **Search for a `specs/<slug>/`** matching the current branch/feature.
+3. **Search for the feature** matching the current branch. `mgr spec status --all --json` lists
+   every slug with its resolved `specRoot`; without the CLI, read the directories under
+   `/specs/` yourself.
 4. **Nothing found → the Spec axis ABSTAINS:** say explicitly "no originating spec
    available" and **do not invent a requirement**. The Standards axis runs normally; the
    review ships with the Standards axis only.

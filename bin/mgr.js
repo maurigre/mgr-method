@@ -8,9 +8,10 @@ import * as installer from "../src/installer.js";
 import * as catalogo from "../src/catalog.js";
 import * as planValidator from "../src/plan-validator.js";
 import * as specValidator from "../src/spec-validator.js";
+import * as provValidator from "../src/prov-validator.js";
 import * as planNext from "../src/plan-next.js";
 import * as specStatus from "../src/spec-status.js";
-import { repoRoot } from "../src/artifacts.js";
+import { repoRoot, slugs } from "../src/artifacts.js";
 import { blocking, summarize } from "../src/findings.js";
 import { buildRuntime, gateSummary } from "../src/builder.js";
 import { validateAll } from "../src/validator.js";
@@ -480,11 +481,14 @@ async function proposeDetected(repo, scope, targets) {
 function cmdSpecValidate(flags, positional) {
   const repo = repoRoot(process.cwd());
   const slug = flags.all ? null : (positional[0] || planValidator.slugFromCwd(repo, process.cwd()));
-  // Dois artefatos, um comando: o plano (ADR-0012) e a spec (ADR-0013).
+  // Três verificações, um comando: o plano (ADR-0012), a spec (ADR-0013) e a proveniência
+  // (ADR-0016). As duas primeiras leem UM arquivo por feature; a terceira vale para qualquer
+  // artefato, e por isso a lista de arquivos é a UNIÃO das três, sem repetir quem aparece em duas.
   const planos = planValidator.validatePlans(repo, { slug });
   const specs = specValidator.validateSpecs(repo, { slug });
-  const arquivos = [...planos.files, ...specs.files];
-  const achados = [...planos.findings, ...specs.findings];
+  const proveniencia = provValidator.validateProvenance(repo, { slug });
+  const arquivos = [...new Set([...planos.files, ...specs.files, ...proveniencia.files])];
+  const achados = [...planos.findings, ...specs.findings, ...proveniencia.findings];
 
   if (!arquivos.length) {
     console.error(M.errorPrefix(M.specValidateNoSpecs(slug || path.join(repo, "specs"))));
@@ -557,7 +561,26 @@ function linhasDoGate(plan) {
 // agora" é sobre UMA feature. Aqui só há formatação e exit code; a decisão vive em src/plan-next.js.
 function cmdSpecNext(flags, positional) {
   const repo = repoRoot(process.cwd());
+
+  // `--all` não é aceito e ignorado: a pergunta "o que faço agora" é sobre UMA feature, e aceitar a
+  // flag em silêncio faz o comando responder sobre uma feature qualquer com cara de resposta sobre
+  // todas (ADR-0016, DT-8).
+  if (flags.all) {
+    console.error(M.errorPrefix(M.specNextAllRefused));
+    return 1;
+  }
+
   const slug = positional[0] || planValidator.slugFromCwd(repo, process.cwd());
+
+  // Sem slug e fora de `specs/<slug>/`, a descoberta escolhia a primeira feature em ordem
+  // alfabética e respondia como se fosse A resposta. Dizer quantas existem e pedir o nome custa uma
+  // linha; a escolha silenciosa custa uma resposta errada que ninguém tem como perceber.
+  const existentes = slugs(repo);
+  if (!slug && existentes.length) {
+    console.error(M.errorPrefix(M.specNextNeedsSlug(existentes.length)));
+    return 1;
+  }
+
   const resultado = planNext.nextTask(repo, { slug });
 
   if (resultado.outcome === "no-plan") {

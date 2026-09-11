@@ -8,7 +8,7 @@ import {
   writeLockfile, LOCKFILE_NAME, LOCKFILE_VERSION,
 } from "../src/lockfile.js";
 
-const tmp = () => mkdtempSync(path.join(os.tmpdir(), "mgr-lock-"));
+const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-lock-"));
 
 const MGR_ORIGIN = { name: "mgr", url: "https://raw.example/mgr/index.json", trusted: true };
 const COMPANY_ORIGIN = { name: "empresa", url: "https://registry.empresa.dev/index.json", trusted: false };
@@ -25,7 +25,7 @@ const entry = (overrides = {}) => ({
 });
 
 test("readLockfile devolve null sem arquivo e roundtrip write→read é idêntico", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   assert.equal(readLockfile(repo), null);
 
   const lockfile = upsertSkill(emptyLockfile(), "@mgr/junit-clean", entry(), MGR_ORIGIN);
@@ -34,7 +34,7 @@ test("readLockfile devolve null sem arquivo e roundtrip write→read é idêntic
 });
 
 test("writeLockfile grava chaves de skills e registries em ordem determinística", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   let lockfile = upsertSkill(emptyLockfile(), "@mgr/zeta", entry(), MGR_ORIGIN);
   lockfile = upsertSkill(lockfile, "@empresa/alfa", entry({ registry: "empresa" }), COMPANY_ORIGIN);
   writeLockfile(repo, lockfile);
@@ -46,7 +46,7 @@ test("writeLockfile grava chaves de skills e registries em ordem determinística
 });
 
 test("readLockfile rejeita lockfileVersion desconhecida com erro explícito", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   writeFileSync(path.join(repo, LOCKFILE_NAME), JSON.stringify({ lockfileVersion: 9 }), "utf8");
   assert.throws(() => readLockfile(repo), /unsupported lockfileVersion .*9 \(expected 1\)/);
 });
@@ -85,7 +85,7 @@ test("diff aponta travadas ausentes do disco e instaladas fora do lockfile", () 
 });
 
 test("readLockfile rejeita dir adulterado (fora do checksum, alcançaria rmSync)", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const lockfile = upsertSkill(emptyLockfile(), "@mgr/junit-clean", entry(), MGR_ORIGIN);
   for (const evil of ["../..", "/etc", "junit/../..", "Junit-Clean", ""]) {
     const tampered = {
@@ -125,7 +125,7 @@ test("replacedByEngine ignora plugin instalado ao lado e lockfile ausente", () =
 });
 
 test("readLockfile aceita replaces válido e reprova o inválido", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const comReplaces = upsertSkill(emptyLockfile(), "@acme/code-analyzer",
     entry({ dir: "code-analyzer", replaces: "code-analyzer" }), MGR_ORIGIN);
   writeLockfile(repo, comReplaces);

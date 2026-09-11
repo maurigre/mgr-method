@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { hookCommand, hookFilePath, HOOK_FILES, HOOK_MARKER, removeHook, writeHook } from "../src/hooks.js";
 
-const tmp = () => mkdtempSync(path.join(os.tmpdir(), "mgr-hooks-"));
+const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-hooks-"));
 const MGR = "/usr/local/bin/mgr";
 
 const ler = (file) => JSON.parse(readFileSync(file, "utf8"));
@@ -18,7 +18,7 @@ const escreverSettings = (repo, engine, conteudo) => {
 };
 
 test("cada motor recebe o formato nativo dele, no arquivo project-local", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
 
   const claude = ler(writeHook("claude-code", repo, { command: MGR }));
   assert.equal(hookFilePath("claude-code", repo), path.join(repo, ".claude", "settings.local.json"));
@@ -42,7 +42,7 @@ test("o comando gravado carrega o marcador de posse e o motor", () => {
 });
 
 test("instalar duas vezes não duplica a entrada do MGR", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   writeHook("claude-code", repo, { command: MGR });
   const file = writeHook("claude-code", repo, { command: "/outro/caminho/mgr" });
 
@@ -52,7 +52,7 @@ test("instalar duas vezes não duplica a entrada do MGR", () => {
 });
 
 test("conteúdo alheio do usuário é preservado ao instalar e ao remover", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const original = {
     permissions: { allow: ["Bash(npm test)"] },
     hooks: {
@@ -74,7 +74,7 @@ test("conteúdo alheio do usuário é preservado ao instalar e ao remover", () =
 });
 
 test("arquivo criado pelo MGR é apagado ao remover; sem arquivo, remover é no-op", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   const file = writeHook("copilot", repo, { command: MGR });
   assert.ok(existsSync(file));
 
@@ -84,7 +84,7 @@ test("arquivo criado pelo MGR é apagado ao remover; sem arquivo, remover é no-
 });
 
 test("remover preserva o arquivo quando o usuário tem outras chaves", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   escreverSettings(repo, "copilot", { version: 1, model: "gpt-5" });
   const file = writeHook("copilot", repo, { command: MGR });
 
@@ -93,7 +93,7 @@ test("remover preserva o arquivo quando o usuário tem outras chaves", () => {
 });
 
 test("motor desconhecido é erro explícito", () => {
-  const repo = tmp();
+  const repo = diretorioTemporario();
   assert.throws(() => writeHook("cursor", repo, { command: MGR }), /invalid engine for session hook/);
   assert.throws(() => hookFilePath("cursor", repo), /invalid engine for session hook/);
 });

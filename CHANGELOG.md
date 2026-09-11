@@ -7,6 +7,56 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
+## [0.7.0-beta.8] - 2026-09-11
+> A etiqueta de proveniência passa a ser conferida onde há fato. Pré-release no dist-tag `next`.
+
+### Adicionado
+- **`PROV-1` a `PROV-4` no `mgr spec validate`** (ADR-0016): etiqueta malformada, ponteiro
+  `[code:<caminho>:<linha>]` que não resolve em disco, e caminho que escapa da raiz do repositório
+  são **erro**; marca de pendência ao fim da linha numa feature com `06-completion.md` é **aviso**.
+  Mesmo comando, mesma assinatura, mesmo envelope `--json`.
+- **A proveniência vale para QUALQUER artefato canônico**, não só para o plano e a spec. A linha de
+  OK do comando passou a contar os artefatos que de fato foram lidos — de 2 por feature para os
+  canônicos presentes.
+- **`src/provenance.js`, `src/prov-rules.js` e `src/prov-validator.js`**, o terceiro trio de
+  parser, regras e orquestrador. A lista de artefatos vem do `spec-status` e o bloco cercado vem do
+  `stripFencedBlocks`: nenhuma descoberta nova, nenhuma cópia.
+- **O `code-analyzer` parou de assumir caminho**: passa a consultar `mgr spec status --json` com o
+  caminho literal como **fallback declarado**, como as outras duas skills do fluxo já faziam. O
+  teste de fallback cobre agora as **três**.
+
+### Corrigido
+- **`mgr spec next --all` era aceito e ignorado.** Respondia sobre uma feature com cara de resposta
+  sobre todas. Passa a ser recusado, com mensagem própria e código diferente de zero.
+- **`mgr spec next` sem slug, rodado da raiz, escolhia a primeira feature em silêncio** e respondia
+  como se fosse a resposta. Passa a dizer quantas features existem e a pedir o nome, ou que se rode
+  de dentro de `specs/<slug>/`.
+
+### Alterado
+- **A nota de status da L1.10** deixou de dizer "declarada, ainda não verificável" e passou a dizer
+  o que **é** conferido — a etiqueta escrita — e o que **continua** por disciplina — a presença
+  dela. O texto normativo da lei não mudou, e as 45 leis seguem intactas.
+
+### O que degrada, declarado
+- **A regra que cobraria a etiqueta NÃO foi feita, e isso é decisão, não pendência.** "Asserção
+  normativa sem etiqueta é erro" foi rejeitada por decisão de produto sustentada em medição: a
+  adesão é **zero** em todo o acervo, e o custo cairia sobre cada linha normativa escrita para
+  sempre. A ferramenta confere fato; ela não cobra disciplina. Quem não etiquetar não é reprovado
+  por nada.
+- **Etiqueta só conta em posição de marca** — o `]` como último caractere da linha. Ponteiro
+  escrito no meio de uma frase **não é conferido**. Medido: a definição tolerante, que aceitaria
+  crase ou pontuação depois do `]`, produziria erro sobre artefatos de features já fechadas.
+- **A `PROV-3` tem falso positivo conhecido e medido**: uma citação que por acaso termina a linha é
+  apontada. Não há regra mecânica que a separe de uma pendência real. Por isso ela é aviso, e **a
+  própria mensagem declara** o que detecta e o que não distingue.
+- **O resultado da `PROV-2` depende da máquina.** Ela confere disco, e `specs/` é gitignored neste
+  projeto — gitignored conta como existente, porque é exatamente onde as asserções vivem. Um
+  artefato que passa aqui pode falhar num clone sem `specs/`. A saída não promete portabilidade.
+- **Três formas de marca de pendência são reconhecidas** — `[TO DEFINE]`, `[A DEFINIR]` e
+  `[A CONFIRMAR]`. Identidade parseável não deveria depender de idioma, e aqui depende. É **dívida
+  declarada**, registrada no ADR-0016: canonizar obrigaria a migrar o acervo ou a reprovar o que
+  existe.
+
 ## [0.7.0-beta.7] - 2026-09-11
 > O plano e a spec passam a dizer ONDE estão. Pré-release no dist-tag `next`.
 

@@ -1682,3 +1682,124 @@ test("mgr spec validate continua idêntico ao lado do next", () => {
   assert.match(stdout, /0 erro\(s\)/);
   assert.ok(!stdout.includes("PLAN-6"), "status válido não produz aviso");
 });
+
+// `mgr spec status` (ADR-0015). Locale fixado, como o CI exige.
+const repoComArtefatos = (arvore) => {
+  const repo = tmp();
+  for (const [slug, arquivos] of Object.entries(arvore)) {
+    mkdirSync(path.join(repo, "specs", slug), { recursive: true });
+    for (const nome of arquivos) writeFileSync(path.join(repo, "specs", slug, nome), "x");
+  }
+  return repo;
+};
+const rodarStatus = (repo, args) => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  try { return { stdout: execFileSync("node", [bin, "spec", "status", ...args], ptBR(repo)), status: 0 }; }
+  catch (erro) { return { stdout: erro.stdout, status: erro.status }; }
+};
+
+test("mgr spec status: marca o que existe e diz o que falta escrever", () => {
+  const repo = repoComArtefatos({ demo: ["01-brief.md", "02-prd.md"] });
+  const { stdout, status } = rodarStatus(repo, ["demo"]);
+  assert.equal(status, 0);
+  assert.match(stdout, /brief prd -spec -plan -execution -completion/);
+  assert.match(stdout, /escrever:\s+spec/);
+});
+
+// O caso real: quatro features em disco têm handoff E completion.
+test("mgr spec status: handoff de feature concluída não vira trabalho pendente", () => {
+  const repo = repoComArtefatos({
+    demo: ["01-brief.md", "02-prd.md", "03-spec.md", "04-plan.md", "05-execution.md",
+           "06-completion.md", ".handoff.md"],
+  });
+  const { stdout } = rodarStatus(repo, ["demo"]);
+  assert.match(stdout, /em disco; ele nunca é removido automaticamente/);
+  assert.ok(!/pendente/i.test(stdout), "a saída nunca chama o arquivo de trabalho pendente");
+  assert.match(stdout, /todos os artefatos estão em disco/);
+});
+
+test("mgr spec status: o aviso sai em toda resposta humana", () => {
+  const repo = repoComArtefatos({ demo: ["01-brief.md"] });
+  for (const args of [["demo"], ["--all"]]) {
+    assert.match(rodarStatus(repo, args).stdout, /EXISTÊNCIA DE ARQUIVO, não progresso/);
+  }
+});
+
+test("mgr spec status --all: uma linha por feature, em ordem estável", () => {
+  const repo = repoComArtefatos({ zebra: ["01-brief.md"], alfa: ["01-brief.md", "02-prd.md"] });
+  const { stdout, status } = rodarStatus(repo, ["--all"]);
+  assert.equal(status, 0);
+  assert.ok(stdout.indexOf("alfa") < stdout.indexOf("zebra"), "ordem estável, não a do readdir");
+  assert.match(stdout, /alfa\s+2\/6/);
+  assert.match(stdout, /zebra\s+1\/6/);
+});
+
+test("mgr spec status: slug inexistente sai com 1", () => {
+  const repo = repoComArtefatos({ demo: ["01-brief.md"] });
+  assert.equal(rodarStatus(repo, ["nao-existe"]).status, 1);
+});
+
+test("mgr spec status --all sem feature nenhuma sai com 1", () => {
+  const repo = tmp();
+  mkdirSync(path.join(repo, "specs"), { recursive: true });
+  assert.equal(rodarStatus(repo, ["--all"]).status, 1);
+});
+
+test("mgr spec status --json: envelope estável, com basis e warning, e sem campo sem fonte", () => {
+  const repo = repoComArtefatos({ demo: ["01-brief.md", "02-prd.md"] });
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const payload = JSON.parse(execFileSync("node", [bin, "spec", "status", "demo", "--json"], ptBR(repo)));
+
+  assert.deepEqual(Object.keys(payload).sort(),
+    ["artifacts", "basis", "found", "handoff", "nextReady", "schemaVersion", "slug", "specRoot", "warning"]);
+  assert.equal(payload.basis, "file-existence", "token estável, para ramificar sem casar tradução");
+  assert.ok(payload.warning.length > 0);
+  for (const artefato of payload.artifacts) {
+    assert.deepEqual(Object.keys(artefato).sort(), ["id", "path", "requires", "status"],
+      "`approved` e `checkpoint` não têm fonte mecânica e não entram no payload");
+    assert.notEqual(artefato.status, "done", "existência de arquivo não é conclusão de etapa");
+  }
+  assert.ok(!JSON.stringify(payload).includes(repo), "nenhum caminho absoluto da máquina");
+});
+
+test("mgr spec validate e mgr spec next continuam idênticos ao lado do status", () => {
+  const repo = tmp();
+  planoDeFixture(repo, "demo", "com-estado.md");
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  assert.match(execFileSync("node", [bin, "spec", "validate", "--all"], ptBR(repo)), /0 erro\(s\)/);
+  assert.match(execFileSync("node", [bin, "spec", "next", "demo"], ptBR(repo)), /^P0\.2$/m);
+});
+
+test("mgr spec status --all --json: o envelope do modo --all também tem basis e warning", () => {
+  const repo = repoComArtefatos({ alfa: ["01-brief.md"], beta: ["01-brief.md", "02-prd.md"] });
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const payload = JSON.parse(execFileSync("node", [bin, "spec", "status", "--all", "--json"], ptBR(repo)));
+
+  assert.deepEqual(Object.keys(payload).sort(), ["basis", "features", "schemaVersion", "warning"]);
+  assert.equal(payload.basis, "file-existence");
+  assert.ok(payload.warning.length > 0, "a CA-4 diz TODO payload, e este é o outro");
+  assert.deepEqual(payload.features.map((f) => f.slug), ["alfa", "beta"]);
+  for (const feature of payload.features) {
+    for (const artefato of feature.artifacts) {
+      assert.deepEqual(Object.keys(artefato).sort(), ["id", "path", "requires", "status"]);
+    }
+  }
+  assert.ok(!JSON.stringify(payload).includes(repo), "nenhum caminho absoluto da máquina");
+});
+
+// A §5 promete derivar o slug do diretório atual. Até esta feature, nenhum dos três comandos
+// conseguia: a borda passava `repo = cwd`, e a relativização dava sempre `..`.
+test("os três comandos spec funcionam de DENTRO de specs/<slug>/", () => {
+  const repo = repoComArtefatos({ demo: ["01-brief.md", "02-prd.md"] });
+  const fixtures = fileURLToPath(new URL("./fixtures/plans", import.meta.url));
+  writeFileSync(path.join(repo, "specs", "demo", "04-plan.md"),
+    readFileSync(path.join(fixtures, "com-estado.md"), "utf8"));
+  writeFileSync(path.join(repo, "package.json"), "{}");
+
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const deDentro = { ...ptBR(repo), cwd: path.join(repo, "specs", "demo") };
+
+  assert.match(execFileSync("node", [bin, "spec", "status"], deDentro), /specs[/\\]demo/);
+  assert.match(execFileSync("node", [bin, "spec", "next"], deDentro), /^P0\.2$/m);
+  assert.match(execFileSync("node", [bin, "spec", "validate"], deDentro), /0 erro\(s\)/);
+});

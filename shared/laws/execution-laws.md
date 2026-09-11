@@ -131,10 +131,15 @@ Every normative assertion in a generated artifact carries its origin: `[brief]`,
 `[code:<path>:<line>]`, `[adr:<n>]`, `[user]`, `[analogical-extension]`, `[quarantined]` or
 `[TO DEFINE]`.
 
-> **Status: declared, not yet enforceable.** No validator checks these tags today. The check
-> arrives with the verifiable artifact format, which is a separate feature. Until then this law
-> states the intent and is applied by discipline — and this file says so rather than implying a
-> guarantee it does not have (L1.9).
+> **Status: partly enforceable.** `mgr spec validate` checks the tag that is **written**: its form,
+> and whether a `[code:<path>:<line>]` pointer resolves on disk from the repository root. A tag
+> counts only in mark position — the `]` as the last character of the line — so one cited
+> mid-sentence is prose, not an assertion.
+>
+> It does **not** require a tag. The rule that would demand one was rejected on measurement, and no
+> assertion is ever failed for carrying no provenance. So **the presence of the tag remains
+> discipline; only what is written is checked** — and this file says which half it enforces rather
+> than implying a guarantee it does not have (L1.9).
 
 ---
 

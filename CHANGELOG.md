@@ -7,6 +7,24 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
+## [0.7.0-beta.9] - 2026-09-11
+> Conserta a 0.7.0-beta.8, que não instalava. Pré-release no dist-tag `next`.
+
+### Corrigido
+- **`mgr install` morria com `recurso do MGR ausente: agents` em quem instalava do npm.** O
+  diretório `agents/` virou artefato instalável na `0.7.0-beta.2`, e a whitelist `files` do
+  `package.json` nunca foi atualizada — o tarball saía sem ele e o instalador falhava **antes de
+  escrever qualquer coisa**. A `0.7.0-beta.8` foi a primeira versão publicada com o gate, então foi
+  nela que o defeito apareceu.
+
+### O que degrada, declarado
+- **Nenhum teste pegava isto, e agora um pega.** Todos os testes de instalação rodam a partir do
+  working tree, onde `agents/` sempre existe. O teste novo empacota de verdade e confere que **todo
+  recurso exigido por `src/bundle.js`** viaja no tarball — a lista é derivada da fonte, não escrita
+  à mão, então acrescentar um recurso sem publicá-lo quebra o teste.
+- **A `0.7.0-beta.8` continua publicada e continua quebrada.** Versão publicada não é sobrescrita;
+  quem instalou precisa subir para a `0.7.0-beta.9`.
+
 ## [0.7.0-beta.8] - 2026-09-11
 > A etiqueta de proveniência passa a ser conferida onde há fato. Pré-release no dist-tag `next`.
 

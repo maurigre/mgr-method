@@ -10,10 +10,16 @@ export default {
   agentFile: (name) => `${name}.md`,
   // "fork": o desvio até o agente é ESTRUTURAL (frontmatter da skill, a plataforma roteia).
   routing: "fork",
-  // Valor literal do campo `tools` do agente. Só leitura e busca: um revisor que não pode
-  // editar não tem como "corrigir" o que deveria reprovar (ADR-0010). A notação é a da
-  // plataforma — por isso mora aqui, e não no builder.
-  agentTools: "Read, Grep, Glob",
+  // Valor literal do campo `tools` do agente, por NECESSIDADE da intenção (ADR-0017). A notação é
+  // a da plataforma — por isso mora aqui, e não no builder.
+  //
+  // `read` é o valor de sempre, intocado: um revisor que não pode editar não tem como "corrigir" o
+  // que deveria reprovar (ADR-0010). `write` acrescenta escrita ao mesmo conjunto de leitura, em
+  // vez de trocá-lo — quem implementa também precisa ler.
+  agentTools: {
+    read: "Read, Grep, Glob",
+    write: "Read, Grep, Glob, Write, Edit",
+  },
   capabilities: {
     agentModel: true,
     agentEffort: true,

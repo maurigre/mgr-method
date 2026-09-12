@@ -23,11 +23,24 @@ export default {
   agentFile: (name) => `${name}.agent.md`,
   // "instruction": o desvio até o agente é INSTRUÇÃO no corpo da skill (delegar via `task`).
   routing: "instruction",
-  // Aliases de ferramenta verificados na documentação oficial em 2026-08-30: o exemplo de
-  // agente de leitura da própria doc usa ["grep", "glob", "view"], e nomes não reconhecidos
-  // são ignorados em vez de quebrar.
+  // Aliases de ferramenta, reconferidos na documentação oficial em 2026-09-11. A lista completa,
+  // textual: `execute` (shell, Bash, powershell) · `read` (Read, NotebookRead) · `edit` (Edit,
+  // MultiEdit, Write, NotebookEdit) · `search` (Grep, Glob) · `agent` (custom-agent, Task) ·
+  // `web` (WebSearch, WebFetch) · `todo` (TodoWrite). Case-insensitive.
   // https://docs.github.com/en/copilot/reference/custom-agents-configuration
-  agentTools: '["view", "grep", "glob"]',
+  //
+  // CORREÇÃO de 2026-09-11: o valor anterior era `["view", "grep", "glob"]`, e **`view` não existe**
+  // — nem como alias, nem como nome de ferramenta. Nome não reconhecido é ignorado em silêncio,
+  // então o agente de revisão podia estar rodando no copilot **sem ferramenta de leitura**: tinha
+  // busca e não tinha como abrir o arquivo que precisa citar verbatim. O gate do método, no motor
+  // inteiro, sem o que a L1.1 exige dele.
+  //
+  // `edit` cobre Edit, MultiEdit, Write e NotebookEdit de uma vez — por isso a escrita é `read` e
+  // `search` mais ele, e não uma lista de nomes soltos.
+  agentTools: {
+    read: '["read", "search"]',
+    write: '["read", "search", "edit"]',
+  },
   capabilities: {
     agentModel: true,
     agentEffort: false,

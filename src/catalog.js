@@ -67,6 +67,10 @@ export const REVIEW_SKILL_TOKEN = "{{MGR_REVIEW_SKILL}}";
 // Sem caminho resolvido (ex.: `mgr build`), a linha continua legível em vez de vazar o token.
 export const REVIEW_SKILL_FALLBACK = "the installed code-analyzer skill";
 
+// Valor reservado: a intenção declara que NÃO quer modelo (ou esforço) declarado, e o agente herda
+// o da sessão. Diferente de "ninguém configurou": é escolha explícita, e a saída distingue as duas.
+export const INHERIT = "inherit";
+
 export const REVIEW_GATE = {
   agent: "mgr-review",
   description:
@@ -75,10 +79,64 @@ export const REVIEW_GATE = {
   skill: "code-analyzer",
   defaults: {
     enabled: true,
-    model: { "claude-code": "opus" },
+    // Sem identificador de modelo publicado: o agente herda o da sessão, e a saída AVISA.
+    // Emenda ao ADR-0010, que publicava `opus` no claude-code por ser alias documentado. Com mais
+    // motores na fila, a lista de modelos é DA CONTA em qualquer um deles, e a RN-4 proíbe
+    // inventar identificador. Declarar um modelo por intenção é o que entrega o benefício.
+    model: {},
     effort: "max",
   },
 };
+
+// As INTENÇÕES do fluxo, cada uma com o agente que a executa e a política padrão dela (ADR-0017).
+//
+// Chaves em INGLÊS porque são identidade parseável — a mesma razão do ADR-0003, e o inverso da
+// dívida que o ADR-0016 registrou nas marcas de pendência. Nasceram como `redacao`/`execucao` e
+// foram corrigidas antes de virarem contrato de configuração.
+//
+// `review` NÃO é uma cópia do `REVIEW_GATE`: é ele mesmo. Duplicar faria as duas divergirem na
+// primeira mudança, e `reviewGate` continua sendo lido como apelido desta entrada.
+//
+// Os defaults de `model` só trazem `claude-code`, pela mesma razão escrita acima sobre o copilot:
+// a lista de modelos é DA CONTA, e publicar default seria palpite sobre a conta de terceiro.
+// `needs` diz de que a intenção PRECISA — `read` ou `write` —, e o descritor do motor traduz isso
+// para a notação da plataforma. A necessidade é da intenção; a notação é do motor, e cada uma fica
+// onde já morava.
+//
+// `review` pede `read` e isso é invariante do ADR-0010, não preferência: um revisor que pode editar
+// não tem como reprovar em vez de "corrigir".
+export const AGENTS = Object.freeze({
+  review: Object.freeze({ ...REVIEW_GATE, needs: "read" }),
+  drafting: Object.freeze({
+    agent: "mgr-draft",
+    // Devolve texto como resposta; só escreve em disco quando recebe o caminho exato.
+    needs: "read",
+    description:
+      "MGR drafting agent. Writes the PRD and the technical spec from the brief and the SDD tiers "
+      + "on disk, and returns the text; it never asks the user anything.",
+    defaults: Object.freeze({
+      enabled: true,
+      model: Object.freeze({}),
+      effort: "high",
+    }),
+  }),
+  execution: Object.freeze({
+    agent: "mgr-task",
+    // Implementa a task, então escreve. É a única das três que escreve.
+    needs: "write",
+    description:
+      "MGR task agent. Implements ONE approved plan task, producing exactly the artifact the plan "
+      + "declares, and returns what it did; it never asks the user anything.",
+    defaults: Object.freeze({
+      enabled: true,
+      model: Object.freeze({}),
+      effort: "low",
+    }),
+  }),
+});
+
+// Ordem estável para a saída e para os testes: a que o fluxo executa, não a alfabética.
+export const INTENTS = Object.freeze(["drafting", "execution", "review"]);
 
 export const architectures = () => Object.keys(ARCHITECTURES);
 export const languages = () => Object.keys(LANGUAGE);

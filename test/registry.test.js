@@ -4,10 +4,11 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  addRegistry, configPath, fetchIndex, listRegistries, readConfig, readDetectionMode,
-  readLawsPreamble, readReviewGate, removeRegistry, resolve, validateIndex, writeConfig,
+  addRegistry, CONFIGURED, configPath, DEFAULT, fetchIndex, RESERVED_AGENT_KEYS, listRegistries, readAgents, readConfig, readDetectionMode,
+  readLawsPreamble, removeRegistry, resolve, validateIndex, writeConfig,
 } from "../src/registry.js";
-import { REVIEW_GATE } from "../src/catalog.js";
+import { AGENTS, INTENTS, REVIEW_GATE } from "../src/catalog.js";
+import { fileURLToPath } from "node:url";
 
 const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-registry-"));
 
@@ -161,79 +162,80 @@ test("o modo de detecção convive com os registries no mesmo config", () => {
 test("gate ausente no config vale o default do catálogo", () => {
   const core = diretorioTemporario();
   writeConfig(core, { registries: [] });
-  assert.deepEqual(readReviewGate(core), REVIEW_GATE.defaults);
+  assert.deepEqual(readAgents(core).policies.review, REVIEW_GATE.defaults);
 });
 
 test("override parcial do gate completa o default em vez de substituí-lo", () => {
   const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { effort: "high" } });
-  const gate = readReviewGate(core);
+  const { policies: { review: gate } } = readAgents(core);
   assert.equal(gate.effort, "high");
   assert.equal(gate.enabled, true, "o que não foi sobrescrito vem do default");
-  assert.equal(gate.model["claude-code"], "opus");
+  assert.deepEqual(gate.model, {}, "o default não publica identificador de modelo");
 });
 
 test("gate desligado é lido como desligado", () => {
   const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { enabled: false } });
-  assert.equal(readReviewGate(core).enabled, false);
+  assert.equal(readAgents(core).policies.review.enabled, false);
 });
 
 test("enabled que não é booleano reprova", () => {
   const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { enabled: "sim" } });
-  assert.throws(() => readReviewGate(core), /invalid reviewGate\.enabled: "sim"/);
+  assert.throws(() => readAgents(core), /invalid agents\.review\.enabled: "sim"/);
 });
 
 test("effort fora da escala reprova com o valor na mensagem", () => {
   const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { effort: "extreme" } });
-  assert.throws(() => readReviewGate(core), /invalid reviewGate\.effort: "extreme"/);
+  assert.throws(() => readAgents(core), /invalid agents\.review\.effort: "extreme"/);
 });
 
 test("effort xhigh é aceito depois da emenda ao ADR-0004", () => {
   const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { effort: "xhigh" } });
-  assert.equal(readReviewGate(core).effort, "xhigh");
+  assert.equal(readAgents(core).policies.review.effort, "xhigh");
 });
 
 test("model como string ensina a forma de mapa em vez de só recusar", () => {
   const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { model: "opus" } });
-  assert.throws(() => readReviewGate(core), /expected a map of engine to model.*claude-code/s);
+  assert.throws(() => readAgents(core), /expected a map of engine to model.*claude-code/s);
 });
 
 test("model com motor desconhecido reprova nomeando o motor", () => {
   const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { model: { cursor: "opus" } } });
-  assert.throws(() => readReviewGate(core), /unknown engine: cursor/);
+  assert.throws(() => readAgents(core), /unknown engine: cursor/);
 });
 
 test("identificador de modelo do usuário passa verbatim, sem lista fechada", () => {
   const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { model: { copilot: "claude-sonnet-5" } } });
-  const gate = readReviewGate(core);
-  assert.equal(gate.model.copilot, "claude-sonnet-5");
-  assert.equal(gate.model["claude-code"], "opus", "o default do outro motor sobrevive");
+  const { policies: { review: gate } } = readAgents(core);
+  assert.equal(gate.model.copilot, "claude-sonnet-5", "o identificador passa como foi escrito");
+  assert.equal(gate.model["claude-code"], undefined,
+    "nenhum default é inventado para o motor que o autor não nomeou");
 });
 
 test("model vazio para um motor reprova", () => {
   const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { model: { "claude-code": "" } } });
-  assert.throws(() => readReviewGate(core), /invalid reviewGate\.model\.claude-code/);
+  assert.throws(() => readAgents(core), /invalid agents\.review\.model\.claude-code/);
 });
 
 test("reviewGate que não é objeto reprova", () => {
   const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: "max" });
-  assert.throws(() => readReviewGate(core), /invalid reviewGate: "max"/);
+  assert.throws(() => readAgents(core), /invalid agents\.review: "max"/);
 });
 
 test("o gate sobrevive ao addRegistry, como o modo de detecção", () => {
   const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { effort: "high" } });
   addRegistry(core, { name: "mgr", url: INDEX_URL });
-  assert.equal(readReviewGate(core).effort, "high");
+  assert.equal(readAgents(core).policies.review.effort, "high");
 });
 
 test("preâmbulo ausente no config vale ligado", () => {
@@ -254,7 +256,7 @@ test("o interruptor do preâmbulo é independente do gate de validação", () =>
   const core = diretorioTemporario();
   writeConfig(core, { registries: [], lawsPreamble: { enabled: false }, reviewGate: { enabled: true } });
   assert.equal(readLawsPreamble(core).enabled, false);
-  assert.equal(readReviewGate(core).enabled, true, "desligar um não desliga o outro");
+  assert.equal(readAgents(core).policies.review.enabled, true, "desligar um não desliga o outro");
 });
 
 test("preâmbulo com valor inválido reprova com o valor na mensagem", () => {
@@ -264,4 +266,221 @@ test("preâmbulo com valor inválido reprova com o valor na mensagem", () => {
 
   writeConfig(core, { registries: [], lawsPreamble: true });
   assert.throws(() => readLawsPreamble(core), /invalid lawsPreamble: true/);
+});
+
+// `readAgents` — a política de todas as intenções, com `reviewGate` como apelido (ADR-0017).
+const FIXTURES_AGENTS = fileURLToPath(new URL("./fixtures/agents/", import.meta.url));
+const configDaFixture = (nome) => JSON.parse(readFileSync(path.join(FIXTURES_AGENTS, nome), "utf8"));
+
+test("sem `agents` no config, cada intenção vale o default do catálogo", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [] });
+  const { policies, aliasOverridden } = readAgents(core);
+  assert.deepEqual(Object.keys(policies), INTENTS);
+  for (const intent of INTENTS) assert.deepEqual(policies[intent], AGENTS[intent].defaults);
+  assert.equal(aliasOverridden, false);
+});
+
+test("config legado só com `reviewGate` produz a MESMA política de hoje", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], ...configDaFixture("config-legado.json") });
+  const { policies, aliasOverridden } = readAgents(core);
+  assert.equal(policies.review.effort, "max", "o apelido foi lido e obedecido");
+  // A fixture DECLARA `opus`, que era o default antigo. Hoje isso é valor configurado, não default:
+  // o catálogo deixou de publicar identificador de modelo (ADR-0017, emenda ao ADR-0010).
+  assert.equal(policies.review.model["claude-code"], "opus", "o que o config legado escreveu vale");
+  assert.deepEqual(REVIEW_GATE.defaults.model, {}, "e o default, este sim, não publica nada");
+  assert.equal(aliasOverridden, false, "sem `agents.review`, o apelido não está sendo sobreposto");
+});
+
+test("com as duas chaves, `agents` vence E o conflito volta para a borda avisar", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], ...configDaFixture("config-conflito.json") });
+  const { policies, aliasOverridden } = readAgents(core);
+  assert.equal(policies.review.model["claude-code"], "opus", "`agents.review` vence o `reviewGate`");
+  assert.equal(policies.review.effort, "max");
+  assert.equal(aliasOverridden, true, "resolver em silêncio seria escolher pelo autor sem lhe dizer");
+  assert.equal(readAgents(core).sources.review.effort, CONFIGURED, "o apelido foi escrito pelo autor");
+});
+
+test("as três intenções da fixture de conflito chegam com a política declarada", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], ...configDaFixture("config-conflito.json") });
+  const { policies } = readAgents(core);
+  assert.equal(policies.drafting.model["claude-code"], "opus");
+  assert.equal(policies.drafting.effort, "high");
+  assert.equal(policies.execution.model["claude-code"], "haiku");
+  assert.equal(policies.execution.effort, "low");
+});
+
+test("override parcial de uma intenção não apaga o default do outro motor", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { execution: { model: { copilot: "gpt-5" } } } });
+  const { policies } = readAgents(core);
+  assert.equal(policies.execution.model.copilot, "gpt-5");
+  assert.deepEqual(Object.keys(policies.execution.model), ["copilot"],
+    "o default não traz motor nenhum, então só o escrito aparece");
+  assert.equal(policies.execution.effort, "low", "o que não foi escrito vem do default");
+});
+
+test("intenção desconhecida reprova dizendo quais existem", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { revisao: {} } });
+  assert.throws(() => readAgents(core), /unknown agent intent\(s\): revisao \(expected drafting \| execution \| review\)/);
+});
+
+test("a mensagem de erro nomeia o caminho REAL no config", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { drafting: { effort: "extreme" } } });
+  assert.throws(() => readAgents(core), /invalid agents\.drafting\.effort: "extreme"/);
+});
+
+test("`agents` que não é objeto reprova antes de olhar intenção nenhuma", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: "opus" });
+  assert.throws(() => readAgents(core), /invalid agents: "opus" \(expected an object\)/);
+});
+
+// `sources` — de onde veio cada valor (ADR-0017, CA-5).
+
+test("sem nada configurado, toda origem é o default do catálogo", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [] });
+  const { sources } = readAgents(core);
+  for (const intent of INTENTS) {
+    assert.equal(sources[intent].enabled, DEFAULT, intent);
+    assert.equal(sources[intent].effort, DEFAULT, intent);
+    assert.deepEqual(sources[intent].model, {}, `${intent}: sem modelo publicado, nada a atribuir`);
+  }
+});
+
+test("valor escrito pelo autor sai como configurado, e só ele", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { drafting: { effort: "max" } } });
+  const { sources } = readAgents(core);
+  assert.equal(sources.drafting.effort, CONFIGURED, "foi ele quem escreveu");
+  assert.equal(sources.drafting.enabled, DEFAULT, "o que não foi escrito não vira escolha dele");
+  assert.deepEqual(sources.drafting.model, {}, "nenhum motor tem modelo, configurado ou default");
+  assert.equal(sources.execution.effort, DEFAULT, "outra intenção não é contaminada");
+});
+
+test("a origem do `model` é POR MOTOR, porque o override é por motor", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { execution: { model: { copilot: "gpt-5" } } } });
+  const { sources } = readAgents(core);
+  assert.equal(sources.execution.model.copilot, CONFIGURED);
+  assert.equal(sources.execution.model["claude-code"], undefined,
+    "sem default publicado, o motor não escrito nem aparece");
+});
+
+test("o apelido `reviewGate` conta como CONFIGURADO", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], reviewGate: { effort: "high" } });
+  const { sources } = readAgents(core);
+  assert.equal(sources.review.effort, CONFIGURED,
+    "chamar de default diria ao autor que ele não escolheu o que escolheu");
+});
+
+test("com as duas chaves, a origem é a de `agents`, que foi quem venceu", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], ...configDaFixture("config-conflito.json") });
+  const { policies, sources } = readAgents(core);
+  assert.equal(policies.review.effort, "max");
+  assert.equal(sources.review.effort, CONFIGURED, "os dois foram escritos; a origem é de quem valeu");
+});
+
+test("a origem não diz nada sobre capacidade de motor — isso é do gateSummary", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [] });
+  const { sources } = readAgents(core);
+  // Misturar as duas faria "não configurado" e "não suportado" virarem a mesma palavra.
+  const valores = new Set(Object.values(sources.review.model));
+  for (const valor of valores) assert.ok([CONFIGURED, DEFAULT].includes(valor), valor);
+});
+
+// `budget` — chave reservada sob `agents` (ADR-0017). O defeito que ela conserta: o config que a
+// spec e o ADR documentam derrubava `install`, `update` e `agents`.
+
+test("o teto documentado pela spec NÃO derruba a leitura", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, {
+    registries: [],
+    agents: { budget: { totalTokens: 500000 }, execution: { model: { "claude-code": "haiku" } } },
+  });
+  const { budget, policies } = readAgents(core);
+  assert.deepEqual(budget, { totalTokens: 500000 });
+  assert.equal(policies.execution.model["claude-code"], "haiku", "a intenção ao lado segue lida");
+});
+
+test("sem `budget`, o teto é ausente — e ausência NÃO é zero", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [] });
+  assert.equal(readAgents(core).budget, null, "zero é um teto que reprova tudo; ausência não reprova nada");
+});
+
+test("`budget` sem `totalTokens` é objeto válido com teto ausente", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { budget: {} } });
+  assert.deepEqual(readAgents(core).budget, { totalTokens: null });
+});
+
+test("teto zero é aceito, porque zero é um teto", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { budget: { totalTokens: 0 } } });
+  assert.deepEqual(readAgents(core).budget, { totalTokens: 0 });
+});
+
+test("intenção desconhecida DE VERDADE continua sendo recusada", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { revisao: {} } });
+  assert.throws(() => readAgents(core), /unknown agent intent\(s\): revisao/);
+  assert.ok(!RESERVED_AGENT_KEYS.includes("revisao"));
+});
+
+test("`budget` malformado reprova com o caminho REAL na mensagem", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { budget: 500000 } });
+  assert.throws(() => readAgents(core), /invalid agents\.budget: 500000 \(expected an object\)/);
+
+  const outro = diretorioTemporario();
+  writeConfig(outro, { registries: [], agents: { budget: { totalTokens: -1 } } });
+  assert.throws(() => readAgents(outro), /invalid agents\.budget\.totalTokens: -1 \(expected a non-negative integer\)/);
+
+  const terceiro = diretorioTemporario();
+  writeConfig(terceiro, { registries: [], agents: { budget: { totalTokens: "500k" } } });
+  assert.throws(() => readAgents(terceiro), /invalid agents\.budget\.totalTokens: "500k"/);
+});
+
+// `inherit` — a forma de o autor dizer "não declare este campo" (ADR-0017, pedido para os motores
+// que ainda vão entrar).
+
+test("`effort: inherit` é aceito e vira AUSÊNCIA do campo", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { review: { effort: "inherit" } } });
+  const { policies } = readAgents(core);
+  assert.equal(Object.hasOwn(policies.review, "effort"), false,
+    "herdar é não ter valor, e quem consome já sabe omitir o que não tem");
+});
+
+test("`model: inherit` por motor vira ausência daquele motor, sem mexer nos outros", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, {
+    registries: [],
+    agents: { execution: { model: { "claude-code": "inherit", copilot: "gpt-5" } } },
+  });
+  const { policies } = readAgents(core);
+  assert.deepEqual(policies.execution.model, { copilot: "gpt-5" });
+});
+
+test("esforço fora da escala continua reprovando, e a mensagem inclui `inherit`", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { review: { effort: "extremo" } } });
+  assert.throws(() => readAgents(core), /invalid agents\.review\.effort: "extremo"/);
+  assert.throws(() => readAgents(core), /inherit/, "a saída ensina o valor que desliga o campo");
+});
+
+test("modelo vazio continua reprovando — vazio não é herdar", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { review: { model: { "claude-code": "" } } } });
+  assert.throws(() => readAgents(core), /invalid agents\.review\.model\.claude-code: ""/);
 });

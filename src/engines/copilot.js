@@ -41,6 +41,16 @@ export default {
     read: '["read", "search"]',
     write: '["read", "search", "edit"]',
   },
+  // Vazio de propósito, e isto NÃO é omissão: o Copilot não publica conjunto fixo de modelos — a
+  // lista é da CONTA de quem instala. Verificado por experimento em 2026-08-26 (spec §11, V-2/V-4):
+  // a lista só aparece em runtime, como aviso da própria plataforma, depois de declarar um modelo
+  // que aquela conta não tem. A referência de configuração de custom agents documenta o campo
+  // `model`, e não os seus valores:
+  // https://docs.github.com/en/copilot/reference/custom-agents-configuration
+  //
+  // Preencher com nomes plausíveis seria palpite sobre a conta de terceiro. Sem sugestão, a skill
+  // diz que ali não há o que sugerir — que é verdade, e vale mais que uma lista inventada.
+  documentedModels: [],
   capabilities: {
     agentModel: true,
     agentEffort: false,

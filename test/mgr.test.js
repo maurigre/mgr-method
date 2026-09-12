@@ -15,13 +15,13 @@ import {
 } from "../src/builder.js";
 import * as installer from "../src/installer.js";
 import * as catalog from "../src/catalog.js";
-import { get as engineDescriptor } from "../src/engines/index.js";
+import { get as engineDescriptor, ids as engineIds } from "../src/engines/index.js";
 import { collectInstallAnswers, detectUserLanguage, CANCELLED } from "../src/prompts.js";
 import { getMessages } from "../src/messages.js";
 import { validateAll, validateSkill, checkSkill } from "../src/validator.js";
 import { aggregateChecksum, sha256 } from "../src/plugin.js";
 import { add as addPlugin } from "../src/plugin-installer.js";
-import { addRegistry } from "../src/registry.js";
+import { addRegistry, readAgents, writeAgentPolicy, writeConfig } from "../src/registry.js";
 import { readLockfile } from "../src/lockfile.js";
 import { captureCli } from "../scripts/capture-cli-baseline.mjs";
 
@@ -1124,6 +1124,32 @@ test("as ferramentas de cada motor batem com a documentação da plataforma", ()
   // copilot, e nome não reconhecido é ignorado em SILÊNCIO — o gate rodava sem leitura de arquivo.
   assert.equal(engineDescriptor("copilot").agentTools.read, '["read", "search"]');
   assert.equal(engineDescriptor("copilot").agentTools.write, '["read", "search", "edit"]');
+});
+
+test("os aliases documentados do claude-code são os quatro que a doc citada publica", () => {
+  assert.deepEqual(engineDescriptor("claude-code").documentedModels, ["sonnet", "opus", "haiku", "fable"]);
+});
+
+test("a lista do copilot é vazia porque os modelos são da conta, e não do produto", () => {
+  assert.deepEqual(engineDescriptor("copilot").documentedModels, [],
+    "não é omissão: o produto não publica conjunto fixo, e inventar nomes seria palpite sobre a conta alheia");
+});
+
+test("todo motor declara a lista, ainda que vazia", () => {
+  for (const id of engineIds()) {
+    assert.ok(Array.isArray(engineDescriptor(id).documentedModels), `${id} sem documentedModels`);
+  }
+});
+
+test("a lista documentada é sugestão, e não grade do que pode ser escrito", () => {
+  const foraDaLista = "modelo-que-so-existe-na-minha-conta";
+  assert.ok(!engineDescriptor("claude-code").documentedModels.includes(foraDaLista));
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [] });
+  writeAgentPolicy(core, "drafting", { model: { "claude-code": foraDaLista } });
+  const { policies } = readAgents(core);
+  assert.equal(policies.drafting.model["claude-code"], foraDaLista,
+    "validar contra lista nossa faria o método recusar modelo válido assim que a doc mudasse (RN-2)");
 });
 
 test("o agente de revisão do copilot TEM ferramenta de leitura", () => {
@@ -2307,6 +2333,112 @@ test("com `inherit`, a chave `effort` NÃO some do payload --json", () => {
   assert.ok(Object.hasOwn(doClaude, "effort"), "`undefined` some do stringify; a §5 contrata a chave");
   assert.equal(doClaude.effort, null);
   assert.deepEqual(doClaude.skipped, [], "não há capacidade faltando: foi escolha do autor");
+});
+
+// `mgr agents set` — a escrita pela borda. Os motores vêm do MANIFESTO, então o repositório de
+// teste precisa dos dois arquivos, e não só do config.
+const repoComMotores = (engines, config = {}) => {
+  const repo = repoComConfig(config);
+  writeFileSync(path.join(installer.coreDir("project", repo), "manifest.json"),
+    JSON.stringify({ version: "0.0.0", engines, core: installer.coreDir("project", repo) }), "utf8");
+  return repo;
+};
+const configDe = (repo) =>
+  JSON.parse(readFileSync(path.join(installer.coreDir("project", repo), "config.json"), "utf8"));
+
+test("mgr agents set: identificador de modelo desconhecido é aceito", () => {
+  const repo = repoComMotores(["claude-code"]);
+  const { stdout, status } = rodarAgents(repo, ["set", "drafting", "--model", "modelo-da-minha-conta"]);
+  assert.equal(status, 0);
+  assert.match(stdout, /modelo=modelo-da-minha-conta/);
+  assert.equal(configDe(repo).agents.drafting.model["claude-code"], "modelo-da-minha-conta",
+    "a lista de modelos é da conta de quem instala, e lista nossa recusaria modelo válido (RN-2)");
+});
+
+test("mgr agents set: sem --engine, escreve para os motores do manifesto, e nomeia os dois", () => {
+  const repo = repoComMotores(["claude-code", "copilot"]);
+  const { stdout } = rodarAgents(repo, ["set", "execution", "--model", "haiku"]);
+  assert.deepEqual(configDe(repo).agents.execution.model, { "claude-code": "haiku", copilot: "haiku" });
+  for (const engine of ["claude-code", "copilot"]) {
+    assert.match(stdout, new RegExp(`^\\s+${engine}\\s.*modelo=haiku`, "m"), `${engine} na saída`);
+  }
+});
+
+test("mgr agents set: `--effort` com `--engine` mostra TODOS os motores, porque vale para todos", () => {
+  const repo = repoComMotores(["claude-code", "copilot"]);
+  const { stdout } = rodarAgents(repo, ["set", "review", "--engine", "copilot", "--effort", "max"]);
+  assert.equal(configDe(repo).agents.review.effort, "max", "o esforço é da intenção, não do motor");
+  assert.match(stdout, /claude-code.*esforço=max/,
+    "mostrar só o motor pedido esconderia que o esforço passou a valer no outro também");
+});
+
+test("mgr agents set: sem motor instalado, `--model` é recusado em vez de gravar no escuro", () => {
+  const repo = repoComConfig({});
+  const { stderr, status } = rodarAgents(repo, ["set", "review", "--model", "opus"]);
+  assert.notEqual(status, 0);
+  assert.match(stderr, /nenhum motor instalado neste projeto/);
+  assert.equal(Object.hasOwn(configDe(repo), "agents"), false);
+});
+
+test("mgr agents set: motor não instalado é recusado, e nada é gravado", () => {
+  const repo = repoComMotores(["claude-code"]);
+  const { stderr, status } = rodarAgents(repo, ["set", "review", "--engine", "copilot", "--model", "x"]);
+  assert.notEqual(status, 0);
+  assert.match(stderr, /copilot.*não está instalado.*instalados: claude-code/s);
+  assert.equal(Object.hasOwn(configDe(repo), "agents"), false,
+    "gravar e ignorar deixaria o autor achando que configurou");
+});
+
+test("mgr agents set: esforço fora da escala reprova, e o config fica intocado", () => {
+  const repo = repoComMotores(["claude-code"]);
+  const { stderr, status } = rodarAgents(repo, ["set", "review", "--effort", "extremo"]);
+  assert.notEqual(status, 0);
+  assert.match(stderr, /invalid agents\.review\.effort: "extremo"/);
+  assert.equal(Object.hasOwn(configDe(repo), "agents"), false);
+});
+
+test("mgr agents set: sem campo nenhum, e sem intenção, são recusados", () => {
+  const repo = repoComMotores(["claude-code"]);
+  const semCampo = rodarAgents(repo, ["set", "review"]);
+  assert.notEqual(semCampo.status, 0);
+  assert.match(semCampo.stderr, /nada a escrever/);
+
+  const semIntencao = rodarAgents(repo, ["set"]);
+  assert.notEqual(semIntencao.status, 0);
+  assert.match(semIntencao.stderr, /diga a intenção a configurar/);
+
+  const desconhecida = rodarAgents(repo, ["set", "revisao", "--effort", "max"]);
+  assert.notEqual(desconhecida.status, 0);
+  assert.match(desconhecida.stderr, /intenção `revisao` desconhecida/);
+});
+
+test("mgr agents set: uma frase por campo escrito, e só pelos escritos", () => {
+  const repo = repoComMotores(["claude-code"]);
+  const soModelo = rodarAgents(repo, ["set", "drafting", "--model", "opus"]);
+  assert.match(soModelo.stdout, /Escrevendo `agents.drafting` em .mgr-core\/config.json/,
+    "a escrita em disco é anunciada ANTES de acontecer, como o `mgr registry add` já faz");
+  assert.match(soModelo.stdout, /`model` passa a valer na próxima invocação/);
+  assert.ok(!soModelo.stdout.includes("`effort` só passa a valer"),
+    "anunciar efeito de campo que não foi escrito é a saída mentindo");
+
+  const osDois = rodarAgents(repo, ["set", "review", "--model", "opus", "--effort", "max"]);
+  assert.match(osDois.stdout, /`model` passa a valer na próxima invocação/);
+  assert.match(osDois.stdout, /`effort` só passa a valer depois de `mgr update`/,
+    "os dois campos passam a valer em momentos diferentes, e dizer só \"pronto\" esconde isso");
+});
+
+test("mgr agents set: o comando NÃO roda o update, e o arquivo do agente fica como estava", () => {
+  const repo = diretorioTemporario();
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  execFileSync("node", [bin, "install", "--engine", "claude-code", "--arch", "hexagonal",
+    "--project-id", "x", "-y", repo], { encoding: "utf8" });
+  const doAgente = path.join(repo, ".claude", "agents", "mgr-review.md");
+  const antes = readFileSync(doAgente, "utf8");
+
+  const { status } = rodarAgents(repo, ["set", "review", "--effort", "max"]);
+  assert.equal(status, 0);
+  assert.equal(readFileSync(doAgente, "utf8"), antes,
+    "reescrever o disco do autor sem ele pedir é mudança de estado que o comando não anunciou");
 });
 
 test("o predicado de quem está herdando tem um lugar só", () => {

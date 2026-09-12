@@ -211,6 +211,20 @@ const en = {
     "`reviewGate` and `agents.review` are both set: `agents.review` wins. Remove `reviewGate` to "
     + "keep one source.",
   agentsUnknown: (intent, known) => `unknown intent \`${intent}\` (expected ${known})`,
+  agentsSetNeedsIntent: (known) => `name the intent to configure (expected ${known})`,
+  agentsSetWriting: (intent) => `Writing \`agents.${intent}\` to .mgr-core/config.json`,
+  agentsSetNothing: "nothing to write: pass `--model`, `--effort`, or both",
+  agentsSetEngineNotInstalled: (engine, installed) =>
+    `engine \`${engine}\` is not installed in this project`
+    + (installed ? ` (installed: ${installed})` : ""),
+  // Sem motor instalado, `--engine` não é saída: o laço acima recusa qualquer motor que não esteja
+  // no manifesto. Aconselhar um caminho que não leva a lugar nenhum é pior que não aconselhar.
+  agentsSetNoEngines: "no engine installed in this project: run `mgr install` first",
+  agentsSetWritten: (intent, agent) => `written to \`agents.${intent}\` — ${agent}`,
+  agentsSetModelEffect: "`model` takes effect on the next invocation.",
+  agentsSetEffortEffect:
+    "`effort` only takes effect after `mgr update`: it lives in the agent file, and the "
+    + "invocation cannot override it.",
   specNextAllRefused: "`mgr spec next` does not accept `--all`: the next action is about ONE feature — name one, or run it from inside `specs/<slug>/`",
   specNextNeedsSlug: (count) => `${count} feature(s) in specs/ and none was named — name one, or run this from inside \`specs/<slug>/\``,
   specStatusRoot: (root) => `${root}`,
@@ -248,6 +262,8 @@ Usage: mgr <command> [options]
   spec status      which artifacts exist ([<slug>], --all, --json)
   agents           which model and effort each intent uses, and where each
                    value came from ([<intent>], --json)
+  agents set       writes one intent's policy (<intent>, --model, --effort,
+                   --engine); it does not run mgr update
   tokens           how much the flow consumed: pass the conversation
                    transcript, then each agent transcript (--json)
   list             lists the skills
@@ -472,6 +488,18 @@ const ptBR = {
     "`reviewGate` e `agents.review` estão os dois escritos: `agents.review` vence. Apague o "
     + "`reviewGate` para ficar com uma fonte só.",
   agentsUnknown: (intent, known) => `intenção \`${intent}\` desconhecida (esperado ${known})`,
+  agentsSetNeedsIntent: (known) => `diga a intenção a configurar (esperado ${known})`,
+  agentsSetWriting: (intent) => `Escrevendo \`agents.${intent}\` em .mgr-core/config.json`,
+  agentsSetNothing: "nada a escrever: passe `--model`, `--effort`, ou os dois",
+  agentsSetEngineNotInstalled: (engine, instalados) =>
+    `motor \`${engine}\` não está instalado neste projeto`
+    + (instalados ? ` (instalados: ${instalados})` : ""),
+  agentsSetNoEngines: "nenhum motor instalado neste projeto: rode `mgr install` primeiro",
+  agentsSetWritten: (intent, agent) => `escrito em \`agents.${intent}\` — ${agent}`,
+  agentsSetModelEffect: "`model` passa a valer na próxima invocação.",
+  agentsSetEffortEffect:
+    "`effort` só passa a valer depois de `mgr update`: ele mora no arquivo do agente, e a "
+    + "invocação não o sobrescreve.",
   specNextAllRefused: "`mgr spec next` não aceita `--all`: a próxima ação é sobre UMA feature — nomeie uma, ou rode de dentro de `specs/<slug>/`",
   specNextNeedsSlug: (count) => `${count} feature(s) em specs/ e nenhuma foi nomeada — nomeie uma, ou rode isto de dentro de \`specs/<slug>/\``,
   specStatusRoot: (root) => `${root}`,
@@ -509,6 +537,8 @@ Uso: mgr <comando> [opções]
   spec status      quais artefatos existem ([<slug>], --all, --json)
   agents           qual modelo e esforço cada intenção usa, e de onde veio
                    cada valor ([<intenção>], --json)
+  agents set       escreve a política de uma intenção (<intenção>, --model,
+                   --effort, --engine); não roda o mgr update
   tokens           quanto o fluxo consumiu: passe o transcript da conversa e,
                    depois dele, o de cada agente (--json)
   list             lista as skills

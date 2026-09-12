@@ -92,6 +92,7 @@ code-analyzer ─ final 2-axis review: Standards (THE project's guide) + Spec (d
 | `adr-create` | Nygard-format ADRs: auto-detects the directory, sequential numbering, immutability of accepted ones, standalone or invoked mode. |
 | `code-analyzer` | Rigorous **two-axis** reviewer, reported side by side: **Standards** (does the code follow `docs/sdd/09-review-rules.md`?) and **Spec** (did the code fulfill its originating spec?). **Critical Restriction** on both: every reproval quotes textually — the guide rule or the spec line; no citation, no reproval (§3.1). Two-axis model adapted from Matt Pocock's `code-review` ([MIT](https://github.com/mattpocock/skills)). Runs in the **validation gate**: its own agent, with declared model and effort, **no write tools**, and without the conversation that produced the code (ADR-0010). Tunable in `.mgr-core/config.json` → `reviewGate`. |
 | `diagnosing-bugs` | Discipline for diagnosing hard bugs: requires a **red** reproduction loop before any hypothesis (*signal before theory*), 3–5 falsifiable hypotheses, a regression test before the fix. Finds the cause and stops (hands the repair to `spec-create`). Adapted from Matt Pocock's `diagnosing-bugs` ([MIT](https://github.com/mattpocock/skills)). |
+| `configure-agents` | Guides the choice of model and effort per intent (`drafting`, `execution`, `review`) and writes it with `mgr agents set`. It says what each intent does and shows the identifiers each engine documents, and it **never suggests** a model for an intent: the available models and the bill both belong to your account. |
 | `evidence-capture` | Records AI-First evidence per feature (prompts, reviews, skills) in `specs/<feature>/ai/` + a global index; organizes and asks, never invents. |
 | `junit-clean` | Java tests standardized by 13 rules (should+camelCase naming, no inheritance, ParameterizedTest, AAA, boundary + MC/DC, Sonar-safe). |
 | `arch-hexagonal` | Rules guide for Ports & Adapters (Cockburn), language-agnostic (Java/Go/Python/C#/TS profiles + generic). |
@@ -125,7 +126,7 @@ decision automatically generates an ADR. Out comes the same SDD as brownfield; t
 ```
 bin/mgr.js          # CLI (install · status · update · uninstall · build · validate · list · add · remove · registry)
 src/                # bundle · builder · installer · manifest · validator · plugin · registry · lockfile · adapters
-skills/             # the 12 skills (source)
+skills/             # the 13 skills (source)
 shared/scripts/     # sdd-check.sh (checks the spec-create prerequisites)
 docs/plugins.md     # plugin skill format: manifest, registry, lockfile, capability matrix
 test/               # node:test

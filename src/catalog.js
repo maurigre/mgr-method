@@ -13,6 +13,11 @@ export const CORE = [
   "diagnosing-bugs",
 ];
 
+// Skills que acompanham TODA instalação sem pertencer ao fluxo SDD: elas configuram o MÉTODO em
+// vez de conduzi-lo. Ficam fora do CORE de propósito — o CORE é o fluxo, e engordá-lo faria a
+// próxima leitura confundir "sempre instalada" com "parte do fluxo".
+export const TOOLING = ["configure-agents"];
+
 // Uma skill por arquitetura; instala apenas a escolhida.
 export const ARCHITECTURES = {
   hexagonal: "arch-hexagonal",
@@ -144,7 +149,7 @@ const ARCH_SKILLS = () => Object.values(ARCHITECTURES);
 
 // Monta o subconjunto de skills a instalar a partir das escolhas do projeto.
 export function selectSkills({ architecture = null, language = null, optional = [] } = {}) {
-  const set = new Set(CORE);
+  const set = new Set([...CORE, ...TOOLING]);
   if (architecture) {
     const s = ARCHITECTURES[architecture];
     if (!s) throw new Error(`arquitetura desconhecida: ${architecture} (use ${architectures().join(", ")})`);

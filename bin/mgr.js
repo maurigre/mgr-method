@@ -13,7 +13,7 @@ import * as provValidator from "../src/prov-validator.js";
 import * as planNext from "../src/plan-next.js";
 import * as specStatus from "../src/spec-status.js";
 import { repoRoot, slugs } from "../src/artifacts.js";
-import { CONFIGURED, readAgents } from "../src/registry.js";
+import { CONFIGURED, readAgents, writeAgentPolicy } from "../src/registry.js";
 import * as tokens from "../src/tokens.js";
 import { ids as engineIds } from "../src/engines/index.js";
 import { blocking, summarize } from "../src/findings.js";
@@ -87,6 +87,8 @@ function parseArgs(argv) {
     else if (a === "--all") flags.all = true;
     else if (a === "--json") flags.json = true;
     else if (a === "--out") flags.out = argv[++i];
+    else if (a === "--model") flags.model = argv[++i];
+    else if (a === "--effort") flags.effort = argv[++i];
     else if (a.startsWith("-")) { console.error(M.unknownFlag(a)); process.exit(1); }
     else positional.push(a);
   }
@@ -725,6 +727,7 @@ const resumoDeStatus = (feature) =>
 // (ADR-0017). A decisão vem do núcleo: `readAgents` diz o valor e a origem, `gateSummary` diz o que
 // o motor sustenta. Aqui só se escolhe a palavra.
 function cmdAgents(flags, positional) {
+  if (positional[0] === "set") return cmdAgentsSet(flags, positional.slice(1));
   const repo = repoRoot(process.cwd());
   const core = installer.coreDir("project", repo);
   const { policies, sources, aliasOverridden } = readAgents(core);
@@ -783,6 +786,76 @@ function cmdAgents(flags, positional) {
   console.log("");
   console.log(pc.dim(M.agentsEffortNote));
   if (aliasOverridden) console.log(M.agentsAliasNote);
+  return 0;
+}
+
+// `mgr agents set` — escreve a política de UMA intenção e diz o que passou a valer (ADR-0017).
+//
+// A decisão de MERGE e a validação são do núcleo (`writeAgentPolicy`); aqui só se resolve para
+// QUAIS motores escrever, e se escolhe a palavra. Este comando NÃO roda o `update`: reescrever o
+// arquivo do agente sem o autor pedir mexeria no disco dele por conta própria.
+//
+// `model` é mapa POR MOTOR e `effort` é da intenção inteira — por isso `--engine` só tem efeito
+// sobre o modelo, e o esforço é escrito uma vez, sem motor.
+function cmdAgentsSet(flags, positional) {
+  const repo = repoRoot(process.cwd());
+  const core = installer.coreDir("project", repo);
+
+  const intent = positional[0];
+  if (!intent) {
+    console.error(M.errorPrefix(M.agentsSetNeedsIntent(catalogo.INTENTS.join(" | "))));
+    return 1;
+  }
+  if (!catalogo.INTENTS.includes(intent)) {
+    console.error(M.errorPrefix(M.agentsUnknown(intent, catalogo.INTENTS.join(" | "))));
+    return 1;
+  }
+  if (flags.model === undefined && flags.effort === undefined) {
+    console.error(M.errorPrefix(M.agentsSetNothing));
+    return 1;
+  }
+
+  // Sem `--engine`, os motores vêm do manifesto — é o que o autor instalou, e não um palpite.
+  const manifesto = installer.detectPrior("project", repo);
+  const instalados = (manifesto?.engines || [manifesto?.engine]).filter((e) => engineIds().includes(e));
+  const motores = flags.engines.length ? flags.engines : instalados;
+  for (const engine of flags.engines) {
+    // Motor não instalado é RECUSADO, e não gravado e ignorado: config que ninguém lê é pior que
+    // erro na hora, porque o autor sai achando que configurou.
+    if (!instalados.includes(engine)) {
+      console.error(M.errorPrefix(M.agentsSetEngineNotInstalled(engine, instalados.join(", "))));
+      return 1;
+    }
+  }
+  if (flags.model !== undefined && !motores.length) {
+    console.error(M.errorPrefix(M.agentsSetNoEngines));
+    return 1;
+  }
+
+  const escrita = {};
+  if (flags.model !== undefined) escrita.model = Object.fromEntries(motores.map((e) => [e, flags.model]));
+  if (flags.effort !== undefined) escrita.effort = flags.effort;
+  // Valor inválido sai pelo `throw` do núcleo, capturado no `main` — e nada é gravado.
+  console.log(M.agentsSetWriting(intent));
+  const policy = writeAgentPolicy(core, intent, escrita);
+  console.log(M.agentsSetWritten(intent, catalogo.AGENTS[intent].agent));
+
+  // `effort` vale para a INTENÇÃO inteira: mostrar só o motor do `--engine` esconderia que ele
+  // passou a valer nos outros também. Com `--model` sozinho, mostra-se só onde se escreveu.
+  const mostrados = (flags.effort !== undefined && instalados.length)
+    ? instalados
+    : (motores.length ? motores : engineIds());
+  for (const engine of mostrados) {
+    const { model, effort, skipped } = gateSummary(engine, policy);
+    console.log(M.agentsEngine(engine,
+      model || (skipped.includes("model") ? M.agentsUnsupported : M.agentsInherited),
+      effort || (skipped.includes("effort") ? M.agentsUnsupported : M.agentsInherited)));
+  }
+  console.log("");
+  // Uma frase por campo ESCRITO: os dois campos passam a valer em momentos diferentes, e dizer só
+  // "pronto" deixaria o autor esperando efeito que ainda não existe.
+  if (flags.model !== undefined) console.log(pc.dim(M.agentsSetModelEffect));
+  if (flags.effort !== undefined) console.log(pc.dim(M.agentsSetEffortEffect));
   return 0;
 }
 

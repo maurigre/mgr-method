@@ -5,6 +5,8 @@ import { readFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import * as catalogo from "../src/catalog.js";
+import { get as engineDescriptor } from "../src/engines/index.js";
 
 // A regressão mais grave possível nesta feature é o método deixar de funcionar SEM a CLI
 // instalada — hoje ele funciona. As skills passaram a preferir `mgr spec status --json`, e a
@@ -140,4 +142,60 @@ test("a skill diz que o agente NÃO vê a conversa", () => {
     assert.match(fonteDa(skill), /agent cannot see this conversation|cannot see the conversation/,
       `${skill}: sem isto, quem escreve a skill esquece de pôr o contexto em disco`);
   }
+});
+
+// A skill da P2.1: ela CONDUZ a escolha de modelo e esforço, e a regra soberana é que ela nunca
+// sugira. Sem gate, a próxima edição acrescenta "use opus para redação" achando que ajuda — e isso
+// é palpite sobre a conta e sobre o bolso de quem instala (RN-1).
+const CONFIGURA = "configure-agents";
+const ALIASES = /\b(sonnet|opus|haiku|fable)\b/;
+
+test("a skill de configuração lê o estado pelo comando e declara os três fallbacks", () => {
+  const texto = fonteDa(CONFIGURA);
+  assert.match(texto, /mgr agents --json/, "lê o estado antes de propor mudança");
+  assert.match(texto, /mgr agents set <intent>/, "e escreve pelo comando, não editando o JSON");
+  const fallbacks = texto.match(new RegExp(FALLBACK.source, "g")) || [];
+  assert.equal(fallbacks.length, 3,
+    "os três caminhos que dependem da CLI — ler o estado, ler os motores e escrever — têm fallback");
+  assert.match(texto, /`\.mgr-core\/manifest\.json`/,
+    "mostrar alias de motor que o projeto não tem é oferecer o que o comando vai recusar");
+  assert.match(texto, /`\.mgr-core\/config\.json`/, "o fallback diz QUAL arquivo abrir");
+  assert.match(texto, /MUST keep working with the skills alone/);
+});
+
+test("a skill NÃO sugere modelo por intenção, em nenhuma das duas ordens", () => {
+  const texto = fonteDa(CONFIGURA);
+  assert.match(texto, /\*\*Never suggest which model to use for an intent\.\*\*/,
+    "a proibição é escrita, não subentendida");
+
+  const recomendando = new RegExp(
+    `\\b(use|prefer|recommend\\w*|best|ideal|suited)\\b.{0,60}${ALIASES.source}`, "i");
+  assert.doesNotMatch(texto, recomendando, "nenhum alias aparece atrás de verbo de recomendação");
+
+  const INTENCOES = /\b(drafting|execution|review)\b/;
+  // `.` e não `[^.]`: com o texto colapsado numa linha só, um ponto qualquer — dentro de uma URL,
+  // inclusive — desarmava a janela e deixava a asserção passar sem olhar nada.
+  assert.doesNotMatch(texto, new RegExp(`${INTENCOES.source}.{0,80}${ALIASES.source}`, "i"),
+    "alias perto de intenção é sugestão, mesmo sem verbo");
+  assert.doesNotMatch(texto, new RegExp(`${ALIASES.source}.{0,80}${INTENCOES.source}`, "i"),
+    "e a ordem inversa diria a mesma coisa");
+});
+
+test("a skill entra no catálogo FORA do CORE, que segue com seis", () => {
+  assert.deepEqual(catalogo.CORE.length, 6, "um sétimo item no CORE é regressão até prova em contrário");
+  assert.ok(!catalogo.CORE.includes(CONFIGURA), "ela configura o método, não conduz o fluxo");
+  assert.ok(catalogo.TOOLING.includes(CONFIGURA));
+  assert.ok(catalogo.selectSkills({}).includes(CONFIGURA), "mas acompanha toda instalação");
+});
+
+// A duplicação declarada da P2.1: os aliases vivem no descritor do motor E no texto da skill,
+// porque a CLI não expõe o campo. Sem este gate, "divergem de forma visível" é promessa; com ele,
+// não divergem.
+test("a lista de aliases da skill é a MESMA do descritor do motor", () => {
+  const texto = fonteDa(CONFIGURA);
+  for (const alias of engineDescriptor("claude-code").documentedModels) {
+    assert.match(texto, new RegExp(`\\b${alias}\\b`), `${alias} está no descritor e sumiu da skill`);
+  }
+  assert.deepEqual(engineDescriptor("copilot").documentedModels, [],
+    "e a skill diz que ali não há o que oferecer, em vez de listar nome plausível");
 });

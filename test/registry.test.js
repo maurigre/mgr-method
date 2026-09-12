@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   addRegistry, CONFIGURED, configPath, DEFAULT, fetchIndex, RESERVED_AGENT_KEYS, listRegistries, readAgents, readConfig, readDetectionMode,
-  readLawsPreamble, removeRegistry, resolve, validateIndex, writeConfig,
+  readLawsPreamble, removeRegistry, writeAgentPolicy, resolve, validateIndex, writeConfig,
 } from "../src/registry.js";
 import { AGENTS, INTENTS, REVIEW_GATE } from "../src/catalog.js";
 import { fileURLToPath } from "node:url";
@@ -483,4 +483,111 @@ test("modelo vazio continua reprovando — vazio não é herdar", () => {
   const core = diretorioTemporario();
   writeConfig(core, { registries: [], agents: { review: { model: { "claude-code": "" } } } });
   assert.throws(() => readAgents(core), /invalid agents\.review\.model\.claude-code: ""/);
+});
+
+// `writeAgentPolicy` — a escrita da política de uma intenção.
+const configCheio = (core) => writeConfig(core, {
+  registries: [{ name: "mgr", url: INDEX_URL, trusted: false }],
+  lawsPreamble: { enabled: false },
+  reviewGate: { effort: "high" },
+  agents: { budget: { totalTokens: 900 }, execution: { model: { copilot: "gpt-5" } } },
+});
+
+test("escrever um motor NÃO apaga o modelo de outro já declarado", () => {
+  const core = diretorioTemporario();
+  configCheio(core);
+  writeAgentPolicy(core, "execution", { model: { "claude-code": "haiku" } });
+  const { policies } = readAgents(core);
+  assert.deepEqual(policies.execution.model, { copilot: "gpt-5", "claude-code": "haiku" });
+});
+
+test("escrever uma intenção não altera as outras", () => {
+  const core = diretorioTemporario();
+  configCheio(core);
+  writeAgentPolicy(core, "drafting", { model: { "claude-code": "opus" } });
+  const { policies } = readAgents(core);
+  assert.equal(policies.drafting.model["claude-code"], "opus");
+  assert.deepEqual(policies.execution.model, { copilot: "gpt-5" }, "a vizinha ficou como estava");
+  assert.deepEqual(policies.review.model, {}, "e a que ninguém tocou segue sem modelo");
+});
+
+test("as chaves vizinhas do config sobrevivem à escrita", () => {
+  const core = diretorioTemporario();
+  configCheio(core);
+  writeAgentPolicy(core, "review", { effort: "max" });
+  const config = readConfig(core);
+  assert.equal(config.registries.length, 1, "registries");
+  assert.equal(config.lawsPreamble.enabled, false, "lawsPreamble");
+  assert.deepEqual(config.reviewGate, { effort: "high" }, "o apelido não é reescrito");
+  assert.deepEqual(config.agents.budget, { totalTokens: 900 }, "budget");
+});
+
+test("só o campo pedido é tocado", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { review: { model: { "claude-code": "opus" }, effort: "max" } } });
+  writeAgentPolicy(core, "review", { effort: "low" });
+  const { policies } = readAgents(core);
+  assert.equal(policies.review.effort, "low", "o que foi pedido mudou");
+  assert.equal(policies.review.model["claude-code"], "opus", "o que não foi pedido ficou");
+});
+
+test("`inherit` grava e some na leitura, nos dois campos", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { review: { model: { "claude-code": "opus" }, effort: "max" } } });
+  writeAgentPolicy(core, "review", { model: { "claude-code": "inherit" }, effort: "inherit" });
+  const { policies } = readAgents(core);
+  assert.deepEqual(policies.review.model, {}, "o motor marcado some do mapa");
+  assert.equal(Object.hasOwn(policies.review, "effort"), false, "e o campo some inteiro");
+});
+
+test("desfazer uma intenção não desfaz as outras", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: {
+    drafting: { model: { "claude-code": "opus" } },
+    execution: { model: { "claude-code": "haiku" } },
+  } });
+  writeAgentPolicy(core, "drafting", { model: { "claude-code": "inherit" } });
+  const { policies } = readAgents(core);
+  assert.deepEqual(policies.drafting.model, {});
+  assert.equal(policies.execution.model["claude-code"], "haiku");
+});
+
+test("a escrita devolve o que passou a valer", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [] });
+  const policy = writeAgentPolicy(core, "execution", { model: { "claude-code": "sonnet" } });
+  assert.equal(policy.model["claude-code"], "sonnet");
+  assert.equal(policy.effort, "low", "o que não foi escrito vem do default");
+});
+
+test("intenção desconhecida é recusada, e nada é gravado", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [] });
+  assert.throws(() => writeAgentPolicy(core, "revisao", { effort: "max" }),
+    /unknown agent intent: "revisao" \(expected drafting \| execution \| review\)/);
+  assert.equal(Object.hasOwn(readConfig(core), "agents"), false, "config intocado");
+});
+
+test("escrita sem campo nenhum é recusada", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [] });
+  assert.throws(() => writeAgentPolicy(core, "review", {}),
+    /nothing to write for agents\.review/);
+  assert.throws(() => writeAgentPolicy(core, "review"), /nothing to write/);
+});
+
+test("valor inválido reprova ANTES de gravar, e o config não quebra", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [] });
+  assert.throws(() => writeAgentPolicy(core, "review", { effort: "extremo" }),
+    /invalid agents\.review\.effort: "extremo"/);
+  assert.equal(Object.hasOwn(readConfig(core), "agents"), false,
+    "gravar e só descobrir na leitura seguinte deixaria o config quebrado pela mão do método");
+});
+
+test("identificador de modelo desconhecido é ACEITO — a lista é da conta", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [] });
+  const policy = writeAgentPolicy(core, "drafting", { model: { "claude-code": "modelo-que-so-existe-na-minha-conta" } });
+  assert.equal(policy.model["claude-code"], "modelo-que-so-existe-na-minha-conta");
 });

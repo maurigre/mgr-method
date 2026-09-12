@@ -20,6 +20,26 @@ export default {
     read: "Read, Grep, Glob",
     write: "Read, Grep, Glob, Write, Edit",
   },
+  // Aliases que a plataforma PUBLICA, conferidos em 2026-09-12 nas duas páginas oficiais, que dizem
+  // o mesmo por caminhos diferentes:
+  //   - https://code.claude.com/docs/en/cli-reference — a descrição do `--model` nomeia exatamente
+  //     estes quatro ("such as `sonnet`, `opus`, `haiku`, or `fable`, or a model's full name") e
+  //     aponta dali para a tabela completa. É a fonte que o DT-4 da spec fixou;
+  //   - https://code.claude.com/docs/en/model-config, seção "Model aliases" — a tabela completa, de
+  //     onde saem as razões de exclusão logo abaixo. Sem ela as exclusões seriam afirmação sem fonte.
+  //
+  // É sugestão, nunca grade: nada valida contra esta lista. A conta de quem instala pode ter modelo
+  // que a doc não publica, e lista nossa envelhece e passa a recusar modelo válido (RN-2).
+  //
+  // A tabela tem MAIS linhas que estas quatro. O que ficou de fora, e por quê, pela própria doc:
+  //   - `default`: a doc diz textualmente "Not itself a model alias", e colidiria com o `inherit`,
+  //     que já é o valor reservado do método para ausência;
+  //   - `best`: resolve para fable ou opus conforme a conta, o que tornaria a política declarada
+  //     imprevisível entre máquinas — o oposto do que declarar modelo por intenção serve para fazer;
+  //   - `sonnet[1m]` e `opus[1m]`: variantes de janela dos mesmos dois modelos, não modelos distintos;
+  //   - `opusplan`: "Special mode" que troca de modelo no meio do caminho, de frente contra a
+  //     premissa do ADR-0017 de que o agente segura UM modelo pela execução inteira.
+  documentedModels: ["sonnet", "opus", "haiku", "fable"],
   capabilities: {
     agentModel: true,
     agentEffort: true,

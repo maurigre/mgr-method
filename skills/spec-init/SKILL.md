@@ -21,7 +21,7 @@ Probe the `mgr-mcp` with a light call. **ON** → retrieve previous analyses, co
 decisions for this project/domain and use them as context; when finishing, record the SDD
 summary and the constitution in memory. **OFF** → emit visibly:
 
-> ⚠️ **mgr-code unavailable** — operating without long-term memory. Proceeding with the
+> **WARNING — mgr-code unavailable.** Operating without long-term memory. Proceeding with the
 > repository state only.
 
 Never silence the absence; never block because of it.

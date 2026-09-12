@@ -212,6 +212,35 @@ function resolvePolicy(label, defaults, configured) {
 // Quando as duas chaves existem, `agents.review` vence e o conflito volta em `aliasOverridden`
 // para a BORDA avisar. Resolver em silêncio seria escolher pelo autor sem lhe dizer — e ele
 // escreveu os dois valores justamente porque achava que os dois valiam.
+// Escreve a política de UMA intenção, preservando tudo o mais (ADR-0017; esta fatia).
+//
+// O merge do `model` é de DOIS NÍVEIS, pela mesma razão do `resolvePolicy`: declarar um motor não
+// pode apagar o outro que o autor já tinha escrito. E só o campo pedido é tocado — passar `model`
+// não mexe no `effort`, e vice-versa.
+//
+// A validação é a MESMA da leitura, rodada aqui antes de gravar: escrever um valor inválido e só
+// descobrir na próxima leitura deixaria o config quebrado com a mão do próprio método.
+export function writeAgentPolicy(coreDir, intent, { model, effort } = {}) {
+  if (!INTENTS.includes(intent)) {
+    throw new Error(`unknown agent intent: ${JSON.stringify(intent)} (expected ${INTENTS.join(" | ")})`);
+  }
+  if (model === undefined && effort === undefined) {
+    throw new Error(`nothing to write for agents.${intent} (expected model, effort, or both)`);
+  }
+
+  const config = readConfig(coreDir);
+  const agents = { ...(config.agents ?? {}) };
+  const escrita = { ...(agents[intent] ?? {}) };
+  if (model !== undefined) escrita.model = { ...(escrita.model ?? {}), ...model };
+  if (effort !== undefined) escrita.effort = effort;
+
+  // Valida ANTES de gravar, e devolve o que passou a valer — é o que a borda relata.
+  const policy = resolvePolicy(`agents.${intent}`, AGENTS[intent].defaults, escrita);
+  agents[intent] = escrita;
+  writeConfig(coreDir, { ...config, agents });
+  return policy;
+}
+
 // De onde veio cada valor da política: o que o autor escreveu, ou o default do catálogo.
 //
 // Existe porque a saída do `mgr agents` tem de dizer a ORIGEM, não só o valor — sem isso o autor

@@ -3,6 +3,32 @@
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
+### Adicionado
+- **`mgr agents set <intenção> [--model] [--effort] [--engine]`**: escreve a política de uma
+  intenção sem você abrir o JSON. Escrever um motor **não apaga** o outro, escrever uma intenção não
+  mexe nas vizinhas, e passar `--effort` não apaga o `model`. Valor inválido é recusado **antes** de
+  gravar, então o config nunca fica quebrado pela mão do próprio método.
+- **Skill `configure-agents`**, instalada em todo projeto: lê o estado, explica o que cada intenção
+  faz e quantas vezes ela roda, e escreve pelo comando. Ela **não** entra no CORE, que segue com seis.
+- **`documentedModels` no descritor de cada motor**: os identificadores que a documentação da
+  plataforma publica, com data e fonte no comentário. É sugestão, e nunca grade de validação.
+
+### O que degrada, declarado
+- **Nenhum motor lista os modelos que a sua conta tem.** Foi verificado na documentação oficial dos
+  dois: não existe comando de listagem. Por isso a skill oferece os **aliases documentados** de cada
+  motor e **aceita qualquer identificador** que você escrever. Lista nossa envelheceria e passaria a
+  recusar modelo válido.
+- **No Copilot não há o que oferecer.** Os modelos disponíveis ali são da conta, e a plataforma só
+  os revela em runtime, como aviso, depois de você declarar um que ela não tem. A lista vazia é o
+  fato, não esquecimento.
+- **A skill nunca diz qual modelo usar em qual etapa.** Ela explica o que cada intenção faz e quanto
+  ela roda; escolher exige saber a sua conta e o seu orçamento, que ela não vê.
+- **O comando não roda o `mgr update`.** Como antes, `model` vale na próxima invocação e `effort` só
+  depois do `update` — a assimetria é da plataforma, e agora o comando diz isso a cada escrita.
+- **Os aliases documentados vivem em dois lugares**: no descritor do motor e no texto da skill. A
+  CLI ainda não expõe o campo, então as duas cópias carregam data e fonte para divergirem de forma
+  visível.
+
 ### Planejado
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).

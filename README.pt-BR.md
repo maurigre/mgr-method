@@ -97,6 +97,7 @@ code-analyzer ─ review final de 2 eixos: Standards (guia DO projeto) + Spec (c
 | `adr-create` | ADRs formato Nygard: auto-detecta diretório, numeração sequencial, imutabilidade de aceitos, modo avulso ou invocado. |
 | `code-analyzer` | Revisor rigoroso de **dois eixos**, reportados lado a lado: **Standards** (o código segue `docs/sdd/09-review-rules.md`?) e **Spec** (o código cumpriu a spec de origem?). **Restrição Crítica** nos dois: toda reprovação cita textualmente — a regra do guia ou a linha da spec; sem citação, não reprova (§3.1). Modelo de dois eixos adaptado de `code-review` de Matt Pocock ([MIT](https://github.com/mattpocock/skills)). Roda no **gate de validação**: agente próprio, com modelo e esforço declarados, **sem ferramenta de escrita** e sem o histórico da conversa que produziu o código (ADR-0010). Ajustável em `.mgr-core/config.json` → `reviewGate`. |
 | `diagnosing-bugs` | Disciplina de diagnóstico de bug difícil: exige um loop de reprodução **vermelho** antes de qualquer hipótese (*sinal antes de teoria*), 3–5 hipóteses falsificáveis, teste de regressão antes do fix. Acha a causa e para (entrega o conserto ao `spec-create`). Adaptada de `diagnosing-bugs` de Matt Pocock ([MIT](https://github.com/mattpocock/skills)). |
+| `configure-agents` | Conduz a escolha de modelo e esforço por intenção (`drafting`, `execution`, `review`) e escreve com `mgr agents set`. Diz o que cada intenção faz e mostra os identificadores que cada motor documenta, e **nunca sugere** modelo para uma intenção: os modelos disponíveis e a conta são seus. |
 | `evidence-capture` | Registra evidências AI-First por funcionalidade (prompts, revisões, habilidades) em `specs/<feature>/ai/` + índice global; organiza e pergunta, nunca inventa. |
 | `junit-clean` | Testes Java padronizados por 13 regras (naming should+camelCase, sem herança, ParameterizedTest, AAA, boundary + MC/DC, Sonar-safe). |
 | `arch-hexagonal` | Guia de regras para Ports & Adapters (Cockburn), agnóstico à linguagem (perfis Java/Go/Python/C#/TS + genérico). |
@@ -128,7 +129,7 @@ feature, idêntico.
 ```
 bin/mgr.js          # CLI (install · status · update · uninstall · build · validate · list · add · remove · registry)
 src/                # bundle · builder · installer · manifest · validator · plugin · registry · lockfile · adapters
-skills/             # as 12 skills (fonte)
+skills/             # as 13 skills (fonte)
 shared/scripts/     # sdd-check.sh (verifica pré-requisitos do spec-create)
 docs/plugins.md     # formato de skill plugável: manifest, registry, lockfile, matriz de suporte
 test/               # node:test

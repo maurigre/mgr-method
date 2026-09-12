@@ -85,6 +85,26 @@ available skills (built-in + custom in `.claude/skills/` and `~/.claude/skills/`
 for each one, read the SKILL.md and note when it would be useful). Save to
 `.context.json` under the resolved `specRoot` (gitignored; fallback `/specs/<slug>/.context.json`).
 
+## Commissioning the drafting — ask which model, do not assume
+
+Writing the PRD and the spec is closed work: it reads disk and returns text, and it asks nobody.
+That makes it an agent's job, and the agent is the only thing that holds a model for a whole
+execution. **The checkpoints stay here**, because an agent cannot ask a human.
+
+`mgr agents drafting --json` returns the model and the effort declared for drafting, and where each
+value came from. Commission `mgr-draft` with that model, hand it the brief and the tiers it needs
+**by path**, and take what it returns to the checkpoint yourself.
+
+**Fallback, two cases, both supported:**
+- **The `mgr` CLI is NOT installed** — write the document yourself, in this conversation. The method
+  MUST keep working with the skills alone.
+- **The delegation comes back saying the agent does not exist** — a freshly installed agent can take
+  a moment to become available. Do not retry in a loop: write the document yourself and say so.
+
+Say in the log which of the three paths you used. **The agent cannot see this conversation**, so
+anything decided here that it needs must be on disk before you commission it — a decision taken out
+loud and never written does not reach it.
+
 ### Phase 2 — PRD (`02-prd.md`)
 Context and motivation · goal · use cases (actors + flow) · business rules ·
 constraints · out of scope (explicit) · success metrics · stakeholders.

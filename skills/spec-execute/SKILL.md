@@ -83,6 +83,26 @@ POST/GET/PATCH/DELETE"* — **not** four controllers, no renaming, no splitting,
 - Technical doubt → **search a solid source** (canon/official docs); not finding one →
   **ASK**. Never invent, never improvise to "keep moving".
 
+## Commissioning a task — ask which model, do not assume
+
+Implementing one approved task is closed work: the plan already declares its exact artifact, and it
+asks nobody. That makes it an agent's job. **The block checkpoints stay here**, because an agent
+cannot ask a human.
+
+`mgr agents execution --json` returns the model and the effort declared for execution. Commission
+`mgr-task` with that model, hand it the task **by path** — the plan file and the task id — and take
+what it reports back into the log yourself.
+
+**Fallback, two cases, both supported:**
+- **The `mgr` CLI is NOT installed** — implement the task yourself, in this conversation. The method
+  MUST keep working with the skills alone.
+- **The delegation comes back saying the agent does not exist** — a freshly installed agent can take
+  a moment to become available. Do not retry in a loop: implement it yourself and say so.
+
+Say in the log which of the three paths you used. **The agent cannot see this conversation**, so a
+decision taken out loud and never written to disk does not reach it. This is the same rule L2.1
+already states; here it has teeth.
+
 ## Execution (real-time log in `05-execution.md`)
 
 - Respect the DAG: a task only starts with its `depends_on` completed; order P0 → P1 → P2.

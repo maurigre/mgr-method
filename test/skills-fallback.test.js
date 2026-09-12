@@ -95,3 +95,49 @@ test("as skills repetem que artefato em disco não é artefato aprovado", () => 
       `${skill}: sem isto, o verde do comando seria lido como aprovação`);
   }
 });
+
+// A delegação da redação e da execução a agentes (ADR-0017). O que o gate protege aqui não é o
+// caminho feliz: é que NENHUM checkpoint humano tenha ido junto com o trabalho para o agente.
+const CONSULTA_DE_AGENTE = /mgr agents [a-z]+[^.]{0,20}--json/;
+const FALLBACK_SEM_CLI = /The `mgr` CLI is NOT installed/;
+const FALLBACK_AGENTE_AUSENTE = /the agent does not exist/;
+
+const CHECKPOINTS_QUE_NAO_PODEM_SUMIR = {
+  "spec-create": [
+    /\*\*CHECKPOINT 1 \(blocking\)/,
+    /\*\*CHECKPOINT 2 \(blocking\)/,
+    /\*\*CHECKPOINT 3 \(blocking\)/,
+  ],
+  "spec-execute": [/\*\*Execution checkpoint:\*\*/],
+};
+
+// Quem já delega. A P2.2 acrescenta o `spec-execute` a esta lista — escopar por task mantém a
+// suíte verde entre elas, em vez de deixar vermelho declarado atravessando o bloco.
+const SKILLS_QUE_DELEGAM = ["spec-create", "spec-execute"];
+
+test("a skill que delega consulta o `mgr agents` e declara os DOIS fallbacks", () => {
+  for (const skill of SKILLS_QUE_DELEGAM) {
+    const texto = fonteDa(skill);
+    assert.match(texto, CONSULTA_DE_AGENTE, `${skill}: pergunta qual modelo, não assume`);
+    assert.match(texto, FALLBACK_SEM_CLI, `${skill}: o método opera sem a CLI`);
+    assert.match(texto, FALLBACK_AGENTE_AUSENTE,
+      `${skill}: agente recém-instalado demora a aparecer, e isso é recuperável`);
+  }
+});
+
+test("NENHUM checkpoint humano foi junto com o trabalho para o agente", () => {
+  for (const [skill, checkpoints] of Object.entries(CHECKPOINTS_QUE_NAO_PODEM_SUMIR)) {
+    const texto = fonteDa(skill);
+    for (const checkpoint of checkpoints) {
+      assert.match(texto, checkpoint,
+        `${skill}: checkpoint que some é o método deixando de ser o método (RN-5)`);
+    }
+  }
+});
+
+test("a skill diz que o agente NÃO vê a conversa", () => {
+  for (const skill of SKILLS_QUE_DELEGAM) {
+    assert.match(fonteDa(skill), /agent cannot see this conversation|cannot see the conversation/,
+      `${skill}: sem isto, quem escreve a skill esquece de pôr o contexto em disco`);
+  }
+});

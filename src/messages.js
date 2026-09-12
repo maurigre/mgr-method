@@ -139,14 +139,15 @@ const en = {
   hookRemoved: (file) => `  session hook removed from ${file}`,
   hookCopilotTrust: "Copilot only loads the repository hook after you trust the folder: the first session will ask, and nothing happens until you accept.",
 
-  planGate: (dir) => `gate     →   ${dir}`,
-  planGateHint: "(validation gate: the review runs in its own agent)",
+  planGate: (dir) => `agents   →   ${dir}`,
+  planGateHint: "(one agent per intent; the review runs in its own)",
+  planAgentIntent: (intent, agent) => `  ${intent}: ${agent}`,
   planGateEngine: (engine, model, effort) => `  ${engine}: model=${model} effort=${effort}`,
   gateModelInherited: "inherits the session model",
   gateEffortInherited: "session effort",
   gateSkipped: (engine, capability) => `  ${engine}: ${capability} not supported by this engine — declared, not applied`,
   gateBlocked: (file) => `  not overwritten: ${file} exists and was not written by MGR`,
-  gateWritten: (file) => `  validation gate agent written to ${file}`,
+  agentWritten: (agent, file) => `  agent ${agent} written to ${file}`,
   planLaws: (file) => `laws     →   ${file}`,
   planLawsHint: "(execution laws: single source, pointed to by every CORE skill)",
   planPreambleOn: "  session preamble: on (the central laws enter before the first message)",
@@ -180,6 +181,36 @@ const en = {
   specNextNoState: (total) => `State declared in 0 of ${total} task(s): this tool does NOT know what you have already done.`,
   specNextFirstStartable: "So this is the first task that CAN start, not necessarily the next one.",
   specNextNoPlan: (dir) => `no plan found in ${dir}`,
+  tokensMissing: (files) => `transcript not found: ${files}`,
+  tokensNoInput: "no transcript given — pass the conversation transcript, and each agent transcript after it",
+  tokensTotal: (total) => `total          ${total}`,
+  tokensConversation: (context, total) => `conversation   context ${context}  ·  ${total} counted`,
+  tokensAgents: (total, count) => `agents         ${total}  ·  ${count} transcript(s)`,
+  tokensCacheRead: (cache) => `cache read     ${cache}  (reported apart, never in the total)`,
+  tokensNoBudget: "No ceiling declared in `agents.budget.totalTokens`: measured, not judged.",
+  tokensWithin: (total, budget) => `Within the declared ceiling: ${total} of ${budget}.`,
+  tokensOver: (total, budget) => `OVER the declared ceiling: ${total} against ${budget}.`,
+  agentsIntent: (intent, agent) => `${intent.padEnd(10)} ${agent}`,
+  agentsEngine: (engine, model, effort) => `  ${engine.padEnd(12)} model=${model}  effort=${effort}`,
+  agentChanged: (agent, engine, field, from, to) =>
+    `  ${agent} (${engine}): ${field} from ${from} to ${to}`,
+  agentCreated: (agent, engine) => `  ${agent} (${engine}): written for the first time`,
+  agentsValueFrom: (value, source) => `${value} (${source})`,
+  agentsUnsupported: "not supported by this engine",
+  agentsSourceConfigured: "configured",
+  agentsSourceDefault: "default",
+  agentsInherited: "inherited from the session",
+  agentsInheritWarning: (intents) =>
+    `Running on the session model: ${intents}. No model is published by default — the list of `
+    + `models belongs to your account, not to this tool. Declare one per intent in `
+    + `\`.mgr-core/config.json\` to get the benefit.`,
+  agentsEffortNote:
+    "Changing `effort` only takes effect after `mgr update`: it lives in the agent file, and the "
+    + "invocation cannot override it. Changing `model` takes effect on the next invocation.",
+  agentsAliasNote:
+    "`reviewGate` and `agents.review` are both set: `agents.review` wins. Remove `reviewGate` to "
+    + "keep one source.",
+  agentsUnknown: (intent, known) => `unknown intent \`${intent}\` (expected ${known})`,
   specNextAllRefused: "`mgr spec next` does not accept `--all`: the next action is about ONE feature — name one, or run it from inside `specs/<slug>/`",
   specNextNeedsSlug: (count) => `${count} feature(s) in specs/ and none was named — name one, or run this from inside \`specs/<slug>/\``,
   specStatusRoot: (root) => `${root}`,
@@ -195,7 +226,7 @@ const en = {
   specStatusEmpty: (dir) => `no feature found in ${dir}`,
   gateKept: (file) => `  kept: ${file} lost the MGR marker and was left untouched`,
   statusGate: (state) => `  gate:    ${state}`,
-  statusGateOff: "off (reviewGate.enabled = false)",
+  statusGateOff: "off (every intent disabled in `agents`)",
   statusGateEngine: (engine, model, effort) => `    ${engine}: model=${model} effort=${effort}`,
   statusGateSource: (source) => `    from: ${source}`,
 
@@ -215,6 +246,10 @@ Usage: mgr <command> [options]
                    ([<slug>], --all, --strict, --json)
   spec next        the next action from the plan ([<slug>], --json)
   spec status      which artifacts exist ([<slug>], --all, --json)
+  agents           which model and effort each intent uses, and where each
+                   value came from ([<intent>], --json)
+  tokens           how much the flow consumed: pass the conversation
+                   transcript, then each agent transcript (--json)
   list             lists the skills
   version          shows the version
 
@@ -365,14 +400,15 @@ const ptBR = {
   hookRemoved: (file) => `  hook de sessão removido de ${file}`,
   hookCopilotTrust: "O Copilot só carrega o hook do repositório depois que você confia na pasta: a primeira sessão vai perguntar, e nada acontece até você aceitar.",
 
-  planGate: (dir) => `gate     →   ${dir}`,
-  planGateHint: "(gate de validação: a revisão roda em agente próprio)",
+  planGate: (dir) => `agentes  →   ${dir}`,
+  planGateHint: "(um agente por intenção; a revisão roda no próprio)",
+  planAgentIntent: (intent, agent) => `  ${intent}: ${agent}`,
   planGateEngine: (engine, model, effort) => `  ${engine}: modelo=${model} esforço=${effort}`,
   gateModelInherited: "herda o modelo da sessão",
   gateEffortInherited: "esforço da sessão",
   gateSkipped: (engine, capability) => `  ${engine}: ${capability} não suportado por este motor — declarado, não aplicado`,
   gateBlocked: (file) => `  não sobrescrito: ${file} já existe e não foi escrito pelo MGR`,
-  gateWritten: (file) => `  agente do gate de validação gravado em ${file}`,
+  agentWritten: (agent, file) => `  agente ${agent} gravado em ${file}`,
   planLaws: (file) => `leis     →   ${file}`,
   planLawsHint: "(leis de execução: fonte única, apontada por toda skill do CORE)",
   planPreambleOn: "  preâmbulo de sessão: ligado (as leis centrais entram antes da primeira mensagem)",
@@ -406,6 +442,36 @@ const ptBR = {
   specNextNoState: (total) => `Estado declarado em 0 de ${total} task(s): esta ferramenta NÃO sabe o que você já fez.`,
   specNextFirstStartable: "Então esta é a primeira task que PODE começar, não necessariamente a próxima.",
   specNextNoPlan: (dir) => `nenhum plano encontrado em ${dir}`,
+  tokensMissing: (files) => `transcript não encontrado: ${files}`,
+  tokensNoInput: "nenhum transcript informado — passe o transcript da conversa e, depois dele, o de cada agente",
+  tokensTotal: (total) => `total          ${total}`,
+  tokensConversation: (context, total) => `conversa       contexto ${context}  ·  ${total} contados`,
+  tokensAgents: (total, count) => `agentes        ${total}  ·  ${count} transcript(s)`,
+  tokensCacheRead: (cache) => `cache lido     ${cache}  (reportado à parte, nunca no total)`,
+  tokensNoBudget: "Nenhum teto declarado em `agents.budget.totalTokens`: medido, não julgado.",
+  tokensWithin: (total, budget) => `Dentro do teto declarado: ${total} de ${budget}.`,
+  tokensOver: (total, budget) => `ACIMA do teto declarado: ${total} contra ${budget}.`,
+  agentsIntent: (intent, agent) => `${intent.padEnd(10)} ${agent}`,
+  agentsEngine: (engine, model, effort) => `  ${engine.padEnd(12)} modelo=${model}  esforço=${effort}`,
+  agentChanged: (agent, engine, field, from, to) =>
+    `  ${agent} (${engine}): ${field} de ${from} para ${to}`,
+  agentCreated: (agent, engine) => `  ${agent} (${engine}): gravado pela primeira vez`,
+  agentsValueFrom: (value, source) => `${value} (${source})`,
+  agentsUnsupported: "não suportado por este motor",
+  agentsSourceConfigured: "configurado",
+  agentsSourceDefault: "default",
+  agentsInherited: "herdado da sessão",
+  agentsInheritWarning: (intents) =>
+    `Rodando no modelo da sessão: ${intents}. Nenhum modelo é publicado por default — a lista de `
+    + `modelos é da sua conta, não desta ferramenta. Declare um por intenção em `
+    + `\`.mgr-core/config.json\` para ter o benefício.`,
+  agentsEffortNote:
+    "Mudar o `effort` só passa a valer depois de `mgr update`: ele vive no arquivo do agente, e a "
+    + "invocação não tem como sobrepô-lo. Mudar o `model` vale já na próxima invocação.",
+  agentsAliasNote:
+    "`reviewGate` e `agents.review` estão os dois escritos: `agents.review` vence. Apague o "
+    + "`reviewGate` para ficar com uma fonte só.",
+  agentsUnknown: (intent, known) => `intenção \`${intent}\` desconhecida (esperado ${known})`,
   specNextAllRefused: "`mgr spec next` não aceita `--all`: a próxima ação é sobre UMA feature — nomeie uma, ou rode de dentro de `specs/<slug>/`",
   specNextNeedsSlug: (count) => `${count} feature(s) em specs/ e nenhuma foi nomeada — nomeie uma, ou rode isto de dentro de \`specs/<slug>/\``,
   specStatusRoot: (root) => `${root}`,
@@ -421,7 +487,7 @@ const ptBR = {
   specStatusEmpty: (dir) => `nenhuma feature encontrada em ${dir}`,
   gateKept: (file) => `  preservado: ${file} perdeu o marcador do MGR e não foi tocado`,
   statusGate: (state) => `  gate:    ${state}`,
-  statusGateOff: "desligado (reviewGate.enabled = false)",
+  statusGateOff: "desligado (todas as intenções desligadas em `agents`)",
   statusGateEngine: (engine, model, effort) => `    ${engine}: modelo=${model} esforço=${effort}`,
   statusGateSource: (source) => `    origem: ${source}`,
 
@@ -441,6 +507,10 @@ Uso: mgr <comando> [opções]
                    ([<slug>], --all, --strict, --json)
   spec next        a próxima ação a partir do plano ([<slug>], --json)
   spec status      quais artefatos existem ([<slug>], --all, --json)
+  agents           qual modelo e esforço cada intenção usa, e de onde veio
+                   cada valor ([<intenção>], --json)
+  tokens           quanto o fluxo consumiu: passe o transcript da conversa e,
+                   depois dele, o de cada agente (--json)
   list             lista as skills
   version          mostra a versão
 

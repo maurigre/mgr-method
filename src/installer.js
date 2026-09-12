@@ -13,7 +13,7 @@ import path from "node:path";
 import * as bundle from "./bundle.js";
 import { installAgents, installEngine, isOurAgent } from "./builder.js";
 import * as engineDescriptors from "./engines/index.js";
-import { readReviewGate } from "./registry.js";
+import { readAgents } from "./registry.js";
 import { readManifest, writeManifest, writeEnv } from "./manifest.js";
 import * as catalog from "./catalog.js";
 
@@ -101,8 +101,15 @@ export function planInstall(engines, scope, repo, opts = {}) {
     ? [{ engine: "custom", dir: skillsDir, skills }]
     : engines.map((e) => ({ engine: e, dir: engineSkillsDir(e, scope, repo), skills: forEngine(e) }));
   const pid = projectId || path.basename(path.resolve(repo));
-  const reviewGate = readReviewGate(coreDir(scope, repo));
-  return { engines: skillsDir ? ["custom"] : engines, scope, repo, targets, skills, replaced, language, architecture, userLanguage, projectId: pid, reviewGate };
+  // A política de TODAS as intenções, de UMA fonte (ADR-0017, RN-1). O `reviewGate` do plano passa
+  // a SAIR daqui, e não mais de `readReviewGate`: lendo o apelido enquanto a instalação gravava a
+  // partir de `agents`, o plano que o usuário confirmava contradizia o arquivo que era escrito —
+  // defeito achado pelo gate isolado e reproduzido.
+  //
+  // `reviewGate` NÃO volta no plano: ele seria `agents.policies.review` com outro nome, e campo
+  // duplicado diverge na primeira mudança. Mesma razão que tirou o `readReviewGate` do módulo.
+  const agents = readAgents(coreDir(scope, repo));
+  return { engines: skillsDir ? ["custom"] : engines, scope, repo, targets, skills, replaced, language, architecture, userLanguage, projectId: pid, agents };
 }
 
 // Migra do modelo antigo (runtime-launcher): remove lançadores e o conteúdo de skills/shared
@@ -129,9 +136,13 @@ export function migrateOld(scope, repo) {
 
 export function execute(plan) {
   const migrated = migrateOld(plan.scope, plan.repo);
-  const gate = plan.reviewGate || readReviewGate(coreDir(plan.scope, plan.repo));
+  const { policies } = plan.agents || readAgents(coreDir(plan.scope, plan.repo));
+  // Mesma fonte que o `installAgents` usa. Sem isto, o roteamento da skill de review olharia para
+  // uma política e o arquivo do agente seria escrito a partir de outra.
+  const gate = policies.review;
   const agents = [];
   const agentsDirs = [];
+  const agentChanges = [];
   const gateWarnings = [];
   for (const t of plan.targets) {
     const ref = t.engine === "custom" ? undefined : archRulesRef(t.dir, plan.scope, plan.repo);
@@ -142,14 +153,18 @@ export function execute(plan) {
       userLanguage: plan.userLanguage, engineId, reviewGate: engineId ? gate : undefined,
     });
     // Motor "custom" (--skills-dir) não é plataforma: não há diretório de agentes para ele.
-    if (!engineId || !gate.enabled) continue;
+    //
+    // O gate desligado NÃO pula mais o bloco inteiro: cada intenção decide sozinha se é escrita,
+    // e desligar a revisão não pode levar junto a redação e a execução.
+    if (!engineId) continue;
     const dir = engineAgentsDir(engineId, plan.scope, plan.repo);
     const skillRef = path.join(t.dir, catalog.REVIEW_GATE.skill, "SKILL.md");
-    const { written, skipped, blocked } = installAgents(engineId, dir, gate, {
+    const { written, skipped, blocked, changes } = installAgents(engineId, dir, policies, {
       reviewSkillRef: plan.scope === "project" ? path.relative(plan.repo, skillRef) : skillRef,
       userLanguage: plan.userLanguage,
     });
     if (written.length) { agents.push(...written); agentsDirs.push(dir); }
+    agentChanges.push(...changes);
     for (const capability of skipped) gateWarnings.push({ engine: engineId, capability });
     for (const file of blocked) gateWarnings.push({ engine: engineId, blocked: file });
   }
@@ -177,7 +192,7 @@ export function execute(plan) {
   return {
     targets: plan.targets.map((t) => ({ engine: t.engine, dir: t.dir })),
     skills: plan.skills, migrated, core, projectId: plan.projectId,
-    agents, gate, gateWarnings,
+    agents, gate, gateWarnings, agentChanges,
   };
 }
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // CLI do MGR — Método Governado por Rastreabilidade.
+import { existsSync } from "node:fs";
 import path from "node:path";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
@@ -12,8 +13,11 @@ import * as provValidator from "../src/prov-validator.js";
 import * as planNext from "../src/plan-next.js";
 import * as specStatus from "../src/spec-status.js";
 import { repoRoot, slugs } from "../src/artifacts.js";
+import { CONFIGURED, readAgents } from "../src/registry.js";
+import * as tokens from "../src/tokens.js";
+import { ids as engineIds } from "../src/engines/index.js";
 import { blocking, summarize } from "../src/findings.js";
-import { buildRuntime, gateSummary } from "../src/builder.js";
+import { buildRuntime, gateSummary, inheritingModel } from "../src/builder.js";
 import { validateAll } from "../src/validator.js";
 import { printBanner } from "../src/banner.js";
 import { collectInstallAnswers, detectUserLanguage, CANCELLED } from "../src/prompts.js";
@@ -24,7 +28,7 @@ import {
 } from "../src/plugin-installer.js";
 import {
   addRegistry, fetchIndex, lawsFallbackRef, listRegistries, readDetectionMode,
-  readLawsPreamble, readReviewGate, removeRegistry,
+  readLawsPreamble, removeRegistry,
 } from "../src/registry.js";
 import { diff as lockfileDiff, readLockfile, replacedByEngine, LOCKFILE_NAME } from "../src/lockfile.js";
 import { collectSuggestions, detect, hookReport, lawsPreamble } from "../src/detector.js";
@@ -37,7 +41,7 @@ const PLUGIN_COMMANDS = ["add", "remove", "registry"];
 // resolveria o repo como `<cwd>/validate`, o manifesto não seria encontrado e o `userLanguage` do
 // projeto seria descartado — quebrando, só para o comando novo, a precedência
 // flag > manifesto > locale que os demais respeitam.
-const SUBCOMMAND_COMMANDS = ["spec"];
+const SUBCOMMAND_COMMANDS = ["spec", "agents", "tokens"];
 const isTTY = process.stdin.isTTY && process.stdout.isTTY;
 
 // Glue: junta os dados que o nucleo precisa. A decisao de como combinar e do detector.
@@ -190,7 +194,9 @@ async function cmdInstall(flags, positional) {
   if (res.migrated) p.log.info(M.migrationInfo(res.migrated.removed.length));
   // Degradação declarada, uma vez por capacidade ausente — nunca em silêncio (ADR-0010).
   // Escrita em diretório do usuário é anunciada, como a do hook — LOG-1 do guia.
-  for (const file of res.agents || []) p.log.success(M.gateWritten(path.relative(plan.repo, file)));
+  for (const file of res.agents || []) {
+    p.log.success(M.agentWritten(path.basename(file, path.extname(file)).replace(/\.agent$/, ""), path.relative(plan.repo, file)));
+  }
   for (const aviso of res.gateWarnings || []) {
     if (aviso.blocked) p.log.warn(M.gateBlocked(path.relative(plan.repo, aviso.blocked)));
     else p.log.warn(M.gateSkipped(aviso.engine, aviso.capability));
@@ -540,20 +546,42 @@ function linhasDasLeis(plan) {
   ];
 }
 
+// Três estados por campo, não dois: ter valor, herdar por escolha, e o MOTOR não sustentar.
+// Colapsar os dois últimos fazia o plano dizer "esforço da sessão" do copilot, que não tem o campo
+// — o valor declarado pelo autor era descartado e a tela onde ele confirma não dizia nada (RN-3).
+//
+// Esta função serve o plano do install E o `mgr status`. O `cmdAgents` já distinguia; corrigir só
+// lá teria deixado a mentira viva nas duas superfícies que importam mais.
 function linhaDoMotor(engine, gate, formato = M.planGateEngine) {
-  const { model, effort } = gateSummary(engine, gate);
-  return formato(engine, model || M.gateModelInherited, effort || M.gateEffortInherited);
+  const { model, effort, skipped } = gateSummary(engine, gate);
+  const texto = (valor, campo, herdado) =>
+    valor || (skipped.includes(campo) ? M.agentsUnsupported : herdado);
+  return formato(
+    engine,
+    texto(model, "model", M.gateModelInherited),
+    texto(effort, "effort", M.gateEffortInherited),
+  );
 }
 
+// O plano lista UMA linha por intenção ligada e por motor, e não só a do gate (ADR-0017, §5).
+// Três agentes eram escritos e um era anunciado: o plano é a superfície de consentimento, e
+// consentir com um enquanto três são gravados não é consentir.
 function linhasDoGate(plan) {
-  const gate = plan.reviewGate;
+  const policies = plan.agents?.policies;
   const motores = plan.engines.filter((engine) => engine !== "custom");
-  if (!gate?.enabled || !motores.length) return [];
+  const ligadas = catalogo.INTENTS.filter((intent) => policies?.[intent]?.enabled);
+  if (!ligadas.length || !motores.length) return [];
   const dirs = motores.map((engine) => path.relative(plan.repo, installer.engineAgentsDir(engine, plan.scope, plan.repo)));
-  return [
-    `${M.planGate([...new Set(dirs)].join(" · "))}  ${pc.dim(M.planGateHint)}`,
-    ...motores.map((engine) => linhaDoMotor(engine, gate)),
-  ];
+  const linhas = [`${M.planGate([...new Set(dirs)].join(" · "))}  ${pc.dim(M.planGateHint)}`];
+  for (const intent of ligadas) {
+    linhas.push(M.planAgentIntent(intent, catalogo.AGENTS[intent].agent));
+    for (const engine of motores) linhas.push(`  ${linhaDoMotor(engine, policies[intent])}`);
+  }
+  // O plano é a superfície de consentimento: quem confirma precisa saber que está aceitando três
+  // agentes rodando no modelo da sessão, e o que fazer se não quiser isso.
+  const herdando = inheritingModel(ligadas, motores, policies);
+  if (herdando.length) linhas.push(pc.yellow(M.agentsInheritWarning(herdando.join(", "))));
+  return linhas;
 }
 
 // Namespace `mgr spec <sub>`: separado do `mgr validate` de propósito (ADR-0012).
@@ -693,6 +721,112 @@ const resumoDeStatus = (feature) =>
   `${feature.artifacts.filter((a) => a.status === specStatus.PRESENT).length}/${feature.artifacts.length}`
   + (feature.handoff.exists ? "  handoff" : "");
 
+// `mgr agents` — qual modelo e qual esforço cada intenção usa, e DE ONDE veio cada valor
+// (ADR-0017). A decisão vem do núcleo: `readAgents` diz o valor e a origem, `gateSummary` diz o que
+// o motor sustenta. Aqui só se escolhe a palavra.
+function cmdAgents(flags, positional) {
+  const repo = repoRoot(process.cwd());
+  const core = installer.coreDir("project", repo);
+  const { policies, sources, aliasOverridden } = readAgents(core);
+
+  const pedida = positional[0];
+  if (pedida && !catalogo.INTENTS.includes(pedida)) {
+    console.error(M.errorPrefix(M.agentsUnknown(pedida, catalogo.INTENTS.join(" | "))));
+    return 1;
+  }
+  const intents = pedida ? [pedida] : catalogo.INTENTS;
+  const motores = engineIds();
+
+  if (flags.json) {
+    console.log(JSON.stringify({
+      schemaVersion: 1,
+      aliasOverridden,
+      intents: Object.fromEntries(intents.map((intent) => [intent, {
+        agent: catalogo.AGENTS[intent].agent,
+        needs: catalogo.AGENTS[intent].needs,
+        enabled: policies[intent].enabled,
+        engines: Object.fromEntries(motores.map((engine) => {
+          const { model, effort, skipped } = gateSummary(engine, policies[intent]);
+          return [engine, {
+            model, effort, skipped,
+            modelSource: model ? sources[intent].model[engine] : null,
+            effortSource: effort ? sources[intent].effort : null,
+          }];
+        })),
+      }])),
+    }, null, 2));
+    return 0;
+  }
+
+  const palavraDaOrigem = (origem) =>
+    (origem === CONFIGURED ? M.agentsSourceConfigured : M.agentsSourceDefault);
+  for (const intent of intents) {
+    console.log(M.agentsIntent(intent, catalogo.AGENTS[intent].agent));
+    for (const engine of motores) {
+      const { model, effort, skipped } = gateSummary(engine, policies[intent]);
+      const textoDoModelo = model
+        ? M.agentsValueFrom(model, palavraDaOrigem(sources[intent].model[engine]))
+        : (skipped.includes("model") ? M.agentsUnsupported : M.agentsInherited);
+      // Mesma forma do ramo do `model` logo acima: sem valor pode ser incapacidade do MOTOR ou
+      // escolha do autor, e chamar as duas de "não suportado" faz a saída mentir sobre a
+      // plataforma — o claude-code suporta `effort`.
+      const textoDoEsforco = effort
+        ? M.agentsValueFrom(effort, palavraDaOrigem(sources[intent].effort))
+        : (skipped.includes("effort") ? M.agentsUnsupported : M.agentsInherited);
+      console.log(M.agentsEngine(engine, textoDoModelo, textoDoEsforco));
+    }
+  }
+  // O aviso do default: sem modelo declarado, o agente roda no da sessão. Some quando todas as
+  // intenções mostradas têm modelo em algum motor — avisar sobre o que já foi resolvido vira ruído.
+  const herdando = inheritingModel(intents, motores, policies);
+  if (herdando.length) console.log(pc.yellow(M.agentsInheritWarning(herdando.join(", "))));
+  console.log("");
+  console.log(pc.dim(M.agentsEffortNote));
+  if (aliasOverridden) console.log(M.agentsAliasNote);
+  return 0;
+}
+
+// `mgr tokens` — quanto o fluxo consumiu (ADR-0017). O PRIMEIRO transcript é o da conversa; os
+// demais são os dos agentes que ela subiu. Medir só a conversa contaria a economia e esconderia o
+// custo, porque agente não compartilha contexto.
+//
+// A decisão vive em `src/tokens.js`; aqui só se escolhe a palavra e o exit code.
+function cmdTokens(flags, positional) {
+  if (!positional.length) {
+    console.error(M.errorPrefix(M.tokensNoInput));
+    return 1;
+  }
+  // Caminho que não existe é ERRO DE ENTRADA, não medição zero: um erro de digitação sairia com
+  // `total 0` e cara de medida real. O núcleo tolera arquivo ausente de propósito — um transcript
+  // de agente pode ainda não ter sido escrito —, e essa tolerância é dele, não da borda.
+  const ausentes = positional.filter((caminho) => !existsSync(caminho));
+  if (ausentes.length) {
+    console.error(M.errorPrefix(M.tokensMissing(ausentes.join(", "))));
+    return 1;
+  }
+
+  const [conversation, ...agents] = positional;
+  const medicao = tokens.summarize({ conversation, agents });
+  const { budget } = readAgents(installer.coreDir("project", repoRoot(process.cwd())));
+  const teto = budget?.totalTokens ?? null;
+  const veredito = tokens.verdict(medicao, teto);
+
+  if (flags.json) {
+    console.log(JSON.stringify({ schemaVersion: 1, ...medicao, budget: teto, verdict: veredito }, null, 2));
+    return veredito === tokens.OVER_BUDGET ? 1 : 0;
+  }
+
+  console.log(M.tokensTotal(medicao.total));
+  console.log(M.tokensConversation(medicao.conversationContext, medicao.conversationTotal));
+  console.log(M.tokensAgents(medicao.agentsTotal, medicao.agentsCounted));
+  console.log(pc.dim(M.tokensCacheRead(medicao.cacheRead)));
+  console.log("");
+  if (veredito === tokens.NO_BUDGET) console.log(pc.dim(M.tokensNoBudget));
+  else if (veredito === tokens.WITHIN_BUDGET) console.log(pc.green(M.tokensWithin(medicao.total, teto)));
+  else console.log(pc.red(M.tokensOver(medicao.total, teto)));
+  return veredito === tokens.OVER_BUDGET ? 1 : 0;
+}
+
 function cmdSpec(flags, positional) {
   const sub = positional[0];
   if (sub === "validate") return cmdSpecValidate(flags, positional.slice(1));
@@ -717,14 +851,20 @@ function cmdStatus(_f, positional) {
       for (const d of man.skillsDirs || [man.skillsDir]) if (d) console.log(M.statusSkillsDir(d));
       console.log(M.statusSkills((man.skills || []).join(", ")));
       // O gate é respondido a partir do config + manifest, sem abrir o arquivo do agente.
-      const gate = readReviewGate(man.core);
-      if (!gate.enabled) {
+      // A política de CADA intenção, da mesma fonte que a instalação usa. Reportar a do apelido
+      // fazia o `status` responder sobre uma política diferente da que está no disco.
+      const { policies } = readAgents(man.core);
+      const ligadas = catalogo.INTENTS.filter((intent) => policies[intent].enabled);
+      if (!ligadas.length) {
         console.log(M.statusGate(M.statusGateOff));
       } else if ((man.agents || []).length) {
         console.log(M.statusGate((man.agents || []).join(" · ")));
-        for (const engine of (man.engines || [man.engine]).filter(Boolean)) {
-          if (engine === "custom") continue;
-          console.log(linhaDoMotor(engine, gate, M.statusGateEngine));
+        for (const intent of ligadas) {
+          console.log(M.planAgentIntent(intent, catalogo.AGENTS[intent].agent));
+          for (const engine of (man.engines || [man.engine]).filter(Boolean)) {
+            if (engine === "custom") continue;
+            console.log(`  ${linhaDoMotor(engine, policies[intent], M.statusGateEngine)}`);
+          }
         }
       }
       const preambulo = readLawsPreamble(man.core);
@@ -768,6 +908,17 @@ async function cmdUpdate(flags, positional) {
   const res = installer.update(scope, repo, { replaced: replacedByEngine(readLockfile(repo)) });
   if (res.migrated) console.log(pc.dim(M.updateMigrated));
   console.log(pc.green(M.updateDone(scope, res.skills.length, res.targets.map((t) => t.dir).join(" · "))));
+
+  // O `update` reescreve o frontmatter dos agentes a partir do config, e fazia isso em SILÊNCIO:
+  // quem ajustava o modelo não via confirmação nenhuma de que pegou (ADR-0017). Só o que de fato
+  // mudou é impresso — relatar o que ficou igual encheria a saída de linha sem informação.
+  for (const mudanca of res.agentChanges || []) {
+    if (!mudanca.before) { console.log(pc.dim(M.agentCreated(mudanca.agent, mudanca.engine))); continue; }
+    for (const campo of ["model", "effort"]) {
+      if (mudanca.before[campo] === mudanca.after[campo]) continue;
+      console.log(M.agentChanged(mudanca.agent, mudanca.engine, campo, mudanca.before[campo], mudanca.after[campo]));
+    }
+  }
 
   if (readLockfile(repo)) {
     console.log(M.restoring(LOCKFILE_NAME));
@@ -835,6 +986,8 @@ async function main() {
       case "build": return cmdBuild(flags);
       case "validate": return cmdValidate();
       case "spec": return cmdSpec(flags, positional);
+      case "agents": return cmdAgents(flags, positional);
+      case "tokens": return cmdTokens(flags, positional);
       case "list": return await cmdList(flags, positional);
       case "version": case "--version": case "-v":
         console.log(`mgr-method ${bundle.readVersion()}`); return 0;

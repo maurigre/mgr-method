@@ -1,0 +1,3 @@
+{"type":"user","uuid":"uuid-1","message":{"role":"user","content":"pedido"}}
+{"type":"assistant","uuid":"uuid-2","message":{"id":"msg_1","model":"claude-haiku-4-5-20251001","role":"assistant","usage":{"input_tokens":10,"cache_creation_input_tokens":7916,"cache_read_input_tokens":0,"output_tokens":148,"output_tokens_details":{"thinking_tokens":62},"service_tier":"standard"}}}
+{"type":"assistant","uuid":"uuid-3","message":{"id":"msg_2","model":"claude-haiku-4-5-20251001","role":"assistant","usage":{"input_tokens":25,"cache_creation_input_tokens":0,"cache_read_input_tokens":7916,"output_tokens":30,"output_tokens_details":{"thinking_tokens":0},"service_tier":"standard"}}}

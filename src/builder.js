@@ -132,7 +132,9 @@ export function gateSummary(engineId, gate) {
   return {
     engine: engineId,
     model: engine.capabilities.agentModel ? model : null,
-    effort: engine.capabilities.agentEffort ? gate.effort : null,
+    // `?? null` porque `inherit` é normalizado para AUSÊNCIA no núcleo, e `undefined` some do
+    // `JSON.stringify`: a chave `effort` desaparecia do payload, que a §5 contrata responder.
+    effort: engine.capabilities.agentEffort ? (gate.effort ?? null) : null,
     // Declarado e não sustentado pelo motor: é isto, e só isto, que é degradação.
     skipped: [
       ...(model && !engine.capabilities.agentModel ? ["model"] : []),
@@ -141,42 +143,99 @@ export function gateSummary(engineId, gate) {
   };
 }
 
-// Monta o frontmatter do agente para um motor, a partir do descritor e da política do gate.
-// O que a plataforma não suporta simplesmente não é escrito, e o motivo volta em `skipped`
-// para a borda declarar a degradação em vez de escondê-la.
-export function agentFrontmatter(engineId, gate) {
+// As intenções que estão HERDANDO o modelo em todos os motores — nenhuma declarou um.
+//
+// Mora aqui, e não na borda, porque era o mesmo predicado escrito duas vezes lá: uma no plano do
+// install e outra no `mgr agents`. Duas cópias da mesma decisão divergem na primeira mudança, que
+// é o defeito que esta fatia já produziu uma vez por outro caminho.
+export function inheritingModel(intents, engineIds, policies) {
+  return intents.filter((intent) =>
+    engineIds.every((engineId) => !gateSummary(engineId, policies[intent]).model));
+}
+
+// Monta o frontmatter do agente de UMA intenção, a partir do descritor do motor e da política
+// dela (ADR-0017). O que a plataforma não suporta simplesmente não é escrito, e o motivo volta em
+// `skipped` para a borda declarar a degradação em vez de escondê-la.
+//
+// `gateSummary` continua sendo a fonte da decisão de capacidade, sem alteração: ela recebe uma
+// política e diz o que vale naquele motor, e isso nunca foi específico do gate.
+export function agentFrontmatter(engineId, intent, policy) {
   const engine = engines.get(engineId);
-  const { model, effort, skipped } = gateSummary(engineId, gate);
+  const descritor = catalog.AGENTS[intent];
+  const { model, effort, skipped } = gateSummary(engineId, policy);
   const fields = [
-    `name: ${catalog.REVIEW_GATE.agent}`,
-    `description: ${catalog.REVIEW_GATE.description}`,
-    `tools: ${engine.agentTools}`,
+    `name: ${descritor.agent}`,
+    `description: ${descritor.description}`,
+    `tools: ${engine.agentTools[descritor.needs]}`,
     ...(model ? [`model: ${model}`] : []),
     ...(effort ? [`effort: ${effort}`] : []),
   ];
   return { frontmatter: `---\n${fields.join("\n")}\n---`, skipped };
 }
 
-// Instala o agente do gate no diretório de agentes do motor. Gate desligado = nada escrito.
-export function installAgents(engineId, engineAgentsDir, gate, { reviewSkillRef, userLanguage } = {}) {
-  if (!gate.enabled) return { written: [], skipped: [], blocked: [] };
+// O `model` e o `effort` que um arquivo de agente JÁ declara. Nulo quando o arquivo não existe —
+// o que é diferente de existir sem o campo, e por isso os dois casos não podem virar o mesmo valor.
+//
+// Existe para o `update` poder dizer o que MUDOU em vez de reescrever em silêncio (ADR-0017). Mora
+// aqui, e não na borda, porque ler e interpretar arquivo instalado é persistência, não formatação.
+export function agentDeclares(file) {
+  if (!existsSync(file)) return null;
+  const frontmatter = readFileSync(file, "utf8").split("---")[1] ?? "";
+  const campo = (nome) => frontmatter.match(new RegExp(`^${nome}:\\s*(.+)$`, "m"))?.[1]?.trim() ?? null;
+  return { model: campo("model"), effort: campo("effort") };
+}
+
+// Instala UM agente. Intenção desligada não escreve nada.
+function installAgent(engineId, engineAgentsDir, intent, policy, { reviewSkillRef, userLanguage }) {
+  if (!policy.enabled) return { written: [], skipped: [], blocked: [], change: null };
 
   const engine = engines.get(engineId);
-  const source = readFileSync(path.join(bundle.agentsDir(), `${catalog.REVIEW_GATE.agent}.md`), "utf8");
+  const descritor = catalog.AGENTS[intent];
+  const source = readFileSync(path.join(bundle.agentsDir(), `${descritor.agent}.md`), "utf8");
+  // O token da skill de review só existe no corpo do gate; nos outros o replaceAll não faz nada.
   const body = resolveUserLanguage(source, userLanguage)
     .replaceAll(catalog.REVIEW_SKILL_TOKEN, reviewSkillRef || catalog.REVIEW_SKILL_FALLBACK);
 
-  const { frontmatter, skipped } = agentFrontmatter(engineId, gate);
-  const dest = path.join(engineAgentsDir, engine.agentFile(catalog.REVIEW_GATE.agent));
+  const { frontmatter, skipped } = agentFrontmatter(engineId, intent, policy);
+  const dest = path.join(engineAgentsDir, engine.agentFile(descritor.agent));
 
   // Prova de posse: arquivo de mesmo nome que não é nosso não é sobrescrito (ADR-0010).
   if (existsSync(dest) && !isOurAgent(readFileSync(dest, "utf8"))) {
-    return { written: [], skipped, blocked: [dest] };
+    return { written: [], skipped, blocked: [dest], change: null };
   }
 
+  // O ANTES é lido antes de escrever, porque depois ele não existe mais.
+  const before = agentDeclares(dest);
   mkdirSync(engineAgentsDir, { recursive: true });
   writeFileSync(dest, `${frontmatter}\n\n${body}\n<!-- ${AGENT_MARKER} -->\n`, "utf8");
-  return { written: [dest], skipped, blocked: [] };
+  return {
+    written: [dest],
+    skipped,
+    blocked: [],
+    change: { engine: engineId, intent, agent: descritor.agent, before, after: agentDeclares(dest) },
+  };
+}
+
+// Instala os agentes de TODAS as intenções ligadas, no diretório de agentes do motor (ADR-0017).
+//
+// `policies` é o mapa que o `registry.readAgents` devolve. A ordem é a de `catalog.INTENTS`, que é
+// a do fluxo e não a alfabética, para a saída ser estável e legível.
+//
+// `skipped` é acumulado SEM repetição: a capacidade que falta é do MOTOR, não da intenção, e
+// repeti-la uma vez por agente faria a borda avisar três vezes a mesma coisa.
+export function installAgents(engineId, engineAgentsDir, policies, opts = {}) {
+  const written = [];
+  const blocked = [];
+  const changes = [];
+  const skipped = new Set();
+  for (const intent of catalog.INTENTS) {
+    const resultado = installAgent(engineId, engineAgentsDir, intent, policies[intent], opts);
+    written.push(...resultado.written);
+    blocked.push(...resultado.blocked);
+    if (resultado.change) changes.push(resultado.change);
+    for (const capability of resultado.skipped) skipped.add(capability);
+  }
+  return { written, blocked, changes, skipped: [...skipped] };
 }
 
 // Bloco que manda o copilot delegar a revisão ao agente. Em inglês porque é conteúdo

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, existsSync, readFileSync, readdirSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, existsSync, readFileSync, readdirSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { Buffer } from "node:buffer";
 import { execFile, execFileSync } from "node:child_process";
 import { createServer } from "node:http";
@@ -10,11 +10,12 @@ import os from "node:os";
 import path from "node:path";
 import * as bundle from "../src/bundle.js";
 import {
-  AGENT_MARKER, agentFrontmatter, buildRuntime, buildSkill, gateSummary, installAgents,
+  AGENT_MARKER, agentDeclares, agentFrontmatter, buildRuntime, inheritingModel, buildSkill, gateSummary, installAgents,
   installEngine, isOurAgent, resolveLaws, resolveUserLanguage, routeReviewSkill,
 } from "../src/builder.js";
 import * as installer from "../src/installer.js";
 import * as catalog from "../src/catalog.js";
+import { get as engineDescriptor } from "../src/engines/index.js";
 import { collectInstallAnswers, detectUserLanguage, CANCELLED } from "../src/prompts.js";
 import { getMessages } from "../src/messages.js";
 import { validateAll, validateSkill, checkSkill } from "../src/validator.js";
@@ -1056,17 +1057,15 @@ test("CLI: ciclo da sugestão — detect propõe, add instala, detect para de pr
   }
 });
 
-test("o gate de validação declara modelo por motor, sem default para o copilot", () => {
+test("nenhum motor recebe default de modelo, e o copilot também não tem esforço", () => {
   const { agent, skill, defaults } = catalog.REVIEW_GATE;
   assert.equal(agent, "mgr-review");
   assert.equal(skill, "code-analyzer");
   assert.equal(defaults.enabled, true);
   assert.equal(defaults.effort, "max");
-  assert.equal(defaults.model["claude-code"], "opus");
-  assert.equal(
-    Object.hasOwn(defaults.model, "copilot"), false,
-    "sem default para o copilot: a lista de modelos e da conta, nao do produto (ADR-0010)",
-  );
+  // O ADR-0010 deixava o copilot sem default porque a lista de modelos é DA CONTA. Com mais
+  // motores na fila, a exceção virou regra: NENHUM motor recebe identificador publicado.
+  assert.deepEqual(defaults.model, {}, "nenhum motor recebe default de modelo");
 });
 
 test("a fonte do agente do gate existe e não duplica o procedimento de review", () => {
@@ -1078,26 +1077,65 @@ test("a fonte do agente do gate existe e não duplica o procedimento de review",
 });
 
 // Clone raso com o mapa `model` próprio: os testes ajustam o gate sem contaminar o default.
+// Mapa de políticas com SÓ a intenção pedida ligada — os testes abaixo falam do gate, e ligar as
+// três faria cada um deles escrever três arquivos e afirmar sobre o primeiro por acaso.
+const soA = (intent, policy) => Object.fromEntries(
+  catalog.INTENTS.map((nome) => [nome, nome === intent ? policy : { ...catalog.AGENTS[nome].defaults, enabled: false }]),
+);
+
 const gateDefaults = () => ({
   ...catalog.REVIEW_GATE.defaults,
   model: { ...catalog.REVIEW_GATE.defaults.model },
 });
 
 test("o agente do claude-code declara modelo, esforço e só ferramentas de leitura", () => {
-  const { frontmatter, skipped } = agentFrontmatter("claude-code", gateDefaults());
+  const { frontmatter, skipped } = agentFrontmatter("claude-code", "review", gateDefaults());
   assert.match(frontmatter, /^---\nname: mgr-review\n/);
   assert.match(frontmatter, /tools: Read, Grep, Glob/);
-  assert.match(frontmatter, /model: opus/);
-  assert.match(frontmatter, /effort: max/);
+  assert.ok(!frontmatter.includes("model:"), "sem default publicado: o agente herda o da sessão");
+  assert.match(frontmatter, /effort: max/, "o esforço segue com default — a escala é da plataforma");
   assert.deepEqual(skipped, []);
   for (const escrita of ["Write", "Edit", "NotebookEdit"]) {
     assert.ok(!frontmatter.includes(escrita), `ferramenta de escrita vazou: ${escrita}`);
   }
 });
 
+test("as ferramentas seguem a NECESSIDADE da intenção, e o gate nunca ganha escrita", () => {
+  const ESCRITA = /\b(Write|Edit|NotebookEdit|edit)\b/;
+  for (const engineId of ["claude-code", "copilot"]) {
+    for (const intent of catalog.INTENTS) {
+      const { frontmatter } = agentFrontmatter(engineId, intent, catalog.AGENTS[intent].defaults);
+      // Só a linha `tools:` — o CORPO do gate contém "You cannot write", que é a frase que
+      // garante a invariante, e casá-la acusaria justamente a proteção.
+      const linha = frontmatter.split("\n").find((l) => l.startsWith("tools:"));
+      const temEscrita = ESCRITA.test(linha);
+      assert.equal(temEscrita, catalog.AGENTS[intent].needs === "write",
+        `${engineId}/${intent}: ferramenta de escrita só onde a intenção declara precisar`);
+    }
+  }
+  // A invariante do ADR-0010, dita sem depender do laço acima.
+  assert.equal(catalog.AGENTS.review.needs, "read",
+    "um revisor que pode editar não tem como reprovar em vez de corrigir");
+});
+
+test("as ferramentas de cada motor batem com a documentação da plataforma", () => {
+  assert.equal(engineDescriptor("claude-code").agentTools.read, "Read, Grep, Glob");
+  // Corrigido em 2026-09-11 contra a doc oficial: `view` não é alias nem nome de ferramenta do
+  // copilot, e nome não reconhecido é ignorado em SILÊNCIO — o gate rodava sem leitura de arquivo.
+  assert.equal(engineDescriptor("copilot").agentTools.read, '["read", "search"]');
+  assert.equal(engineDescriptor("copilot").agentTools.write, '["read", "search", "edit"]');
+});
+
+test("o agente de revisão do copilot TEM ferramenta de leitura", () => {
+  const { frontmatter } = agentFrontmatter("copilot", "review", catalog.AGENTS.review.defaults);
+  const linha = frontmatter.split("\n").find((l) => l.startsWith("tools:"));
+  assert.match(linha, /"read"/, "sem isto ele não abre o arquivo que a L1.1 manda citar verbatim");
+  assert.ok(!linha.includes("view"), "`view` não existe na plataforma e era ignorado sem aviso");
+});
+
 test("o agente do copilot sai sem effort e sem model, e diz o que pulou", () => {
-  const { frontmatter, skipped } = agentFrontmatter("copilot", gateDefaults());
-  assert.match(frontmatter, /tools: \["view", "grep", "glob"\]/);
+  const { frontmatter, skipped } = agentFrontmatter("copilot", "review", gateDefaults());
+  assert.match(frontmatter, /tools: \["read", "search"\]/);
   assert.ok(!frontmatter.includes("effort:"), "copilot não tem campo effort (V-3)");
   assert.ok(!frontmatter.includes("model:"), "sem default de modelo para o copilot");
   assert.deepEqual(
@@ -1108,14 +1146,14 @@ test("o agente do copilot sai sem effort e sem model, e diz o que pulou", () => 
 
 test("modelo declarado pelo usuário chega ao agente do copilot", () => {
   const gate = { ...gateDefaults(), model: { copilot: "claude-sonnet-5" } };
-  const { frontmatter, skipped } = agentFrontmatter("copilot", gate);
+  const { frontmatter, skipped } = agentFrontmatter("copilot", "review", gate);
   assert.match(frontmatter, /model: claude-sonnet-5/);
   assert.deepEqual(skipped, ["effort"]);
 });
 
 test("instalar o agente resolve os tokens e marca a posse", () => {
   const dir = path.join(diretorioTemporario(), "agents");
-  const { written, blocked } = installAgents("claude-code", dir, gateDefaults(), {
+  const { written, blocked } = installAgents("claude-code", dir, soA("review", gateDefaults()), {
     reviewSkillRef: ".claude/skills/code-analyzer/SKILL.md",
     userLanguage: "português",
   });
@@ -1132,13 +1170,13 @@ test("nome do arquivo do agente segue o descritor do motor", () => {
   const claudeDir = path.join(diretorioTemporario(), "agents");
   const copilotDir = path.join(diretorioTemporario(), "agents");
   const opts = { reviewSkillRef: "x", userLanguage: "en" };
-  assert.equal(path.basename(installAgents("claude-code", claudeDir, gateDefaults(), opts).written[0]), "mgr-review.md");
-  assert.equal(path.basename(installAgents("copilot", copilotDir, gateDefaults(), opts).written[0]), "mgr-review.agent.md");
+  assert.equal(path.basename(installAgents("claude-code", claudeDir, soA("review", gateDefaults()), opts).written[0]), "mgr-review.md");
+  assert.equal(path.basename(installAgents("copilot", copilotDir, soA("review", gateDefaults()), opts).written[0]), "mgr-review.agent.md");
 });
 
 test("gate desligado não escreve arquivo de agente nenhum", () => {
   const dir = path.join(diretorioTemporario(), "agents");
-  const resultado = installAgents("claude-code", dir, { ...gateDefaults(), enabled: false }, {});
+  const resultado = installAgents("claude-code", dir, soA("review", { ...gateDefaults(), enabled: false }), {});
   assert.deepEqual(resultado.written, []);
   assert.equal(existsSync(dir), false);
 });
@@ -1148,7 +1186,7 @@ test("agente alheio de mesmo nome não é sobrescrito", () => {
   mkdirSync(dir, { recursive: true });
   const alheio = path.join(dir, "mgr-review.md");
   writeFileSync(alheio, "agente do usuário, escrito à mão", "utf8");
-  const resultado = installAgents("claude-code", dir, gateDefaults(), { reviewSkillRef: "x" });
+  const resultado = installAgents("claude-code", dir, soA("review", gateDefaults()), { reviewSkillRef: "x" });
   assert.deepEqual(resultado.written, []);
   assert.deepEqual(resultado.blocked, [alheio]);
   assert.equal(readFileSync(alheio, "utf8"), "agente do usuário, escrito à mão");
@@ -1217,22 +1255,41 @@ test("instalar com o default grava o agente e o registra no manifest", () => {
 
   const agente = path.join(repo, ".claude", "agents", "mgr-review.md");
   assert.ok(existsSync(agente), "o agente foi escrito");
-  assert.equal(resultado.agents.length, 1);
+  // As TRÊS intenções são instaladas: o gate mais os dois agentes do ADR-0017.
+  assert.equal(resultado.agents.length, catalog.INTENTS.length);
 
   const man = JSON.parse(readFileSync(path.join(installer.coreDir("project", repo), "manifest.json"), "utf8"));
-  assert.deepEqual(man.agents, [path.join(".claude", "agents", "mgr-review.md")]);
+  assert.deepEqual(
+    man.agents.sort(),
+    catalog.INTENTS.map((intent) => path.join(".claude", "agents", `${catalog.AGENTS[intent].agent}.md`)).sort(),
+  );
   assert.deepEqual(man.agentsDirs, [path.join(".claude", "agents")]);
 
   const texto = readFileSync(agente, "utf8");
-  assert.match(texto, /model: opus/);
+  assert.ok(!texto.includes("model:"), "nenhuma intenção nasce com modelo publicado");
   assert.match(texto, /effort: max/);
   assert.ok(texto.includes(path.join(".claude", "skills", "code-analyzer", "SKILL.md")), "aponta para a skill instalada");
 });
 
-test("gate desligado não grava agente nem registra no manifest", () => {
+test("gate desligado não grava O AGENTE DO GATE, e não leva os outros junto", () => {
   const repo = diretorioTemporario();
   mkdirSync(installer.coreDir("project", repo), { recursive: true });
   instalarComGate(repo, { enabled: false });
+
+  // Antes do ADR-0017 o gate desligado pulava o bloco inteiro. Agora cada intenção decide sozinha:
+  // desligar a revisão não pode levar junto a redação e a execução.
+  assert.equal(existsSync(path.join(repo, ".claude", "agents", "mgr-review.md")), false);
+  assert.ok(existsSync(path.join(repo, ".claude", "agents", "mgr-draft.md")), "a redação continua");
+  assert.ok(existsSync(path.join(repo, ".claude", "agents", "mgr-task.md")), "a execução continua");
+});
+
+test("todas as intenções desligadas não gravam agente nem registram no manifest", () => {
+  const repo = diretorioTemporario();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  const desligadas = Object.fromEntries(catalog.INTENTS.map((intent) => [intent, { enabled: false }]));
+  writeFileSync(path.join(installer.coreDir("project", repo), "config.json"),
+    JSON.stringify({ registries: [], agents: desligadas }), "utf8");
+  installer.execute(installer.planInstall(["claude-code"], "project", repo, { names: ["code-analyzer"] }));
 
   assert.equal(existsSync(path.join(repo, ".claude", "agents")), false);
   const man = JSON.parse(readFileSync(path.join(installer.coreDir("project", repo), "manifest.json"), "utf8"));
@@ -1272,7 +1329,9 @@ test("install não sobrescreve agente alheio e devolve o aviso", () => {
   writeFileSync(path.join(dir, "mgr-review.md"), "agente do usuário", "utf8");
 
   const resultado = instalarComGate(repo);
-  assert.deepEqual(resultado.agents, []);
+  // O bloqueio é DO ARQUIVO ocupado, não da instalação inteira: os outros dois agentes seguem.
+  assert.ok(!resultado.agents.some((p) => p.endsWith("mgr-review.md")), "o ocupado não foi escrito");
+  assert.equal(resultado.agents.length, catalog.INTENTS.length - 1, "os outros dois foram");
   assert.ok(resultado.gateWarnings.some((w) => w.blocked));
   assert.equal(readFileSync(path.join(dir, "mgr-review.md"), "utf8"), "agente do usuário");
 });
@@ -1307,7 +1366,7 @@ test("o ajuste do gate sobrevive ao update", () => {
 
 test("o resumo do gate diz o que cada motor de fato sustenta", () => {
   assert.deepEqual(gateSummary("claude-code", gateDefaults()), {
-    engine: "claude-code", model: "opus", effort: "max", skipped: [],
+    engine: "claude-code", model: null, effort: "max", skipped: [],
   });
   assert.deepEqual(gateSummary("copilot", gateDefaults()), {
     engine: "copilot", model: null, effort: null, skipped: ["effort"],
@@ -1895,4 +1954,435 @@ test("os três comandos spec funcionam de DENTRO de specs/<slug>/", () => {
   assert.match(execFileSync("node", [bin, "spec", "status"], deDentro), /specs[/\\]demo/);
   assert.match(execFileSync("node", [bin, "spec", "next"], deDentro), /^P0\.2$/m);
   assert.match(execFileSync("node", [bin, "spec", "validate"], deDentro), /0 erro\(s\)/);
+});
+
+// `mgr agents` (ADR-0017). Locale fixado, como as fatias anteriores exigem.
+const rodarAgents = (repo, args) => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  try { return { stdout: execFileSync("node", [bin, "agents", ...args], ptBR(repo)), status: 0 }; }
+  catch (erro) { return { stdout: erro.stdout + "", stderr: erro.stderr + "", status: erro.status }; }
+};
+const repoComConfig = (config) => {
+  const repo = diretorioTemporario();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  writeFileSync(path.join(installer.coreDir("project", repo), "config.json"),
+    JSON.stringify({ registries: [], ...config }), "utf8");
+  return repo;
+};
+
+test("mgr agents: diz o valor E a origem de cada um, por motor", () => {
+  const { stdout, status } = rodarAgents(repoComConfig({}), []);
+  assert.equal(status, 0);
+  for (const intent of catalog.INTENTS) assert.match(stdout, new RegExp(`^${intent}\\s`, "m"));
+  assert.match(stdout, /esforço=high \(default\)/, "o esforço herdado sai como default");
+  assert.match(stdout, /esforço=não suportado por este motor/, "o copilot não tem effort");
+  assert.ok(!stdout.includes("modelo=opus"), "nenhum motor recebe identificador publicado");
+});
+
+test("mgr agents: o que o autor escreveu sai como configurado", () => {
+  const repo = repoComConfig({ agents: { execution: { model: { "claude-code": "sonnet" } } } });
+  const { stdout } = rodarAgents(repo, ["execution"]);
+  assert.match(stdout, /modelo=sonnet \(configurado\)/);
+  assert.match(stdout, /esforço=low \(default\)/, "o que não foi escrito não vira escolha dele");
+  assert.ok(!stdout.includes("drafting"), "pedindo uma intenção, só ela sai");
+});
+
+test("mgr agents: avisa que mudar o effort exige update", () => {
+  const { stdout } = rodarAgents(repoComConfig({}), []);
+  assert.match(stdout, /Mudar o `effort` só passa a valer depois de `mgr update`/,
+    "sem isto o autor ajusta o esforço e conclui que a configuração não funciona");
+});
+
+test("mgr agents: com as duas chaves, avisa o conflito", () => {
+  const repo = repoComConfig({ reviewGate: { effort: "high" }, agents: { review: { effort: "max" } } });
+  const { stdout } = rodarAgents(repo, []);
+  assert.match(stdout, /`agents\.review` vence/);
+  const semConflito = rodarAgents(repoComConfig({ reviewGate: { effort: "high" } }), []);
+  assert.ok(!semConflito.stdout.includes("vence"), "sem conflito, nenhum aviso é inventado");
+});
+
+test("mgr agents: intenção desconhecida sai com código diferente de zero", () => {
+  const { status, stderr } = rodarAgents(repoComConfig({}), ["revisao"]);
+  assert.equal(status, 1);
+  assert.match(stderr, /desconhecida \(esperado drafting \| execution \| review\)/);
+});
+
+test("mgr agents --json tem envelope estável e nenhum caminho absoluto", () => {
+  const repo = repoComConfig({});
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const payload = JSON.parse(execFileSync("node", [bin, "agents", "--json"], ptBR(repo)));
+  assert.deepEqual(Object.keys(payload).sort(), ["aliasOverridden", "intents", "schemaVersion"]);
+  assert.deepEqual(Object.keys(payload.intents), catalog.INTENTS);
+  const daRedacao = payload.intents.drafting;
+  assert.deepEqual(Object.keys(daRedacao).sort(), ["agent", "enabled", "engines", "needs"]);
+  assert.equal(daRedacao.engines.copilot.effort, null, "não suportado vem nulo, não inventado");
+  assert.deepEqual(daRedacao.engines.copilot.skipped, ["effort"]);
+  assert.ok(!JSON.stringify(payload).includes(repo), "nenhum caminho absoluto da máquina");
+});
+
+test("a mensagem do install nomeia O AGENTE escrito, não o gate", () => {
+  const repo = diretorioTemporario();
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const stdout = execFileSync("node",
+    [bin, "install", repo, "--engine", "claude-code", "--scope", "project", "--all-skills", "-y"],
+    ptBR(repo));
+  for (const intent of catalog.INTENTS) {
+    const agente = catalog.AGENTS[intent].agent;
+    assert.match(stdout, new RegExp(`agente ${agente} gravado`),
+      `chamar ${agente} de "gate de validação" seria a saída mentindo sobre o que escreveu`);
+  }
+});
+
+// `agentChanges` — o antes e o depois de cada agente, no núcleo (ADR-0017).
+const instalarNoRepo = (repo) =>
+  installer.execute(installer.planInstall(["claude-code"], "project", repo, { names: ["code-analyzer"] }));
+
+test("na primeira instalação o ANTES é nulo, que é diferente de vazio", () => {
+  const repo = diretorioTemporario();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  const { agentChanges } = instalarNoRepo(repo);
+
+  assert.equal(agentChanges.length, catalog.INTENTS.length);
+  for (const mudanca of agentChanges) {
+    assert.equal(mudanca.before, null, `${mudanca.agent}: arquivo que não existia`);
+    assert.equal(mudanca.after.model, null, `${mudanca.agent}: sem default publicado`);
+    assert.ok(mudanca.after.effort, `${mudanca.agent}: o esforço segue declarado`);
+  }
+});
+
+test("valor que não mudou sai com antes igual a depois", () => {
+  const repo = diretorioTemporario();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  instalarNoRepo(repo);
+  const { agentChanges } = instalarNoRepo(repo);
+
+  for (const mudanca of agentChanges) {
+    assert.deepEqual(mudanca.before, mudanca.after, `${mudanca.agent}: nada mudou, e o par diz isso`);
+  }
+});
+
+test("mudar o config muda SÓ o agente e o campo mudados", () => {
+  const repo = diretorioTemporario();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  instalarNoRepo(repo);
+  writeFileSync(path.join(installer.coreDir("project", repo), "config.json"),
+    JSON.stringify({ registries: [], agents: { execution: { model: { "claude-code": "sonnet" } } } }), "utf8");
+  const { agentChanges } = instalarNoRepo(repo);
+
+  const doTask = agentChanges.find((m) => m.agent === "mgr-task");
+  assert.equal(doTask.before.model, null, "antes: herdado, porque o default não publica modelo");
+  assert.equal(doTask.after.model, "sonnet");
+  assert.equal(doTask.before.effort, doTask.after.effort, "o effort não foi tocado");
+
+  for (const mudanca of agentChanges.filter((m) => m.agent !== "mgr-task")) {
+    assert.deepEqual(mudanca.before, mudanca.after, `${mudanca.agent}: não foi mexido`);
+  }
+});
+
+test("agente bloqueado por arquivo alheio não produz mudança nenhuma", () => {
+  const repo = diretorioTemporario();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  const dir = path.join(repo, ".claude", "agents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, "mgr-review.md"), "agente do usuário", "utf8");
+  const { agentChanges } = instalarNoRepo(repo);
+
+  assert.ok(!agentChanges.some((m) => m.agent === "mgr-review"), "o que não foi escrito não mudou");
+  assert.equal(agentChanges.length, catalog.INTENTS.length - 1);
+});
+
+test("intenção desligada não produz mudança", () => {
+  const repo = diretorioTemporario();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  writeFileSync(path.join(installer.coreDir("project", repo), "config.json"),
+    JSON.stringify({ registries: [], agents: { drafting: { enabled: false } } }), "utf8");
+  const { agentChanges } = instalarNoRepo(repo);
+  assert.ok(!agentChanges.some((m) => m.agent === "mgr-draft"));
+});
+
+test("agentDeclares devolve nulo para arquivo ausente, e o campo ausente vira nulo", () => {
+  assert.equal(agentDeclares("/nao/existe.md"), null);
+  const arquivo = path.join(diretorioTemporario(), "a.md");
+  writeFileSync(arquivo, "---\nname: x\ntools: Read\n---\n\ncorpo\n", "utf8");
+  assert.deepEqual(agentDeclares(arquivo), { model: null, effort: null },
+    "existir sem o campo é diferente de o arquivo não existir");
+});
+
+// `mgr update` deixa de reescrever o agente em silêncio (ADR-0017, P1.9).
+const rodarUpdate = (repo) => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  return execFileSync("node", [bin, "update", repo], ptBR(repo));
+};
+const instalarPelaCli = (repo) => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  execFileSync("node", [bin, "install", repo, "--engine", "claude-code", "--scope", "project",
+    "--all-skills", "-y"], ptBR(repo));
+};
+
+test("update sem mudança nenhuma NÃO inventa linha sobre agente", () => {
+  const repo = diretorioTemporario();
+  instalarPelaCli(repo);
+  const stdout = rodarUpdate(repo);
+  for (const intent of catalog.INTENTS) {
+    assert.ok(!stdout.includes(`${catalog.AGENTS[intent].agent} (claude-code)`),
+      `${intent}: relatar o que ficou igual encheria a saída de linha sem informação`);
+  }
+});
+
+test("update depois de mudar o config diz o que mudou, campo a campo", () => {
+  const repo = diretorioTemporario();
+  instalarPelaCli(repo);
+  writeFileSync(path.join(installer.coreDir("project", repo), "config.json"),
+    JSON.stringify({ registries: [], agents: { execution: { model: { "claude-code": "sonnet" }, effort: "medium" } } }),
+    "utf8");
+  const stdout = rodarUpdate(repo);
+
+  assert.match(stdout, /mgr-task \(claude-code\): model de null para sonnet/,
+    "antes era herdado; declarar um modelo é a mudança que o update relata");
+  assert.match(stdout, /mgr-task \(claude-code\): effort de low para medium/);
+  assert.ok(!stdout.includes("mgr-review (claude-code)"), "o que não mudou não aparece");
+  assert.ok(!stdout.includes("mgr-draft (claude-code)"));
+});
+
+test("update que grava um agente pela primeira vez diz isso", () => {
+  const repo = diretorioTemporario();
+  instalarPelaCli(repo);
+  rmSync(path.join(repo, ".claude", "agents", "mgr-draft.md"));
+  const stdout = rodarUpdate(repo);
+  assert.match(stdout, /mgr-draft \(claude-code\): gravado pela primeira vez/);
+  assert.ok(!stdout.includes("mgr-task (claude-code)"), "os outros seguem calados");
+});
+
+// RN-1, "uma fonte só": o plano carrega a política que será gravada (ADR-0017, achado do gate).
+test("com `agents.review` e SEM `reviewGate`, o plano carrega o que será gravado", () => {
+  const repo = diretorioTemporario();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  writeFileSync(path.join(installer.coreDir("project", repo), "config.json"),
+    JSON.stringify({ registries: [], agents: { review: { model: { "claude-code": "sonnet" }, effort: "high" } } }),
+    "utf8");
+
+  const plan = installer.planInstall(["claude-code"], "project", repo, { names: ["code-analyzer"] });
+  // Afirma sobre a fonte que o `execute` de fato usa. O plano trazia um `reviewGate` duplicado,
+  // removido em 2026-09-11 pela mesma razão que tirou o `readReviewGate`: campo repetido diverge.
+  assert.equal(plan.agents.policies.review.model["claude-code"], "sonnet",
+    "ler o apelido aqui fazia o plano contradizer o arquivo escrito");
+  assert.equal(plan.agents.policies.review.effort, "high");
+
+  installer.execute(plan);
+  const gravado = readFileSync(path.join(repo, ".claude", "agents", "mgr-review.md"), "utf8");
+  assert.match(gravado, /model: sonnet/, "o que o plano prometeu é o que o disco recebeu");
+  assert.match(gravado, /effort: high/);
+});
+
+test("o roteamento da skill de review usa a MESMA política que escreve o agente", () => {
+  const repo = diretorioTemporario();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  writeFileSync(path.join(installer.coreDir("project", repo), "config.json"),
+    JSON.stringify({ registries: [], agents: { review: { enabled: false } } }), "utf8");
+
+  installer.execute(installer.planInstall(["claude-code"], "project", repo, { names: ["code-analyzer"] }));
+  const skill = readFileSync(path.join(repo, ".claude", "skills", "code-analyzer", "SKILL.md"), "utf8");
+  assert.ok(!existsSync(path.join(repo, ".claude", "agents", "mgr-review.md")), "o agente não foi escrito");
+  assert.ok(!/context: fork/.test(skill),
+    "rotear para um agente que não existe em disco era o terceiro sintoma do mesmo defeito");
+});
+
+// `mgr tokens` — o consumidor da medição (ADR-0017). Sem ele, `src/tokens.js` era código que
+// nenhum caminho de usuário alcançava, e a QUAL-6 do guia reprova isso.
+const FIXTURE_TRANSCRIPT = fileURLToPath(new URL("./fixtures/transcripts/exemplo.jsonl", import.meta.url));
+const rodarTokens = (repo, args) => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  try { return { stdout: execFileSync("node", [bin, "tokens", ...args], ptBR(repo)), status: 0 }; }
+  catch (erro) { return { stdout: erro.stdout + "", stderr: erro.stderr + "", status: erro.status }; }
+};
+
+test("mgr tokens: sem transcript, recusa e ensina o que passar", () => {
+  const { status, stderr } = rodarTokens(diretorioTemporario(), []);
+  assert.equal(status, 1);
+  assert.match(stderr, /nenhum transcript informado/);
+});
+
+test("mgr tokens: reporta total, contexto e cache À PARTE", () => {
+  const { stdout, status } = rodarTokens(diretorioTemporario(), [FIXTURE_TRANSCRIPT]);
+  assert.equal(status, 0, "sem teto, medir não reprova");
+  assert.match(stdout, /total\s+213/);
+  assert.match(stdout, /cache lido\s+7916/);
+  assert.ok(!stdout.includes("8129"), "somar o cache ao total é o erro que o comando não comete");
+});
+
+test("mgr tokens: o primeiro transcript é a conversa, os demais são agentes", () => {
+  const repo = diretorioTemporario();
+  const doAgente = path.join(repo, "agente.jsonl");
+  writeFileSync(doAgente, `${JSON.stringify({ type: "assistant", message: { role: "assistant", usage: { input_tokens: 90, output_tokens: 10 } } })}\n`, "utf8");
+  const { stdout } = rodarTokens(repo, [FIXTURE_TRANSCRIPT, doAgente]);
+  assert.match(stdout, /total\s+313/, "213 da conversa mais 100 do agente");
+  assert.match(stdout, /agentes\s+100\s+·\s+1 transcript/);
+  assert.match(stdout, /contexto 25/, "o agente tem janela própria e não mexe no contexto da conversa");
+});
+
+test("mgr tokens: sem teto declarado, mede e sai zero", () => {
+  const { stdout, status } = rodarTokens(diretorioTemporario(), [FIXTURE_TRANSCRIPT]);
+  assert.equal(status, 0);
+  assert.match(stdout, /Nenhum teto declarado/);
+});
+
+test("mgr tokens: acima do teto declarado, sai com código diferente de zero", () => {
+  const repo = diretorioTemporario();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  writeFileSync(path.join(installer.coreDir("project", repo), "config.json"),
+    JSON.stringify({ registries: [], agents: { budget: { totalTokens: 100 } } }), "utf8");
+  const acima = rodarTokens(repo, [FIXTURE_TRANSCRIPT]);
+  assert.equal(acima.status, 1);
+  assert.match(acima.stdout, /ACIMA do teto declarado: 213 contra 100/);
+
+  writeFileSync(path.join(installer.coreDir("project", repo), "config.json"),
+    JSON.stringify({ registries: [], agents: { budget: { totalTokens: 1000 } } }), "utf8");
+  const dentro = rodarTokens(repo, [FIXTURE_TRANSCRIPT]);
+  assert.equal(dentro.status, 0);
+  assert.match(dentro.stdout, /Dentro do teto declarado: 213 de 1000/);
+});
+
+test("mgr tokens --json tem envelope estável e nenhum caminho absoluto", () => {
+  const repo = diretorioTemporario();
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const payload = JSON.parse(execFileSync("node", [bin, "tokens", FIXTURE_TRANSCRIPT, "--json"], ptBR(repo)));
+  assert.deepEqual(Object.keys(payload).sort(), [
+    "agentsCounted", "agentsTotal", "budget", "cacheRead", "conversationContext",
+    "conversationTotal", "schemaVersion", "total", "verdict",
+  ]);
+  assert.equal(payload.verdict, "no-budget");
+  assert.ok(!JSON.stringify(payload).includes(repo));
+});
+
+// `inherit` no frontmatter e o aviso do default (ADR-0017).
+test("`effort: inherit` faz o arquivo do agente sair sem a linha, e o agente segue escrito", () => {
+  const repo = diretorioTemporario();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  writeFileSync(path.join(installer.coreDir("project", repo), "config.json"),
+    JSON.stringify({ registries: [], agents: { review: { model: { "claude-code": "opus" }, effort: "inherit" } } }),
+    "utf8");
+  installer.execute(installer.planInstall(["claude-code"], "project", repo, { names: ["code-analyzer"] }));
+
+  const texto = readFileSync(path.join(repo, ".claude", "agents", "mgr-review.md"), "utf8");
+  assert.match(texto, /model: opus/, "o que foi declarado segue declarado");
+  assert.ok(!texto.includes("effort:"), "o que foi marcado como herdado não é escrito");
+});
+
+test("o aviso do modelo herdado aparece, e SOME quando todas as intenções declaram", () => {
+  const semNada = rodarAgents(diretorioTemporario(), []);
+  assert.match(semNada.stdout, /Rodando no modelo da sessão: drafting, execution, review/);
+  assert.match(semNada.stdout, /a lista de modelos é da sua conta/,
+    "a razão é dita, não só o fato — é ela que explica por que não há default");
+
+  const declarado = Object.fromEntries(catalog.INTENTS.map((intent) =>
+    [intent, { model: { "claude-code": "opus" } }]));
+  const { stdout } = rodarAgents(repoComConfig({ agents: declarado }), []);
+  assert.ok(!stdout.includes("Rodando no modelo da sessão"),
+    "avisar sobre o que já foi resolvido vira ruído, e ruído ensina a ignorar a saída");
+});
+
+test("o aviso nomeia SÓ as intenções que estão herdando", () => {
+  const { stdout } = rodarAgents(repoComConfig({ agents: { execution: { model: { "claude-code": "haiku" } } } }), []);
+  assert.match(stdout, /Rodando no modelo da sessão: drafting, review/);
+  assert.ok(!/Rodando no modelo da sessão: [^.]*execution/.test(stdout), "a que declarou não é nomeada");
+});
+
+// F-3 do segundo review: com `inherit`, a saída dizia "não suportado" de um motor que suporta.
+test("`effort: inherit` sai como HERDADO no claude-code, e não como não suportado", () => {
+  const repo = repoComConfig({ agents: { review: { effort: "inherit" } } });
+  const { stdout } = rodarAgents(repo, ["review"]);
+  const doClaude = stdout.split("\n").find((linha) => linha.includes("claude-code"));
+  assert.match(doClaude, /esforço=herdado da sessão/, "o claude-code SUPORTA effort");
+  assert.ok(!doClaude.includes("não suportado"), "dizer isso é a saída mentindo sobre a plataforma");
+
+  const doCopilot = stdout.split("\n").find((linha) => linha.includes("copilot"));
+  assert.match(doCopilot, /esforço=não suportado por este motor/, "e o copilot de fato não suporta");
+});
+
+test("com `inherit`, a chave `effort` NÃO some do payload --json", () => {
+  const repo = repoComConfig({ agents: { review: { effort: "inherit" } } });
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const payload = JSON.parse(execFileSync("node", [bin, "agents", "review", "--json"], ptBR(repo)));
+  const doClaude = payload.intents.review.engines["claude-code"];
+  assert.ok(Object.hasOwn(doClaude, "effort"), "`undefined` some do stringify; a §5 contrata a chave");
+  assert.equal(doClaude.effort, null);
+  assert.deepEqual(doClaude.skipped, [], "não há capacidade faltando: foi escolha do autor");
+});
+
+test("o predicado de quem está herdando tem um lugar só", () => {
+  const policies = Object.fromEntries(catalog.INTENTS.map((intent) =>
+    [intent, { ...catalog.AGENTS[intent].defaults }]));
+  assert.deepEqual(inheritingModel(catalog.INTENTS, ["claude-code"], policies), catalog.INTENTS);
+
+  policies.execution = { ...policies.execution, model: { "claude-code": "haiku" } };
+  assert.deepEqual(inheritingModel(catalog.INTENTS, ["claude-code"], policies), ["drafting", "review"]);
+});
+
+test("mgr tokens: caminho que não existe é ERRO, não medição zero", () => {
+  const { status, stderr, stdout } = rodarTokens(diretorioTemporario(), ["nao-existe.jsonl"]);
+  assert.equal(status, 1, "um erro de digitação saía com `total 0` e cara de medida real");
+  assert.match(stderr, /transcript não encontrado: nao-existe\.jsonl/);
+  assert.ok(!stdout.includes("total"), "nada é medido quando a entrada é inválida");
+});
+
+test("mgr tokens: o caminho ausente é nomeado, um a um", () => {
+  const { stderr } = rodarTokens(diretorioTemporario(), [FIXTURE_TRANSCRIPT, "sumiu-a.jsonl", "sumiu-b.jsonl"]);
+  assert.match(stderr, /sumiu-a\.jsonl, sumiu-b\.jsonl/, "quem lê precisa saber QUAL caminho errou");
+  assert.ok(!stderr.includes("exemplo.jsonl"), "o que existe não é acusado");
+});
+
+test("os comandos novos aparecem no help, nos dois idiomas", () => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  // Rodado de um diretório SEM manifesto: o idioma da CLI é manifesto > locale, e num repo com
+  // manifesto o `LC_ALL` não manda — foi o que a primeira versão deste teste supôs errado.
+  const limpo = diretorioTemporario();
+  for (const [locale, agentes, medicao] of [["pt_BR.UTF-8", /^\s+agents\s+qual modelo/m, /^\s+tokens\s+quanto o fluxo/m],
+    ["C", /^\s+agents\s+which model/m, /^\s+tokens\s+how much the flow/m]]) {
+    const stdout = execFileSync("node", [bin, "help"],
+      { encoding: "utf8", cwd: limpo, env: { ...process.env, LC_ALL: locale } });
+    assert.match(stdout, agentes, `${locale}: comando que não está no help ninguém descobre`);
+    assert.match(stdout, medicao, locale);
+  }
+});
+
+// F-6 do terceiro review: o plano e o `status` colapsavam "herdado" e "não suportado".
+test("o plano e o status distinguem herdado de NÃO SUPORTADO pelo motor", () => {
+  const repo = diretorioTemporario();
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const doPlano = execFileSync("node", [bin, "install", repo, "--engine", "both", "--scope",
+    "project", "--all-skills", "-y"], ptBR(repo));
+  // A moldura da CLI quebra a linha em largura fixa: o contrato é o texto, não o layout.
+  const semQuebras = (texto) => texto.replace(/[│┌└├─╮╯]/g, " ").replace(/\s+/g, " ");
+  assert.match(semQuebras(doPlano), /copilot: modelo=[^|]*?esforço=não suportado por este motor/,
+    "o copilot NÃO tem campo de esforço; dizer `esforço da sessão` descarta o valor em silêncio");
+  assert.ok(!semQuebras(doPlano).includes("esforço=esforço da sessão"), "a frase antiga sumiu");
+
+  const doStatus = execFileSync("node", [bin, "status", repo], ptBR(repo));
+  assert.match(semQuebras(doStatus), /copilot: modelo=[^|]*?esforço=não suportado por este motor/,
+    "a mesma função serve as duas telas");
+});
+
+test("o claude-code, que suporta esforço, segue dizendo herdado", () => {
+  const repo = diretorioTemporario();
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const stdout = execFileSync("node", [bin, "install", repo, "--engine", "claude-code", "--scope",
+    "project", "--all-skills", "-y"], ptBR(repo));
+  const limpo = stdout.replace(/[│┌└├─╮╯]/g, " ").replace(/\s+/g, " ");
+  assert.match(limpo, /claude-code: modelo=/, "o plano lista o claude-code");
+  assert.ok(!limpo.includes("esforço=não suportado"), "o claude-code suporta esforço");
+});
+
+// CA-6, o caso que de fato mudou: config legado que NÃO declara modelo, contando com o default.
+// A fixture `config-legado.json` declara `opus`, então ela cobre o outro caso.
+test("config legado SEM modelo mantém `effort` e perde a linha `model:`", () => {
+  const repo = diretorioTemporario();
+  mkdirSync(installer.coreDir("project", repo), { recursive: true });
+  writeFileSync(path.join(installer.coreDir("project", repo), "config.json"),
+    JSON.stringify({ registries: [], reviewGate: { enabled: true, effort: "max" } }), "utf8");
+  installer.execute(installer.planInstall(["claude-code"], "project", repo, { names: ["code-analyzer"] }));
+
+  const texto = readFileSync(path.join(repo, ".claude", "agents", "mgr-review.md"), "utf8");
+  assert.match(texto, /effort: max/, "o que o autor escreveu continua valendo");
+  assert.ok(!texto.includes("model:"),
+    "e o que ele não escreveu deixou de vir de um default publicado (P2.10)");
 });

@@ -7,6 +7,69 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
+## [0.7.0-beta.10] - 2026-09-11
+> Cada etapa do fluxo passa a rodar no modelo que você declarar. Pré-release no dist-tag `next`.
+
+### Adicionado
+- **Política de modelo por intenção** (ADR-0017): `agents` no `.mgr-core/config.json`, com uma
+  entrada para `drafting`, `execution` e `review`. **Uma fonte, dois momentos de leitura** — a
+  instalação grava no frontmatter do agente, a invocação lê a mesma chave e passa o modelo.
+- **`mgr agents [<intenção>] [--json]`**: responde qual modelo e qual esforço cada intenção usa, por
+  motor, e **de onde veio cada valor** — configurado, default, ou não suportado pelo motor.
+- **Dois agentes novos**: `mgr-draft` escreve o PRD e a spec; `mgr-task` implementa uma task. Os dois
+  declaram, no próprio corpo, que nunca perguntam nada e que não veem a conversa.
+- **Ferramentas por necessidade da intenção**: a intenção declara se precisa de leitura ou de
+  escrita, e o motor traduz. Só o `mgr-task` recebe escrita; **o gate continua só leitura**, que é
+  invariante do ADR-0010 e tem teste próprio.
+- **`src/tokens.js`**: soma o token da conversa e o de cada agente que ela subiu, com
+  `cache_read_input_tokens` reportado à parte. O teto é declarado por você; sem teto, mede e não
+  reprova.
+- **As duas skills do fluxo encomendam em vez de escrever**: `spec-create` delega a redação,
+  `spec-execute` delega a implementação de cada task. **Nenhum checkpoint humano migrou**, e há teste
+  que fica vermelho se algum sumir.
+- **`mgr tokens [--json]`**: soma o token da conversa e o de cada agente que ela subiu, reporta o
+  contexto de conversa e o `cache_read` **à parte**, e compara com o teto declarado em
+  `agents.budget.totalTokens`. Sem teto, mede e não reprova.
+- **`inherit` em `model` e em `effort`**: o valor com que você recusa a declaração de um campo. O
+  núcleo normaliza para ausência, então ele significa a mesma coisa em qualquer motor.
+
+### Corrigido
+- **`mgr update` reescrevia o frontmatter do agente em silêncio.** Passa a dizer, campo a campo, o
+  que mudou de `model` e de `effort` — e não inventa linha quando nada mudou.
+- **A mensagem do install chamava todo agente de "gate de validação"**, inclusive os que não são.
+  Passa a nomear o agente escrito.
+- **O gate desligado desligava a instalação de agentes inteira.** Agora cada intenção decide sozinha,
+  e recusar a revisão não leva junto a redação e a execução.
+- **Agente alheio de mesmo nome bloqueava a instalação inteira**; agora bloqueia só o próprio
+  arquivo.
+
+### Alterado
+- **Nenhum modelo é publicado por default, em motor nenhum.** Sem configuração, os três agentes
+  herdam o modelo da sessão, e o `mgr agents` e o plano de instalação **avisam**, dizendo a razão e
+  o que fazer. Isto **emenda o ADR-0010**: ele publicava `opus` no claude-code e deixava o copilot
+  sem default porque a lista de modelos é **da conta**, não do produto. Com mais motores na fila, a
+  exceção virou a regra.
+- **O agente do gate deixou de receber `model: opus` para quem não configura nada.** É a única
+  mudança desta versão que altera o comportamento de algo já entregue, e não só a saída.
+
+### O que degrada, declarado
+- **Sem configurar, ninguém recebe execução barata.** O default herda, e o benefício de rodar cada
+  etapa no modelo certo exige declarar um modelo por intenção. O aviso existe para isso não ser
+  descoberto tarde.
+- **O agente de redação NÃO vê a conversa.** Uma decisão tomada falando, e nunca escrita em disco,
+  não chega nele. Isso empurra o método para o que a L2.1 já mandava — hand-off por disco —, mas o
+  custo aparece aqui pela primeira vez como perda concreta.
+- **`model` e `effort` não se comportam igual.** O `model` pode ser trocado na invocação e vale já na
+  próxima; o `effort` só existe no arquivo do agente, então **só passa a valer depois de
+  `mgr update`**. A assimetria é da plataforma, e o `mgr agents` avisa dela em toda execução.
+- **O roteamento foi provado em UM motor.** O Copilot não tem campo de esforço, e a conta de teste
+  expõe um modelo só. Fica **`[A CONFIRMAR]`** se o override de modelo na invocação existe nele.
+- **Agente recém-instalado demora a ficar disponível.** Há uma janela em que o arquivo está em disco
+  e a invocação ainda falha. As duas skills tratam isso como caso previsto, escrevem o documento
+  elas mesmas e dizem que fizeram assim — nunca tentam em laço.
+- **A medição de token não prova economia sozinha.** Agente não compartilha contexto: a conversa pode
+  encolher e o total subir. Por isso o critério é duplo, e `cache_read` fica fora do total.
+
 ## [0.7.0-beta.9] - 2026-09-11
 > Conserta a 0.7.0-beta.8, que não instalava. Pré-release no dist-tag `next`.
 

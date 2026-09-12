@@ -1,0 +1,7 @@
+{
+  "reviewGate": {
+    "enabled": true,
+    "model": { "claude-code": "opus" },
+    "effort": "max"
+  }
+}

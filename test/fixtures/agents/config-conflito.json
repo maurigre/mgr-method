@@ -1,0 +1,22 @@
+{
+  "reviewGate": {
+    "enabled": true,
+    "model": { "claude-code": "sonnet" },
+    "effort": "high"
+  },
+  "agents": {
+    "review": {
+      "enabled": true,
+      "model": { "claude-code": "opus" },
+      "effort": "max"
+    },
+    "drafting": {
+      "model": { "claude-code": "opus" },
+      "effort": "high"
+    },
+    "execution": {
+      "model": { "claude-code": "haiku" },
+      "effort": "low"
+    }
+  }
+}

@@ -134,9 +134,11 @@ const en = {
   suggestNonInteractive: "Not asking without an interactive terminal; install with `mgr add <name>`.",
   suggestSkipped: "No skill installed from the suggestion.",
   planHooks: (files) => `hooks    →   ${files}`,
-  planHooksHint: "(session detection per engine)",
-  hookWritten: (file) => `  session hook written to ${file}`,
-  hookRemoved: (file) => `  session hook removed from ${file}`,
+  planHooksHint: "(session detection and hand-off before compaction, per engine)",
+  hookWritten: (file, events) => `  hooks written to ${file}: ${events}`,
+  // Nomeia os eventos, e não "o hook": desde o ADR-0018 o arquivo carrega dois, e anunciar um só
+  // esconderia do usuário metade do que o método tirou do arquivo dele.
+  hookRemoved: (file, events) => `  hooks removed from ${file}: ${events}`,
   hookCopilotTrust: "Copilot only loads the repository hook after you trust the folder: the first session will ask, and nothing happens until you accept.",
 
   planGate: (dir) => `agents   →   ${dir}`,
@@ -213,6 +215,31 @@ const en = {
   agentsUnknown: (intent, known) => `unknown intent \`${intent}\` (expected ${known})`,
   agentsSetNeedsIntent: (known) => `name the intent to configure (expected ${known})`,
   agentsSetWriting: (intent) => `Writing \`agents.${intent}\` to .mgr-core/config.json`,
+  precompactWrote: (file, slug) =>
+    `Context compaction is about to happen. Hand-off for \`${slug}\` written to ${file}.`,
+  precompactWroteBlocked: (file, slug) =>
+    `Compaction stopped this time. Hand-off for \`${slug}\` written to ${file}.`,
+  precompactNothingToSave:
+    "Context compaction is about to happen. No feature in progress, so nothing was written.",
+  precompactSuggestNewSession:
+    "Start a NEW session and resume from the hand-off: what follows in this window comes from a "
+    + "summary, not from the original context.",
+  precompactBlocked: (file) =>
+    `Compaction blocked by MGR: you asked for it, and the state is safe on disk (${file}). `
+    + "Start a new session and resume from it. If you still want to compact, ask again and it will "
+    + "go through.",
+  precompactProceeding:
+    "Compacting: you asked again, and the hand-off on disk is current. What follows in this window "
+    + "comes from a summary.",
+  // Logs do comando de hook (LOG-1/LOG-2). Vão para o stderr, que a doc do claude-code manda para o
+  // debug log quando o hook sai 0 — destino de diagnóstico, e não canal de usuário.
+  precompactLogGitBefore: "reading the git working tree",
+  precompactLogGitAfter: (count) => `git reported ${count} uncommitted file(s)`,
+  precompactLogWriteBefore: (file) => `writing the hand-off to ${file}`,
+  precompactLogWriteAfter: (file, appended) =>
+    `hand-off ${appended ? "appended to" : "created at"} ${file}`,
+  precompactLogStampBefore: "writing the refusal stamp",
+  precompactLogStampAfter: "refusal stamp written",
   agentsSetNothing: "nothing to write: pass `--model`, `--effort`, or both",
   agentsSetEngineNotInstalled: (engine, installed) =>
     `engine \`${engine}\` is not installed in this project`
@@ -264,6 +291,8 @@ Usage: mgr <command> [options]
                    value came from ([<intent>], --json)
   agents set       writes one intent's policy (<intent>, --model, --effort,
                    --engine); it does not run mgr update
+  precompact       writes the hand-off before the engine compacts the context
+                   (--hook <engine>); called by the hook, not by hand
   tokens           how much the flow consumed: pass the conversation
                    transcript, then each agent transcript (--json)
   list             lists the skills
@@ -411,9 +440,11 @@ const ptBR = {
   suggestNonInteractive: "Sem terminal interativo não há pergunta; instale com `mgr add <nome>`.",
   suggestSkipped: "Nenhuma skill instalada a partir da sugestão.",
   planHooks: (files) => `hooks    →   ${files}`,
-  planHooksHint: "(detecção por sessão, por motor)",
-  hookWritten: (file) => `  hook de sessão gravado em ${file}`,
-  hookRemoved: (file) => `  hook de sessão removido de ${file}`,
+  planHooksHint: "(detecção por sessão e hand-off antes da compactação, por motor)",
+  hookWritten: (file, events) => `  hooks gravados em ${file}: ${events}`,
+  // Nomeia os eventos, e não "o hook": desde o ADR-0018 o arquivo carrega dois, e anunciar um só
+  // esconderia do usuário metade do que o método tirou do arquivo dele.
+  hookRemoved: (file, events) => `  hooks removidos de ${file}: ${events}`,
   hookCopilotTrust: "O Copilot só carrega o hook do repositório depois que você confia na pasta: a primeira sessão vai perguntar, e nada acontece até você aceitar.",
 
   planGate: (dir) => `agentes  →   ${dir}`,
@@ -490,6 +521,30 @@ const ptBR = {
   agentsUnknown: (intent, known) => `intenção \`${intent}\` desconhecida (esperado ${known})`,
   agentsSetNeedsIntent: (known) => `diga a intenção a configurar (esperado ${known})`,
   agentsSetWriting: (intent) => `Escrevendo \`agents.${intent}\` em .mgr-core/config.json`,
+  precompactWrote: (file, slug) =>
+    `A compactação de contexto vai acontecer. Hand-off de \`${slug}\` gravado em ${file}.`,
+  precompactWroteBlocked: (file, slug) =>
+    `A compactação foi impedida desta vez. Hand-off de \`${slug}\` gravado em ${file}.`,
+  precompactNothingToSave:
+    "A compactação de contexto vai acontecer. Nenhuma feature em andamento, então nada foi gravado.",
+  precompactSuggestNewSession:
+    "Abra uma sessão NOVA e retome pelo hand-off: o que vier depois nesta janela vem de um resumo, "
+    + "e não do contexto original.",
+  precompactBlocked: (file) =>
+    `Compactação bloqueada pelo MGR: você pediu, e o estado está a salvo em disco (${file}). `
+    + "Abra uma sessão nova e retome por ele. Se ainda quiser compactar, peça de novo que passa.",
+  precompactProceeding:
+    "Compactando: você pediu de novo, e o hand-off em disco está atual. O que vier depois nesta "
+    + "janela vem de um resumo.",
+  // Logs do comando de hook (LOG-1/LOG-2). Vão para o stderr, que a doc do claude-code manda para o
+  // debug log quando o hook sai 0 — destino de diagnóstico, e não canal de usuário.
+  precompactLogGitBefore: "lendo a árvore de trabalho do git",
+  precompactLogGitAfter: (count) => `git devolveu ${count} arquivo(s) não commitado(s)`,
+  precompactLogWriteBefore: (file) => `gravando o hand-off em ${file}`,
+  precompactLogWriteAfter: (file, appended) =>
+    `hand-off ${appended ? "acrescentado a" : "criado em"} ${file}`,
+  precompactLogStampBefore: "gravando o carimbo da recusa",
+  precompactLogStampAfter: "carimbo da recusa gravado",
   agentsSetNothing: "nada a escrever: passe `--model`, `--effort`, ou os dois",
   agentsSetEngineNotInstalled: (engine, instalados) =>
     `motor \`${engine}\` não está instalado neste projeto`
@@ -539,6 +594,8 @@ Uso: mgr <comando> [opções]
                    cada valor ([<intenção>], --json)
   agents set       escreve a política de uma intenção (<intenção>, --model,
                    --effort, --engine); não roda o mgr update
+  precompact       grava o hand-off antes de o motor compactar o contexto
+                   (--hook <motor>); chamado pelo hook, não à mão
   tokens           quanto o fluxo consumiu: passe o transcript da conversa e,
                    depois dele, o de cada agente (--json)
   list             lista as skills

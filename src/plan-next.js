@@ -31,7 +31,10 @@ export function choose(parsed) {
   const taskCount = parsed.tasks.length;
   // Conta PRESENÇA do campo, não diferença do default: `status: todo` é estado declarado.
   const stateDeclared = parsed.tasks.filter((task) => task.statusDeclared).length;
-  const base = { task: null, stateDeclared, taskCount };
+  // Quem fechou de fato. Não se deriva de `stateDeclared`: `status: todo` declara estado e não
+  // fecha nada, e subtrair a pendente oferecida afirmaria progresso que o plano não declara.
+  const doneCount = parsed.tasks.filter(concluida).length;
+  const base = { task: null, stateDeclared, doneCount, taskCount };
 
   if (!parsed.format.declared) return { ...base, outcome: "format-not-declared" };
   if (!taskCount) return { ...base, outcome: "no-tasks" };
@@ -56,7 +59,7 @@ export function choose(parsed) {
 // em vez de receber um palpite (DES-1).
 export function nextTask(repo, { slug = null } = {}) {
   const [arquivo] = artifactFiles(repo, slug, PLAN_FILE);
-  if (!arquivo) return { file: null, outcome: "no-plan", task: null, stateDeclared: 0, taskCount: 0 };
+  if (!arquivo) return { file: null, outcome: "no-plan", task: null, stateDeclared: 0, doneCount: 0, taskCount: 0 };
   const decisao = choose(parse(readFileSync(arquivo, "utf8")));
   return { file: path.relative(repo, arquivo), ...decisao };
 }

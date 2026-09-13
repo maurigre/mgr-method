@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { hookCommand, hookFilePath, HOOK_FILES, HOOK_MARKER, removeHook, writeHook } from "../src/hooks.js";
+import { hookCommand, hookFilePath, HOOK_MARKER, removeHook, writeHook } from "../src/hooks.js";
+import { ids as engineIds } from "../src/engines/index.js";
 
 const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-hooks-"));
 const MGR = "/usr/local/bin/mgr";
@@ -34,7 +35,7 @@ test("cada motor recebe o formato nativo dele, no arquivo project-local", () => 
 });
 
 test("o comando gravado carrega o marcador de posse e o motor", () => {
-  for (const engine of Object.keys(HOOK_FILES)) {
+  for (const engine of engineIds()) {
     const command = hookCommand(MGR, engine);
     assert.ok(command.includes(HOOK_MARKER), "sem marcador não há como provar posse");
     assert.ok(command.includes(`--hook ${engine}`));

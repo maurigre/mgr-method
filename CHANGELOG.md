@@ -12,8 +12,40 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   faz e quantas vezes ela roda, e escreve pelo comando. Ela **não** entra no CORE, que segue com seis.
 - **`documentedModels` no descritor de cada motor**: os identificadores que a documentação da
   plataforma publica, com data e fonte no comentário. É sugestão, e nunca grade de validação.
+- **O contexto não é mais compactado em silêncio** (ADR-0018): quando o motor anuncia que vai
+  compactar, o método **grava o hand-off antes**, diz o motivo e sugere sessão nova. No `/compact`
+  pedido por você, no claude-code, ele ainda **impede** a compactação uma vez, para você decidir com
+  o estado já a salvo.
+- **`mgr precompact --hook <motor>`**: o comando que o hook chama. Monta o hand-off a partir de fato
+  em disco, **nunca sobrescreve** um hand-off existente, e declara em seção própria o que ele não tem
+  como saber.
+- **O conhecimento de hook virou dado no descritor de motor**: arquivo, eventos, matcher e teto de
+  tempo por evento, forma da entrada, envelope e o canal de aviso. Um motor novo passa a ser um
+  arquivo em `src/engines/` mais uma linha no mapa de motores. Isso paga metade da dívida que o
+  ADR-0010 tinha nomeado — a outra metade segue nomeada e aberta: `src/adapters.js`, o instalador e a
+  saída do hook de sessão em `src/detector.js`.
+- **O hook de pré-compactação declara um teto de tempo de 15s.** Ele lê o payload do stdin, e o
+  default que a doc do Claude Code declara para hook de comando é de 600s — dez minutos pendurado
+  se algo não fechar a entrada. O hook de início de sessão **não** foi tocado.
 
 ### O que degrada, declarado
+- **No Copilot a compactação não pode ser impedida, e o aviso não tem como chegar a você.** A
+  documentação oficial classifica o evento de pré-compactação dele como *"notification only"*, diz
+  que a saída do hook não é processada e não oferece nenhum campo por onde falar com você — ao
+  contrário do evento de início de sessão, que aceita contexto adicional. O hand-off **é gravado
+  igual**; o que não existe ali é canal de aviso. O método prefere calar a imprimir num canal que a
+  plataforma descarta, porque isso o faria parecer avisar.
+- **No claude-code o aviso chega em todo caminho, e não só no bloqueio.** Ele vai pelo campo que a
+  doc indica para falar com você (`systemMessage` no JSON de saída). O `stdout` do hook, que a versão
+  anterior desta fatia usava, vai para o **debug log** neste evento — quem só olhasse a sessão não
+  veria mensagem nenhuma.
+- **Bloquear é só no `/compact` que você pediu.** No automático, não: a doc do Claude Code diz que
+  bloquear uma compactação disparada para recuperar de estouro de contexto faz a **requisição em
+  curso falhar**. Proteger o contexto não pode custar o trabalho em andamento.
+- **O bloqueio vale uma vez.** Se você insistir logo em seguida, passa — senão o método tiraria o
+  `/compact` de você para sempre.
+- **O hand-off do hook não vê a conversa.** O que foi decidido falando e não chegou ao disco não
+  entra nele, e o arquivo diz isso.
 - **Nenhum motor lista os modelos que a sua conta tem.** Foi verificado na documentação oficial dos
   dois: não existe comando de listagem. Por isso a skill oferece os **aliases documentados** de cada
   motor e **aceita qualquer identificador** que você escrever. Lista nossa envelheceria e passaria a
@@ -30,6 +62,13 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   visível.
 
 ### Planejado
+- **Quatro motores novos, decididos em 2026-09-12**, ao lado do claude-code e do copilot:
+  **Codex CLI**, **Antigravity**, **Deep Code** (agente de terminal dos modelos DeepSeek) e
+  **OpenCode**. A matriz de capacidade de cada um, com fonte oficial e data, está em
+  `docs/engine-hooks.md` — inclusive o que **não** dá: o OpenCode integra por plugin e não por hook,
+  e Antigravity e Deep Code não têm evento de pré-compactação. A matriz traz fonte oficial e data em
+  cada célula que foi confirmada, e diz `[A CONFIRMAR]` nas que não foram — o OpenCode e o Codex
+  ainda têm células abertas, e isso está escrito lá em vez de arredondado aqui.
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 

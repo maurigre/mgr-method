@@ -2,10 +2,11 @@
 // ser ramificação por nome e passa a ser descritor consultável — é o que faz a degradação
 // declarada sair de consulta, e não de `if (engine === "...")` espalhado.
 //
-// ESCOPO DELIBERADO: nesta fatia o descritor é consumido só pelo eixo de AGENTES. Os mapas
-// de `installer.js` (diretório de skills), `hooks.js` (arquivo e evento de hook) e
-// `adapters.js` (tradução de manifest) continuam onde estão — migrá-los é feature própria,
-// com testes de não-regressão próprios.
+// O QUE JÁ MIGROU: o eixo de AGENTES (ADR-0010) e o de HOOKS (ADR-0018) — arquivo, eventos,
+// matcher por evento, forma da entrada, envelope e capacidade de compactação são dado daqui.
+// O QUE FALTA: os mapas de `installer.js` (diretório de skills) e `adapters.js` (tradução de
+// manifest), mais a saída do hook de sessão em `detector.js`. É a outra metade da dívida que o
+// ADR-0010 nomeou, e continua declarada.
 //
 // Dado puro, sem IO: mesmo padrão de `checkSkill` em src/validator.js.
 import claudeCode from "./claude-code.js";

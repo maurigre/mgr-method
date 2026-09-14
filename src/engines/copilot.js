@@ -51,6 +51,42 @@ export default {
   // Preencher com nomes plausíveis seria palpite sobre a conta de terceiro. Sem sugestão, a skill
   // diz que ali não há o que sugerir — que é verdade, e vale mais que uma lista inventada.
   documentedModels: [],
+  // Hook: mesmo papel do descritor do claude-code, com o esquema NATIVO do copilot — que não é
+  // intercambiável (ADR-0018). Conferido na doc oficial em 2026-09-12:
+  // https://docs.github.com/en/copilot/reference/hooks-configuration
+  //
+  // O envelope `version` é exigência da plataforma, e só é acrescentado quando ainda não existe, para
+  // não sobrescrever a escolha de quem já usava o arquivo.
+  hookFile: [".github", "copilot", "settings.local.json"],
+  hookEvents: { sessionStart: "sessionStart" },
+  // O `sessionStart` deste motor nunca usou matcher, e continua sem — mudar isso reescreveria o
+  // arquivo de quem já tem o MGR instalado. O `preCompact` usa, como a doc documenta.
+  hookMatchers: { sessionStart: null, preCompact: "manual|auto" },
+  // O teto já era 15s nos dois eventos deste motor; passou a DADO por evento, no lugar de literal
+  // dentro do `hookEntry`, para que a entrada gravada continue byte a byte a mesma.
+  hookTimeouts: { sessionStart: 15, preCompact: 15 },
+  hookEntry: (command, matcher, timeout) => ({
+    type: "command",
+    bash: command,
+    ...(typeof timeout === "number" ? { timeout } : {}),
+    ...(matcher === null ? {} : { matcher }),
+  }),
+  hookEnvelope: { version: 1 },
+  // Tem o evento e **não** deixa impedir: a doc classifica o `preCompact` como "notification only",
+  // e diz que a saída não é processada para decisão de controle. Então `block: null` — que é
+  // diferente de não ter evento, e é por isso que este campo não é um booleano (ADR-0018).
+  compaction: {
+    event: "preCompact",
+    block: null,
+    // Sem canal de aviso, e isto é da PLATAFORMA. Reconferido na doc oficial em 2026-09-13
+    // (https://docs.github.com/en/copilot/reference/hooks-configuration): o `preCompact` é
+    // "No — notification only", a saída dele não é processada, e o hook não tem campo por onde
+    // comunicar nada ao usuário — ao contrário do `sessionStart`, que aceita `additionalContext`.
+    //
+    // `null` em vez de uma função que imprime no vazio: imprimir faria o método parecer avisar. A
+    // degradação é declarada ao usuário no CHANGELOG e nos READMEs, que é onde ele pode ler.
+    notice: null,
+  },
   capabilities: {
     agentModel: true,
     agentEffort: false,

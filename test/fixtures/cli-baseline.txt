@@ -18,22 +18,23 @@ hexagonal idioma: pt-BR (saída das skills: conversa e artefatos) config →
 <REPO>/.mgr-core (manifest.json + .env) skills → <REPO>/.claude/skills skills
 (8): spec-init, spec-create, spec-execute, adr-create, code-analyzer,
 diagnosing-bugs, configure-agents, arch-hexagonal hooks →
-.claude/settings.local.json (detecção por sessão, por motor) agentes →
-.claude/agents (um agente por intenção; a revisão roda no próprio) drafting:
-mgr-draft claude-code: modelo=herda o modelo da sessão esforço=high execution:
-mgr-task claude-code: modelo=herda o modelo da sessão esforço=low review:
-mgr-review claude-code: modelo=herda o modelo da sessão esforço=max Rodando no
-modelo da sessão: drafting, execution, review. Nenhum modelo é publicado por
-default — a lista de modelos é da sua conta, não desta ferramenta. Declare um
-por intenção em `.mgr-core/config.json` para ter o benefício. leis →
+.claude/settings.local.json (detecção por sessão e hand-off antes da
+compactação, por motor) agentes → .claude/agents (um agente por intenção; a
+revisão roda no próprio) drafting: mgr-draft claude-code: modelo=herda o
+modelo da sessão esforço=high execution: mgr-task claude-code: modelo=herda o
+modelo da sessão esforço=low review: mgr-review claude-code: modelo=herda o
+modelo da sessão esforço=max Rodando no modelo da sessão: drafting, execution,
+review. Nenhum modelo é publicado por default — a lista de modelos é da sua
+conta, não desta ferramenta. Declare um por intenção em
+`.mgr-core/config.json` para ter o benefício. leis →
 .claude/skills/_shared/laws/execution-laws.md (leis de execução: fonte única,
 apontada por toda skill do CORE) preâmbulo de sessão: ligado (as leis centrais
 entram antes da primeira mensagem) Skills instaladas em <REPO>/.claude/skills.
 agente mgr-draft gravado em .claude/agents/mgr-draft.md agente mgr-task
 gravado em .claude/agents/mgr-task.md agente mgr-review gravado em
-.claude/agents/mgr-review.md hook de sessão gravado em
-.claude/settings.local.json Pronto! Comece com /spec-init e depois
-/spec-create por feature.
+.claude/agents/mgr-review.md hooks gravados em .claude/settings.local.json:
+SessionStart · PreCompact Pronto! Comece com /spec-init e depois /spec-create
+por feature.
 
 $ mgr status <REPO>
 [project] MGR v<VERSION> — claude-code — self-contained projeto: x config:

@@ -4,6 +4,11 @@
 //     (sessão aberta em opus, fork rodou no modelo declarado no agente);
 //   - `context: fork` + `agent:` no frontmatter da skill roteia para o agente — o
 //     `meta.json` do fork traz {"agentType": "<nome>"}, ou seja quem roteia é a plataforma.
+
+// Nome do evento de compactação, em UM lugar. O envelope de saída precisa repeti-lo dentro do
+// `hookSpecificOutput`, e duas fontes para o mesmo nome divergiriam em silêncio.
+const PRE_COMPACT = "PreCompact";
+
 export default {
   id: "claude-code",
   agentsDir: { project: ".claude/agents", global: ".claude/agents" },
@@ -40,6 +45,60 @@ export default {
   //   - `opusplan`: "Special mode" que troca de modelo no meio do caminho, de frente contra a
   //     premissa do ADR-0017 de que o agente segura UM modelo pela execução inteira.
   documentedModels: ["sonnet", "opus", "haiku", "fable"],
+  // Hook: onde mora a configuração, como se chama cada evento e que forma tem a entrada — dado, e não
+  // ramificação por nome de motor (ADR-0018, pagando a dívida que o ADR-0010 nomeou).
+  // Esquema conferido na doc oficial em 2026-09-12: https://code.claude.com/docs/en/hooks
+  hookFile: [".claude", "settings.local.json"],
+  hookEvents: { sessionStart: "SessionStart" },
+  // O matcher é POR EVENTO, e não por motor: `startup` é do `SessionStart`, e o `PreCompact` filtra
+  // por gatilho de compactação. Trocar um pelo outro faz o hook não disparar, em silêncio — é o
+  // mesmo modo de falha do alias `view` que o gate do copilot sofreu em 2026-09-11.
+  hookMatchers: { sessionStart: "startup", preCompact: "manual|auto" },
+  // Timeout POR EVENTO, pela mesma razão do matcher. A doc declara, textualmente, "Seconds before
+  // canceling (...) Defaults: 600 for `command`" — dez minutos. O `precompact` lê o stdin e espera
+  // EOF, então sem teto uma invocação à mão fica pendurada. 15s é escolha de desenho, igual à do
+  // copilot, e NÃO é medição.
+  //
+  // `null` no `sessionStart` de propósito: declarar um teto ali mudaria a entrada já instalada na
+  // máquina de quem tem o MGR, e a invariante 8 desta fatia proíbe tocar o hook de sessão.
+  hookTimeouts: { sessionStart: null, preCompact: 15 },
+  // `hookEvents` NÃO repete o evento de compactação: ele vem de `PRE_COMPACT`, que `compaction.event`
+  // e o envelope leem. Duas fontes para o mesmo nome divergiriam, e o motor que preenchesse uma e
+  // esquecesse a outra não receberia entrada nenhuma, em silêncio.
+  hookEntry: (command, matcher, timeout) => ({
+    matcher,
+    hooks: [{ type: "command", command, ...(typeof timeout === "number" ? { timeout } : {}) }],
+  }),
+  hookEnvelope: null,
+  // Compactação de contexto (ADR-0018). NÃO é booleano, e a razão está em `docs/engine-hooks.md`:
+  // dos seis motores estudados, dois não têm evento nenhum, um tem e não bloqueia, e os que bloqueiam
+  // não bloqueiam da mesma forma. Booleano confundiria "não tem evento" com "tem e não bloqueia", e o
+  // método gravaria hook num evento inexistente.
+  //
+  // `exit-code`: a doc diz que exit 2 bloqueia. A tabela de exit 2 deste evento diz "Can block?
+  // Yes. Blocks compaction. Use `hookSpecificOutput.decision: \"deny\"`".
+  compaction: {
+    event: PRE_COMPACT,
+    block: "exit-code",
+    // O CANAL do aviso, como dado. Conferido na doc oficial em 2026-09-13:
+    // https://code.claude.com/docs/en/hooks
+    //
+    // O stdout deste evento NÃO chega a ninguém: "For most events, Claude Code writes stdout to the
+    // debug log and doesn't show it in the transcript. The exceptions are `UserPromptSubmit`,
+    // `UserPromptExpansion`, `SessionStart`, and `PostModelSwitch`" — e o PreCompact não está entre
+    // elas. Texto solto aqui faria a fatia parecer avisar sem avisar.
+    //
+    // O canal que existe é o envelope: "To surface a message to the user on any platform, return
+    // `systemMessage` in JSON output."
+    //
+    // O motivo do bloqueio vai no `reason`, e não no stderr, porque "the blocking message is the
+    // reason from your JSON's blocking decision when it makes one, and your stderr text otherwise"
+    // — com a decisão declarada aqui, o stderr fica livre para ser canal de log (LOG-1/LOG-2).
+    notice: ({ message, deny }) => JSON.stringify({
+      ...(deny ? { hookSpecificOutput: { hookEventName: PRE_COMPACT, decision: "deny", reason: deny } } : {}),
+      ...(message ? { systemMessage: message } : {}),
+    }),
+  },
   capabilities: {
     agentModel: true,
     agentEffort: true,

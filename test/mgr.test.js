@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, existsSync, readFileSync, readdirSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { Buffer } from "node:buffer";
-import { execFile, execFileSync } from "node:child_process";
+import { execFile, execFileSync, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -22,6 +22,7 @@ import { validateAll, validateSkill, checkSkill } from "../src/validator.js";
 import { aggregateChecksum, sha256 } from "../src/plugin.js";
 import { add as addPlugin } from "../src/plugin-installer.js";
 import { addRegistry, readAgents, writeAgentPolicy, writeConfig } from "../src/registry.js";
+import { eventsFor, hookCommand, removeHook, writeHook, writtenEvents } from "../src/hooks.js";
 import { readLockfile } from "../src/lockfile.js";
 import { captureCli } from "../scripts/capture-cli-baseline.mjs";
 
@@ -962,8 +963,10 @@ test("CLI: install grava o hook dos motores escolhidos, sem duplicar, e uninstal
   const copilot = path.join(repo, ".github", "copilot", "settings.local.json");
 
   const saida = run(["install", ...flags]);
-  assert.match(saida, /hook de sessão gravado em .claude\/settings.local.json/);
-  assert.match(saida, /hook de sessão gravado em .github\/copilot\/settings.local.json/);
+  // A mensagem passou a NOMEAR os eventos: o arquivo carrega dois desde o ADR-0018, e anunciar
+  // "hook de sessão" esconderia do usuário metade do que foi escrito no arquivo dele.
+  assert.match(saida, /hooks gravados em .claude\/settings.local.json: SessionStart · PreCompact/);
+  assert.match(saida, /hooks gravados em .github\/copilot\/settings.local.json: sessionStart · preCompact/);
   assert.match(saida, /Copilot só carrega o hook do repositório depois que você confia na pasta/);
   assert.equal(JSON.parse(readFileSync(claude, "utf8")).hooks.SessionStart.length, 1);
   assert.equal(JSON.parse(readFileSync(copilot, "utf8")).hooks.sessionStart.length, 1);
@@ -972,7 +975,7 @@ test("CLI: install grava o hook dos motores escolhidos, sem duplicar, e uninstal
   assert.equal(JSON.parse(readFileSync(claude, "utf8")).hooks.SessionStart.length, 1, "reinstalar não duplica");
 
   const removido = run(["uninstall", "-y", repo]);
-  assert.match(removido, /hook de sessão removido de .claude\/settings.local.json/);
+  assert.match(removido, /hooks removidos de .claude\/settings.local.json: SessionStart · PreCompact/);
   assert.ok(!existsSync(claude) && !existsSync(copilot), "os arquivos criados pelo MGR somem");
 });
 
@@ -984,7 +987,7 @@ test("CLI: --no-hooks não grava hook nenhum e o plano não promete o que não v
     encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env, LC_ALL: "pt_BR.UTF-8" },
   });
-  assert.doesNotMatch(saida, /hook de sessão gravado/);
+  assert.doesNotMatch(saida, /hooks gravados em/);
   assert.doesNotMatch(saida, /hooks {4}→/);
   assert.ok(!existsSync(path.join(repo, ".claude", "settings.local.json")));
 });
@@ -1124,6 +1127,91 @@ test("as ferramentas de cada motor batem com a documentação da plataforma", ()
   // copilot, e nome não reconhecido é ignorado em SILÊNCIO — o gate rodava sem leitura de arquivo.
   assert.equal(engineDescriptor("copilot").agentTools.read, '["read", "search"]');
   assert.equal(engineDescriptor("copilot").agentTools.write, '["read", "search", "edit"]');
+});
+
+// A P1.2 é a task de risco desta fatia: ela reescreve quem produz um arquivo que já está instalado
+// na máquina de quem usa. O gate é textual e estrutural; a prova byte a byte contra a linha de base
+// mora no fechamento, porque depende do snapshot gravado antes da primeira linha de código.
+test("`src/hooks.js` não conhece o nome de motor nenhum", () => {
+  const fonte = readFileSync(fileURLToPath(new URL("../src/hooks.js", import.meta.url)), "utf8");
+  for (const id of engineIds()) {
+    assert.ok(!fonte.includes(id),
+      `hooks.js ainda cita \`${id}\`; o conhecimento por motor é dado no descritor, não texto aqui`);
+  }
+  assert.ok(!fonte.includes("HOOK_FILES") && !fonte.includes("HOOK_EVENTS"),
+    "os dois mapas foram substituídos pelo descritor");
+});
+
+test("o hook gravado sai exatamente da forma que o descritor declara", () => {
+  const repo = diretorioTemporario();
+  for (const id of engineIds()) {
+    const motor = engineDescriptor(id);
+    writeHook(id, repo, { command: "CMD" });
+    const gravado = JSON.parse(readFileSync(path.join(repo, ...motor.hookFile), "utf8"));
+    const entradas = gravado.hooks[motor.hookEvents.sessionStart];
+    assert.equal(entradas.length, 1);
+    assert.deepEqual(entradas[0],
+      motor.hookEntry(hookCommand("CMD", id), motor.hookMatchers.sessionStart, motor.hookTimeouts.sessionStart),
+      `${id}: a entrada tem de ser a do descritor, sem o módulo remontar nada`);
+    for (const [chave, valor] of Object.entries(motor.hookEnvelope ?? {})) {
+      assert.equal(gravado[chave], valor, `${id}: envelope da plataforma`);
+    }
+  }
+});
+
+// O descritor passa a carregar o conhecimento de HOOK (ADR-0018), que hoje vive em mapas dentro de
+// `src/hooks.js`. Esta task só publica o dado; quem consome é a P1.2.
+test("o descritor publica arquivo, evento e forma da entrada de cada motor", () => {
+  const claude = engineDescriptor("claude-code");
+  assert.deepEqual(claude.hookFile, [".claude", "settings.local.json"]);
+  assert.equal(claude.hookEvents.sessionStart, "SessionStart");
+  assert.equal(claude.hookEnvelope, null);
+  assert.deepEqual(claude.hookEntry("CMD", "startup", claude.hookTimeouts.sessionStart),
+    { matcher: "startup", hooks: [{ type: "command", command: "CMD" }] },
+    "o sessionStart deste motor nunca declarou teto, e declarar um reescreveria arquivo já instalado");
+  assert.deepEqual(claude.hookEntry("CMD", "manual|auto", claude.hookTimeouts.preCompact),
+    { matcher: "manual|auto", hooks: [{ type: "command", command: "CMD", timeout: 15 }] },
+    "o default da doc para `command` é 600s, e o comando espera EOF do stdin");
+  assert.equal(claude.hookMatchers.preCompact, "manual|auto",
+    "o matcher é POR EVENTO: `startup` no PreCompact faria o hook não disparar, em silêncio");
+
+  const copilot = engineDescriptor("copilot");
+  assert.deepEqual(copilot.hookFile, [".github", "copilot", "settings.local.json"]);
+  assert.equal(copilot.hookEvents.sessionStart, "sessionStart");
+  assert.deepEqual(copilot.hookEnvelope, { version: 1 },
+    "o envelope é exigência da plataforma, e é dado do motor, não regra do módulo");
+  assert.deepEqual(copilot.hookEntry("CMD", null, copilot.hookTimeouts.sessionStart),
+    { type: "command", bash: "CMD", timeout: 15 },
+    "o sessionStart deste motor nunca teve matcher, e mudar isso reescreveria arquivo já instalado");
+  assert.deepEqual(copilot.hookEntry("CMD", "manual|auto", copilot.hookTimeouts.preCompact),
+    { type: "command", bash: "CMD", timeout: 15, matcher: "manual|auto" });
+});
+
+test("o descritor é dado PURO: nenhum campo de hook depende de IO ou de caminho da máquina", () => {
+  for (const id of engineIds()) {
+    const motor = engineDescriptor(id);
+    assert.ok(Array.isArray(motor.hookFile), `${id}: caminho em segmentos, para o módulo montar`);
+    for (const segmento of motor.hookFile) {
+      assert.ok(!segmento.includes("/") && !segmento.includes("\\"), `${id}: segmento com separador`);
+    }
+  }
+});
+
+test("`compaction` distingue os TRÊS estados, e não é booleano", () => {
+  const claude = engineDescriptor("claude-code").compaction;
+  assert.equal(claude.event, "PreCompact", "tem evento");
+  assert.equal(claude.block, "exit-code", "e bloqueia");
+
+  const copilot = engineDescriptor("copilot").compaction;
+  assert.equal(copilot.event, "preCompact", "TEM o evento");
+  assert.equal(copilot.block, null,
+    "e não bloqueia: a doc classifica como notification only, e isso é diferente de não ter evento");
+
+  for (const id of engineIds()) {
+    const { event, block } = engineDescriptor(id).compaction;
+    assert.ok(event !== null || block === null,
+      `${id}: bloquear sem ter evento é estado impossível, e o método gravaria hook no vazio`);
+  }
 });
 
 test("os aliases documentados do claude-code são os quatro que a doc citada publica", () => {
@@ -2517,4 +2605,244 @@ test("config legado SEM modelo mantém `effort` e perde a linha `model:`", () =>
   assert.match(texto, /effort: max/, "o que o autor escreveu continua valendo");
   assert.ok(!texto.includes("model:"),
     "e o que ele não escreveu deixou de vir de um default publicado (P2.10)");
+});
+
+// `mgr precompact --hook` — o gatilho mecânico das leis L3.2 e L3.4 (ADR-0018). O que se protege
+// aqui é o caso ruim: o hook não pode derrubar a sessão de quem só abriu o editor.
+const PLANO_EM_ANDAMENTO = [
+  "<!-- mgr-plan-format: 1 -->", "# Plano", "", "## P1 — Core", "",
+  "### P1.1 — task de teste", "- **priority:** P1", "- **depends_on:** []",
+  "- **files:** [src/a.js]", "- **artifact:** 1 coisa declarada", "- **done_when:** pronto",
+  "- **helper_skill:** none", "- **status:** todo",
+].join("\n");
+
+const repoComFeature = () => {
+  const repo = diretorioTemporario();
+  mkdirSync(path.join(repo, "specs", "alfa"), { recursive: true });
+  writeFileSync(path.join(repo, "specs", "alfa", "04-plan.md"), `${PLANO_EM_ANDAMENTO}\n`, "utf8");
+  return repo;
+};
+
+const rodarPrecompact = (repo, engine, payload) => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const { stdout, stderr, status } = spawnSync("node", [bin, "precompact", "--hook", engine],
+    { ...ptBR(repo), input: payload });
+  return { stdout, stderr, status };
+};
+
+// O stdout do evento de pré-compactação é o ENVELOPE, e nada além dele. Parsear em vez de casar
+// regex é o que separa "a mensagem existe" de "a mensagem chega pelo canal que a plataforma lê".
+const envelopeDe = (stdout) => JSON.parse(stdout);
+
+test("mgr precompact: grava o hand-off e avisa pelo canal que o usuário lê", () => {
+  const repo = repoComFeature();
+  const { stdout, status } = rodarPrecompact(repo, "claude-code", '{"trigger":"auto"}');
+  assert.equal(status, 0);
+  const { systemMessage } = envelopeDe(stdout);
+  assert.match(systemMessage, /Hand-off de `alfa` gravado/);
+  assert.match(systemMessage, /sessão NOVA/, "a sugestão de sessão nova é pedido explícito do autor");
+  assert.match(readFileSync(path.join(repo, "specs", "alfa", ".handoff.md"), "utf8"),
+    /O que este hand-off NÃO sabe/);
+});
+
+// O stdout do PreCompact vai para o debug log: a doc lista as quatro exceções em que ele vira
+// contexto, e este evento não está entre elas. Texto solto ali é mensagem que ninguém lê.
+test("mgr precompact: o stdout é só o envelope, e o log vai para o stderr", () => {
+  const repo = repoComFeature();
+  const { stdout, stderr } = rodarPrecompact(repo, "claude-code", '{"trigger":"auto"}');
+  assert.doesNotThrow(() => envelopeDe(stdout),
+    "log no stdout tornaria o envelope impossível de parsear, e o aviso não chegaria");
+  assert.match(stderr, /gravando o hand-off em/, "LOG-1: antes de alterar estado em disco");
+  assert.match(stderr, /hand-off criado em/, "LOG-1: logo depois");
+  assert.match(stderr, /lendo a árvore de trabalho do git/, "LOG-2: antes do subprocesso");
+  assert.match(stderr, /git devolveu \d+ arquivo/, "LOG-2: logo depois");
+  assert.ok(!stdout.includes("[mgr]"), "o canal de log e o canal de aviso não se misturam");
+});
+
+test("mgr precompact: hand-off existente é PRESERVADO e ganha seção", () => {
+  const repo = repoComFeature();
+  const arquivo = path.join(repo, "specs", "alfa", ".handoff.md");
+  writeFileSync(arquivo, "# Hand-off escrito pelo agente\n\nDecisão que só a conversa sabia.\n", "utf8");
+  rodarPrecompact(repo, "claude-code", '{"trigger":"auto"}');
+  const texto = readFileSync(arquivo, "utf8");
+  assert.match(texto, /Decisão que só a conversa sabia/,
+    "o do agente é mais rico que o do hook; sobrescrever perderia informação na hora mais cara");
+  assert.match(texto, /Hand-off automático — compactação de contexto/);
+});
+
+test("mgr precompact: sem feature em andamento, nenhum arquivo é escrito", () => {
+  const repo = diretorioTemporario();
+  const { stdout, status } = rodarPrecompact(repo, "claude-code", '{"trigger":"auto"}');
+  assert.equal(status, 0);
+  assert.match(envelopeDe(stdout).systemMessage, /Nenhuma feature em andamento/);
+  assert.equal(existsSync(path.join(repo, "specs")), false, "hand-off inventado engana a retomada");
+});
+
+test("mgr precompact: o bloqueio sai 2 e o motivo vai na decisão declarada", () => {
+  const repo = repoComFeature();
+  const { stdout, status } = rodarPrecompact(repo, "claude-code", '{"trigger":"manual"}');
+  assert.equal(status, 2, "a doc diz que exit 2 bloqueia a compactação deste evento");
+  const { hookSpecificOutput } = envelopeDe(stdout);
+  assert.deepEqual({ ...hookSpecificOutput, reason: undefined },
+    { hookEventName: "PreCompact", decision: "deny", reason: undefined },
+    "é o idioma que a doc documenta para bloquear este evento");
+  assert.match(hookSpecificOutput.reason, /Compactação bloqueada pelo MGR/);
+  assert.match(hookSpecificOutput.reason, /peça de novo que passa/,
+    "prometer o que não acontece seria pior que não avisar");
+  const { systemMessage } = envelopeDe(stdout);
+  assert.match(systemMessage, /compactação foi impedida desta vez/);
+  assert.ok(!systemMessage.includes("vai acontecer"),
+    "dizer que a compactação vai acontecer no envelope que a impediu é a saída se contradizendo");
+});
+
+test("mgr precompact: quem insiste passa, e o método sai da frente", () => {
+  const repo = repoComFeature();
+  assert.equal(rodarPrecompact(repo, "claude-code", '{"trigger":"manual"}').status, 2);
+  const segunda = rodarPrecompact(repo, "claude-code", '{"trigger":"manual"}');
+  assert.equal(segunda.status, 0, "bloquear sempre tiraria o /compact do usuário para sempre");
+  assert.match(envelopeDe(segunda.stdout).systemMessage, /você pediu de novo/);
+  assert.equal(envelopeDe(segunda.stdout).hookSpecificOutput, undefined,
+    "passar e declarar deny ao mesmo tempo diria à plataforma duas coisas contrárias");
+});
+
+// Sem a guarda, o hand-off era escrito dizendo ter vindo de um motor inexistente e só depois a
+// decisão falhava — arquivo com fato inventado dentro, que é o que a RN-2 proíbe.
+test("mgr precompact: motor desconhecido sai em silêncio e NÃO grava nada", () => {
+  const repo = repoComFeature();
+  const { stdout, status } = rodarPrecompact(repo, "cursor", '{"trigger":"manual"}');
+  assert.equal(status, 0, "derrubar a sessão de quem só abriu o editor é o que a DT-8 proíbe");
+  assert.equal(stdout, "");
+  assert.equal(existsSync(path.join(repo, "specs", "alfa", ".handoff.md")), false);
+});
+
+test("mgr precompact: o copilot nunca bloqueia, porque a plataforma não deixa", () => {
+  const repo = repoComFeature();
+  for (const trigger of ["manual", "auto"]) {
+    assert.equal(rodarPrecompact(repo, "copilot", `{"trigger":"${trigger}"}`).status, 0);
+  }
+});
+
+test("mgr precompact: entrada estranha nunca derruba a sessão", () => {
+  const repo = repoComFeature();
+  for (const payload of ["", "nao-e-json", "null", "[]", '{"trigger":42}']) {
+    assert.equal(rodarPrecompact(repo, "claude-code", payload).status, 0,
+      `payload ${JSON.stringify(payload)}: exceção aqui poluiria o contexto de quem só abriu o editor`);
+  }
+});
+
+// P1.6 — a entrada do evento novo, e só onde o motor tem o evento.
+test("o MGR grava uma entrada por evento que o motor declara, e nenhuma a mais", () => {
+  const repo = diretorioTemporario();
+  for (const id of engineIds()) {
+    const motor = engineDescriptor(id);
+    writeHook(id, repo, { command: "node mgr" });
+    const gravado = JSON.parse(readFileSync(path.join(repo, ...motor.hookFile), "utf8"));
+    const esperados = [motor.hookEvents.sessionStart, motor.compaction.event].filter(Boolean);
+    assert.deepEqual(Object.keys(gravado.hooks).sort(), [...esperados].sort(),
+      `${id}: gravar hook em evento que o motor não tem é escrever no vazio`);
+  }
+});
+
+// O `done_when` da P1.6 pede isto textualmente: "um descritor de teste com `event: null` não recebe
+// nenhuma". Motor registrado nenhum está nesse estado hoje — o antigravity e o deep code estarão —,
+// então o único jeito de afirmar o ramo é com descritor de mesa, como a P1.3 fez para a decisão.
+test("motor sem evento de compactação NÃO recebe entrada de hook para este eixo", () => {
+  const deMesa = {
+    hookEvents: { sessionStart: "OnStart" },
+    hookMatchers: { sessionStart: null, preCompact: "manual|auto" },
+    hookTimeouts: { sessionStart: null, preCompact: 15 },
+    compaction: { event: null, block: null, notice: null },
+  };
+  assert.deepEqual(eventsFor(deMesa, "de-mesa", "CMD").map(({ event }) => event), ["OnStart"],
+    "gravar hook em evento que a plataforma não tem é escrever no vazio no arquivo do usuário");
+
+  const comEvento = { ...deMesa, compaction: { event: "OnCompact", block: null, notice: null } };
+  assert.deepEqual(eventsFor(comEvento, "de-mesa", "CMD").map(({ event }) => event),
+    ["OnStart", "OnCompact"], "tendo o evento, a entrada é gravada mesmo sem poder bloquear");
+});
+
+test("o matcher gravado é o do EVENTO, não o do motor", () => {
+  const repo = diretorioTemporario();
+  const motor = engineDescriptor("claude-code");
+  writeHook("claude-code", repo, { command: "node mgr" });
+  const gravado = JSON.parse(readFileSync(path.join(repo, ...motor.hookFile), "utf8"));
+  assert.equal(gravado.hooks.SessionStart[0].matcher, "startup");
+  assert.equal(gravado.hooks.PreCompact[0].matcher, "manual|auto",
+    "`startup` num PreCompact é aceito e ignorado: o hook nunca dispararia, e nada avisaria");
+});
+
+test("entrada alheia no evento novo é preservada, e o uninstall tira só a do MGR", () => {
+  const repo = diretorioTemporario();
+  const motor = engineDescriptor("claude-code");
+  const arquivo = path.join(repo, ...motor.hookFile);
+  mkdirSync(path.dirname(arquivo), { recursive: true });
+  const alheia = { matcher: "manual", hooks: [{ type: "command", command: "script-do-usuario.sh" }] };
+  writeFileSync(arquivo, JSON.stringify({ hooks: { PreCompact: [alheia] } }), "utf8");
+
+  writeHook("claude-code", repo, { command: "node mgr" });
+  const comOsDois = JSON.parse(readFileSync(arquivo, "utf8"));
+  assert.equal(comOsDois.hooks.PreCompact.length, 2);
+  assert.deepEqual(comOsDois.hooks.PreCompact[0], alheia, "o arquivo é do usuário, não do MGR");
+
+  removeHook("claude-code", repo);
+  const depois = JSON.parse(readFileSync(arquivo, "utf8"));
+  assert.deepEqual(depois.hooks.PreCompact, [alheia]);
+  assert.equal(Object.hasOwn(depois.hooks, "SessionStart"), false, "contêiner vazio some");
+});
+
+test("o uninstall apaga o arquivo que era só do MGR, nos dois eventos", () => {
+  const repo = diretorioTemporario();
+  for (const id of engineIds()) {
+    writeHook(id, repo, { command: "node mgr" });
+    removeHook(id, repo);
+    assert.equal(existsSync(path.join(repo, ...engineDescriptor(id).hookFile)), false,
+      `${id}: o arquivo foi criado pelo MGR e não sobrou nada dele`);
+  }
+});
+
+// A doc do copilot classifica o `preCompact` como "No — notification only" e diz que a saída dele
+// não é processada: ali o aviso NÃO TEM CANAL. Imprimir de qualquer jeito faria o método parecer
+// avisar; a degradação é declarada onde o usuário pode ler, no CHANGELOG e nos READMEs.
+test("mgr precompact: motor sem canal de aviso não imprime no vazio", () => {
+  const repo = repoComFeature();
+  const { stdout, stderr, status } = rodarPrecompact(repo, "copilot", '{"trigger":"manual"}');
+  assert.equal(status, 0);
+  assert.equal(stdout, "", "saída num canal que a plataforma descarta é aviso que ninguém recebe");
+  assert.match(stderr, /gravando o hand-off em/, "o hand-off é gravado igual, e o log registra");
+  assert.match(readFileSync(path.join(repo, "specs", "alfa", ".handoff.md"), "utf8"), /Feature:/);
+});
+
+test("mgr precompact: sem feature em andamento, não bloqueia nem carimba", () => {
+  const repo = diretorioTemporario();
+  const { status } = rodarPrecompact(repo, "claude-code", '{"trigger":"manual"}');
+  assert.equal(status, 0, "bloquear sem ter gravado nada só obstrui: não há estado para preservar");
+  assert.equal(existsSync(path.join(repo, ".mgr-core")), false,
+    "a invariante 2 diz que sem feature em andamento NENHUM arquivo é escrito");
+});
+
+test("mgr precompact: manifesto corrompido não derruba o hook", () => {
+  const repo = repoComFeature();
+  mkdirSync(path.join(repo, ".mgr-core"), { recursive: true });
+  writeFileSync(path.join(repo, ".mgr-core", "manifest.json"), "{ isto nao e json", "utf8");
+  const { status, stderr } = rodarPrecompact(repo, "claude-code", '{"trigger":"auto"}');
+  assert.equal(status, 0);
+  assert.ok(!(stderr || "").includes("SyntaxError"),
+    "stack trace no stderr de um hook é o ruído no contexto do agente que a DT-8 quer impedir");
+});
+
+test("o uninstall tira os DOIS eventos, e não deixa resto", () => {
+  const repo = diretorioTemporario();
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  execFileSync("node", [bin, "install", repo, "--engine", "both", "--scope", "project",
+    "--project-id", "x", "--arch", "hexagonal", "-y"], { encoding: "utf8" });
+  for (const id of engineIds()) {
+    const gravado = JSON.parse(readFileSync(path.join(repo, ...engineDescriptor(id).hookFile), "utf8"));
+    assert.deepEqual(Object.keys(gravado.hooks).sort(), writtenEvents(id).sort(),
+      `${id}: o install grava exatamente os eventos que o núcleo declara`);
+  }
+  execFileSync("node", [bin, "uninstall", repo, "--scope", "project", "-y"], { encoding: "utf8" });
+  for (const id of engineIds()) {
+    assert.equal(existsSync(path.join(repo, ...engineDescriptor(id).hookFile)), false,
+      `${id}: o arquivo era só do MGR e não sobrou nada dele`);
+  }
 });

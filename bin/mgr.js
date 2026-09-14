@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // CLI do MGR — Método Governado por Rastreabilidade.
-import { existsSync } from "node:fs";
+import { existsSync, writeSync } from "node:fs";
 import path from "node:path";
+import { Buffer } from "node:buffer";
+import { execFileSync } from "node:child_process";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import * as bundle from "../src/bundle.js";
@@ -32,7 +34,8 @@ import {
 } from "../src/registry.js";
 import { diff as lockfileDiff, readLockfile, replacedByEngine, LOCKFILE_NAME } from "../src/lockfile.js";
 import { collectSuggestions, detect, hookReport, lawsPreamble } from "../src/detector.js";
-import { hookFilePath, removeHook, writeHook } from "../src/hooks.js";
+import { hookFilePath, removeHook, writeHook, writtenEvents } from "../src/hooks.js";
+import { ASSEMBLED, assemble, decide, notice, persist, readStamp, writeStamp } from "../src/precompact.js";
 
 const SCOPES = ["project", "global"];
 // Comandos de skill plugável: o posicional é o nome da skill/registry, nunca o repositório.
@@ -41,7 +44,7 @@ const PLUGIN_COMMANDS = ["add", "remove", "registry"];
 // resolveria o repo como `<cwd>/validate`, o manifesto não seria encontrado e o `userLanguage` do
 // projeto seria descartado — quebrando, só para o comando novo, a precedência
 // flag > manifesto > locale que os demais respeitam.
-const SUBCOMMAND_COMMANDS = ["spec", "agents", "tokens"];
+const SUBCOMMAND_COMMANDS = ["spec", "agents", "tokens", "precompact"];
 const isTTY = process.stdin.isTTY && process.stdout.isTTY;
 
 // Glue: junta os dados que o nucleo precisa. A decisao de como combinar e do detector.
@@ -206,7 +209,7 @@ async function cmdInstall(flags, positional) {
 
   for (const engine of motoresComHook) {
     const file = writeHook(engine, plan.repo, { command: mgrCommand() });
-    p.log.success(M.hookWritten(path.relative(plan.repo, file)));
+    p.log.success(M.hookWritten(path.relative(plan.repo, file), writtenEvents(engine).join(" · ")));
   }
   // O hook do repositório só carrega depois do folder trust; sem este aviso o usuário conclui,
   // com razão, que o MGR gravou algo quebrado (verificado por experimento — ADR-0009).
@@ -789,6 +792,155 @@ function cmdAgents(flags, positional) {
   return 0;
 }
 
+// `mgr precompact --hook <motor>` — o gatilho mecânico das leis L3.2 e L3.4 (ADR-0018). O motor
+// anuncia que vai compactar, e o método põe o estado em disco ANTES.
+//
+// Disciplina do `mgr detect --hook`, pela mesma razão: falha aqui não pode poluir o contexto do
+// agente nem derrubar a sessão de quem só abriu o editor. A ÚNICA saída diferente de zero é o
+// bloqueio deliberado, e ele é intencional.
+async function cmdPrecompact(flags) {
+  try {
+    const repo = repoRoot(process.cwd());
+    const core = installer.coreDir("project", repo);
+    const payload = await lerPayload();
+    const engine = flags.hook;
+    // Motor desconhecido sai em silêncio, e ANTES de gravar: sem esta guarda o hand-off seria
+    // escrito dizendo ter vindo de um motor que não existe, e só depois a decisão falharia. É a
+    // validação de entrada da borda (QUAL-2), com a saída silenciosa que a DT-8 exige em lugar do
+    // fail fast ruidoso — o `mgr detect --hook` faz igual.
+    if (!engineIds().includes(engine)) return 0;
+    // O gatilho vem do payload, e SÓ dele. Sem ele, `decide` trata como desconhecido e não bloqueia.
+    const trigger = payload.trigger ?? null;
+
+    // Git é da BORDA — o núcleo recebe a lista pronta, e repositório sem git devolve vazio.
+    logHook(M.precompactLogGitBefore);
+    const changedFiles = modificados(repo);
+    logHook(M.precompactLogGitAfter(changedFiles.length));
+
+    // Gravar vem antes de decidir (RN-1): se só der para fazer uma coisa, é pôr o estado em disco.
+    const montado = assemble(repo, { engine, trigger, changedFiles });
+    const gravou = montado.outcome === ASSEMBLED;
+    if (gravou) {
+      logHook(M.precompactLogWriteBefore(montado.destination));
+      const { appended } = persist(repo, montado);
+      logHook(M.precompactLogWriteAfter(montado.destination, appended));
+    }
+
+    // A borda passa o FATO de ter gravado; quem conjuga isso com gatilho e carimbo é o núcleo.
+    const veredito = decide({ engine, trigger, blockedAt: readStamp(core, engine), saved: gravou });
+    if (veredito.block) {
+      // A palavra é escolhida DEPOIS da decisão, e não antes: dizer "a compactação vai acontecer" no
+      // caminho em que ela foi impedida seria a saída se contradizendo dentro do mesmo envelope.
+      //
+      // O motivo vai no envelope, e não no stderr: a doc diz que a mensagem de bloqueio é "the
+      // reason from your JSON's blocking decision when it makes one, and your stderr text
+      // otherwise" — declarando a decisão, o stderr fica livre para ser canal de log.
+      const entregue = emitirAviso(engine, {
+        message: M.precompactWroteBlocked(montado.destination, montado.slug),
+        deny: M.precompactBlocked(montado.destination),
+      });
+      // Bloquear sem conseguir entregar o motivo obstruiria o usuário sem explicação — e é pior que
+      // isso: sem envelope válido, a própria doc diz que a mensagem de bloqueio passa a ser o
+      // stderr, que aqui carrega as linhas de log. Então não bloqueia. E **não carimba**: a próxima
+      // tentativa continua valendo como recusa nova, em vez de ser liberada por uma recusa que o
+      // usuário nunca viu.
+      if (!entregue) return 0;
+      logHook(M.precompactLogStampBefore);
+      writeStamp(core, { engine });
+      logHook(M.precompactLogStampAfter);
+      return 2;
+    }
+    const gravacao = gravou
+      ? M.precompactWrote(montado.destination, montado.slug)
+      : M.precompactNothingToSave;
+    const seguinte = veredito.repeated ? M.precompactProceeding : M.precompactSuggestNewSession;
+    emitirAviso(engine, { message: `${gravacao} ${seguinte}` });
+    return 0;
+  } catch {
+    // Silêncio é melhor que ruído no contexto do agente. O aviso, quando houve, já saiu acima.
+    return 0;
+  }
+}
+
+// Escrita SÍNCRONA nos dois canais do hook, e isto não é preferência de estilo: o processo termina em
+// `process.exit`, e em pipe o stdout do Node é assíncrono — o `write` enfileira e a saída pode ser
+// truncada antes do flush. Perder o envelope aqui é perder a única mensagem que chega ao usuário.
+// Tentativas em canal que não drenou. NÃO é medição: é escolha de desenho declarada. Existe porque
+// dentro do hook a espera é limitada pelo teto de 15s da entrada, mas numa invocação à mão com o
+// stdout redirecionado para um pipe non-blocking não há teto nenhum — girar sem limite queimaria CPU
+// até alguém ler. Passado o teto, trata-se o canal como indisponível, que é o que o desenho já faz
+// para qualquer outro erro.
+const MAX_TENTATIVAS_DE_ESCRITA = 1000;
+
+// Erros retentáveis: canal non-blocking que ainda não drenou, e chamada interrompida por sinal. Os
+// dois são "tente de novo", e não "o canal morreu".
+const RETENTAVEIS = new Set(["EAGAIN", "EINTR"]);
+
+// Devolve se a mensagem saiu INTEIRA. O retorno importa: escrita parcial seguida de canal fechado
+// deixaria um envelope truncado, e quem chamou precisa saber para não agir como se tivesse avisado.
+const escreverSync = (fd, texto) => {
+  const bytes = Buffer.from(texto, "utf8");
+  let escrito = 0;
+  let tentativas = 0;
+  // Laço porque `writeSync` devolve QUANTOS bytes escreveu: em pipe a escrita pode ser parcial, e
+  // parar na primeira chamada truncaria a mensagem no meio de um JSON.
+  while (escrito < bytes.length) {
+    try {
+      const n = writeSync(fd, bytes, escrito);
+      // Zero byte escrito sem erro não progride: repetir seria laço infinito.
+      if (n <= 0) return false;
+      escrito += n;
+      tentativas = 0;
+    } catch (erro) {
+      if (!RETENTAVEIS.has(erro.code)) return false;
+      if (++tentativas > MAX_TENTATIVAS_DE_ESCRITA) return false;
+    }
+  }
+  return true;
+};
+
+// Log de hook vai para o STDERR, nunca para o stdout: o stdout deste evento carrega o envelope JSON,
+// e texto solto ali o tornaria impossível de parsear. A doc diz que "stderr from a hook that exits 0
+// goes to the debug log only, never the transcript, and Claude never sees it" — é destino de
+// diagnóstico, que é o que a LOG-1/LOG-2 pedem, sem virar ruído no contexto de ninguém.
+// Log não tem o que fazer com o resultado: se o canal de diagnóstico caiu, não há onde relatar isso
+// — e relatar pelo próprio canal seria recursivo.
+const logHook = (linha) => { escreverSync(2, `[mgr] ${linha}\n`); };
+
+// O aviso ao usuário sai pelo envelope que o motor declara, ou não sai. Motor sem canal não recebe
+// texto solto: imprimir no que a plataforma descarta faria a fatia parecer avisar.
+// Devolve se NADA foi perdido. Motor sem canal devolve `true`: não havia o que entregar, e isso não
+// é falha de entrega — é a degradação que o descritor declara.
+const emitirAviso = (engine, conteudo) => {
+  const envelope = notice(engine, conteudo);
+  return envelope === null || escreverSync(1, `${envelope}\n`);
+};
+
+// O payload chega por stdin. Vazio e JSON inválido são entrada legítima de uma sessão estranha, não
+// erro do usuário: viram objeto vazio, e o gatilho desconhecido não bloqueia (`decide`).
+async function lerPayload() {
+  const pedacos = [];
+  for await (const pedaco of process.stdin) pedacos.push(pedaco);
+  try {
+    return JSON.parse(Buffer.concat(pedacos).toString("utf8")) ?? {};
+  } catch {
+    return {};
+  }
+}
+
+const modificados = (repo) => {
+  try {
+    // `stdio` ignora o stderr do git de propósito: em repositório sem git ele imprime "not a git
+    // repository", e isso cairia no contexto do agente — o ruído que a DT-8 quer impedir.
+    return execFileSync("git", ["status", "--short"], {
+      cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+    })
+      .split("\n").map((linha) => linha.trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+};
+
 // `mgr agents set` — escreve a política de UMA intenção e diz o que passou a valer (ADR-0017).
 //
 // A decisão de MERGE e a validação são do núcleo (`writeAgentPolicy`); aqui só se resolve para
@@ -1011,8 +1163,11 @@ async function cmdUninstall(flags, positional) {
   const res = installer.uninstall(scope, repo);
   for (const r of res.removed) console.log(pc.dim(M.removedItem(r)));
   for (const engine of installer.ENGINES) {
+    // Os eventos vêm do núcleo, como na escrita: remontá-los aqui duplicaria a regra de quais
+    // eventos o método usa, que foi a reprovação do gate do bloco P1.
+    const eventos = writtenEvents(engine).join(" · ");
     const file = removeHook(engine, repo);
-    if (file) console.log(pc.dim(M.hookRemoved(path.relative(repo, file))));
+    if (file) console.log(pc.dim(M.hookRemoved(path.relative(repo, file), eventos)));
   }
   console.log(pc.green(M.uninstalled));
   return 0;
@@ -1043,8 +1198,13 @@ async function main() {
   // Refina o idioma da CLI: flag > manifesto (project > global) > locale (default acima).
   const semRepoPosicional = PLUGIN_COMMANDS.includes(command) || SUBCOMMAND_COMMANDS.includes(command);
   const repo = path.resolve(semRepoPosicional ? "." : (positional[0] || "."));
-  const manifestLang = installer.detectPrior("project", repo)?.userLanguage
-    || installer.detectPrior("global", repo)?.userLanguage;
+  // Manifesto corrompido não pode derrubar o processo ANTES do try: num hook, um stack trace no
+  // stderr é exatamente o ruído no contexto do agente que a DT-8 do ADR-0018 quer impedir.
+  let manifestLang = null;
+  try {
+    manifestLang = installer.detectPrior("project", repo)?.userLanguage
+      || installer.detectPrior("global", repo)?.userLanguage;
+  } catch { /* idioma cai para o locale, que é o default de sempre */ }
   M = getMessages(flags.userLanguage || manifestLang || detectUserLanguage(process.env));
   try {
     switch (command) {
@@ -1053,6 +1213,7 @@ async function main() {
       case "remove": return cmdRemove(flags, positional);
       case "registry": return cmdRegistry(flags, positional);
       case "detect": return await cmdDetect(flags, positional);
+      case "precompact": return await cmdPrecompact(flags);
       case "status": return cmdStatus(flags, positional);
       case "update": return await cmdUpdate(flags, positional);
       case "uninstall": return await cmdUninstall(flags, positional);

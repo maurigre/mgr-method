@@ -52,12 +52,36 @@ in its Principles, the concrete names of its rings/layers.
 
 ### Log standards
 
-1. (LOG-1) Info-level log always right before and right after changing state in a database or
-   messaging system (rabbit/kafka).
-2. (LOG-2) Info-level log always right before and right after calling an external HTTP API.
+1. (LOG-1) Info-level log always right before and right after changing **persisted state** — a
+   database, a messaging system (rabbit/kafka) or a file on disk.
+2. (LOG-2) Info-level log always right before and right after calling an external HTTP API or
+   **spawning a subprocess**.
 3. (LOG-3) Error-level log only in catches; exception: an error log for metrics when the
    exception is not rethrown.
 4. (LOG-4) Debug-level log only in conditionals that interrupt flows.
+
+### Documentation standards
+
+1. (DOC-1) A new capability appears in the documentation **where it belongs**: a new module or
+   layer in the architecture document; a new command, endpoint, event or configuration key in the
+   contract document; and **in the README everything the user sees** — a command, a capability, any
+   change to the surface they touch.
+2. (DOC-2) Documentation does not contradict the code: a document that names a module, command,
+   path or field that no longer exists reproves, and so does one whose declared source does not
+   exist.
+
+> **Rationale (DOC):** documentation that lags is documentation that lies — it is read as a
+> statement about the code, and a reader has no way to tell a stale line from a current one. These
+> two rules exist because the flow already asks for the update and nothing verified it: a rule with
+> no trigger is advice. DOC-1 catches the omission, DOC-2 catches the contradiction, and both are
+> checked by reading — no command to run, no judgement about whether the wording is *good*.
+>
+> **Why DOC-1 says "where it belongs" instead of naming all three documents:** the first wording
+> demanded every capability in all three, and it was found to demand the impossible while being
+> applied to the very slice that wrote it — an internal module has no external contract, and a README
+> that lists every module of a core is a README nobody reads. A rule that demands the impossible is a
+> rule people route around. The README half stays **unconditional for user-facing surface**, which is
+> what the omission actually costs.
 
 ### Mutation testing scope
 

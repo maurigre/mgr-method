@@ -1,6 +1,6 @@
 ---
 name: arch-onion
-description: Provider of the review rules guide for projects with Onion Architecture (Jeffrey Palermo), LANGUAGE-AGNOSTIC. Invoked by spec-init with the project's language; assembles docs/sdd/09-review-rules.md combining the Onion principles (object model at the center, interfaces in the core, coupling toward the center) with the shared cross-cutting rules (design, tests, logs, mutation and the language profile). Rules numbered with stable IDs, textually citable by the code-analyzer. Use when the project's architecture is Onion.
+description: Provider of the review rules guide for projects with Onion Architecture (Jeffrey Palermo), LANGUAGE-AGNOSTIC. Invoked by spec-init with the project's language; assembles docs/sdd/09-review-rules.md combining the Onion principles (object model at the center, interfaces in the core, coupling toward the center) with the shared cross-cutting rules (design, tests, logs, documentation, mutation and the language profile). Rules numbered with stable IDs, textually citable by the code-analyzer. Use when the project's architecture is Onion.
 ---
 
 # arch-onion — Rules guide (Onion Architecture)

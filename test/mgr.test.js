@@ -70,6 +70,18 @@ test("install autossuficiente: só o subconjunto na pasta do motor, sem .mgr-cor
 
   assert.ok(existsSync(path.join(sk, "_shared", "arch", "cross-cutting-rules.md")));
   assert.ok(existsSync(path.join(sk, "_shared", "quality", "quality-rules.md")), "fonte de qualidade co-locada (spec-init)");
+
+  // ADR-0020: as regras de documentação e as de log ampliadas viajam para o projeto instalado, e é
+  // de lá que o `spec-init` monta o guia de review dele. Conferir só a existência do arquivo não
+  // provaria isso — foi assim que a defasagem passou.
+  const transversais = readFileSync(path.join(sk, "_shared", "arch", "cross-cutting-rules.md"), "utf8");
+  for (const regra of ["(DOC-1)", "(DOC-2)"]) {
+    assert.ok(transversais.includes(regra), `${regra} tem de chegar ao projeto: sem ela o gate não tem o que citar`);
+  }
+  assert.match(transversais, /\(LOG-1\)[^\n]*\n?[^\n]*file on disk/,
+    "a LOG-1 ampliada: foi a redação com disco que exigiu o par de logs em volta da escrita do hand-off");
+  assert.match(transversais, /\(LOG-2\)[^\n]*\n?[^\n]*subprocess/,
+    "a LOG-2 ampliada: foi ela que exigiu o par em volta do subprocesso do git");
   const archMd = readFileSync(path.join(sk, "arch-hexagonal", "SKILL.md"), "utf8");
   assert.ok(!archMd.includes("{{MGR_ARCH_RULES}}"), "token deve ser resolvido");
   assert.ok(archMd.includes("_shared/arch/cross-cutting-rules.md"), "deve apontar para a fonte co-locada");
@@ -1944,7 +1956,12 @@ test("mgr spec validate: a marca de pendência só vira aviso em feature com 06-
 
   const fechada = diretorioTemporario();
   artefatoComTexto(fechada, "demo", "01-brief.md", "o prazo [A DEFINIR]\n");
-  artefatoComTexto(fechada, "demo", "06-completion.md", "fechada\n");
+  // A fixture ganhou a declaração de diff porque o eixo de documentação (ADR-0020) passou a exigi-la
+  // de todo fechamento, e este teste roda o COMANDO, que compõe os quatro eixos. Sem isso, o DOC-3
+  // reprovaria a fixture e o teste passaria a medir a regra errada — não é teste massageado, é
+  // fixture que precisa ser um completion válido para o que ela existe para testar (PROV-3).
+  artefatoComTexto(fechada, "demo", "06-completion.md",
+    "fechada\n\n## Diff do SDD\n\nNenhuma alteração necessária: fixture de teste.\n");
   const { stdout, status } = rodarValidate(fechada, ["demo"]);
   assert.equal(status, 0, "PROV-3 é aviso: não bloqueia");
   assert.match(stdout, /PROV-3/);
@@ -2862,6 +2879,43 @@ const repoInstalado = () => {
     "-y", "--project-id", "proj-de-teste"], { ...ptBR(repo), stdio: "ignore" });
   return repo;
 };
+
+// ADR-0020: o quarto eixo do `mgr spec validate`. O que se protege aqui é que ele seja MECÂNICO —
+// o gate de review pega conteúdo errado, este pega o passo esquecido.
+test("mgr spec validate: o eixo de documentação reprova fechamento sem a declaração de diff", () => {
+  const repo = diretorioTemporario();
+  const dir = path.join(repo, "specs", "alfa");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, "01-brief.md"), "# Brief\n", "utf8");
+  writeFileSync(path.join(dir, "05-execution.md"), "# Execução\n", "utf8");
+  writeFileSync(path.join(dir, "06-completion.md"), "# Completion\n\n## Testes\n\nverdes\n", "utf8");
+
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const { stdout, status } = (() => {
+    try { return { stdout: execFileSync("node", [bin, "spec", "validate", "alfa"], ptBR(repo)), status: 0 }; }
+    catch (erro) { return { stdout: `${erro.stdout}`, status: erro.status }; }
+  })();
+
+  assert.equal(status, 1, "erro bloqueia: a adesão medida é de 13 em 14, então a regra formaliza prática");
+  assert.match(stdout, /DOC-3/);
+  assert.match(stdout, /sem a declaração do diff/);
+});
+
+test("mgr spec validate: fechamento que declara o diff com arquivo existente passa", () => {
+  const repo = diretorioTemporario();
+  const dir = path.join(repo, "specs", "alfa");
+  mkdirSync(dir, { recursive: true });
+  mkdirSync(path.join(repo, "docs", "sdd"), { recursive: true });
+  writeFileSync(path.join(repo, "docs", "sdd", "03-contracts.md"), "# contratos\n", "utf8");
+  writeFileSync(path.join(dir, "05-execution.md"), "# Execução\n", "utf8");
+  writeFileSync(path.join(dir, "06-completion.md"),
+    "# Completion\n\n## Diff do SDD\n\n- `03-contracts.md`: o comando novo entrou\n", "utf8");
+
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const saida = execFileSync("node", [bin, "spec", "validate", "alfa"], ptBR(repo));
+  assert.ok(!saida.includes("DOC-3"), "declarou o diff com fato: não há o que reprovar");
+  assert.ok(!saida.includes("DOC-4"));
+});
 
 test("mgr precompact: referencia o contexto no manifesto do escopo GLOBAL", () => {
   const repo = repoInstalado();

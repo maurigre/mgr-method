@@ -1187,6 +1187,30 @@ test("o descritor publica arquivo, evento e forma da entrada de cada motor", () 
     { type: "command", bash: "CMD", timeout: 15, matcher: "manual|auto" });
 });
 
+// P1.1 — o descritor publica ONDE vivem os transcripts de subagente, como dado. Layout medido em
+// disco em 2026-09-13, em quatro sessões deste projeto. Esta task não tem consumidor: só o dado.
+test("o descritor diz onde achar o que mais pertence à sessão, no layout medido", () => {
+  const doPayload = "/casa/.claude/projects/-proj/abc-123.jsonl";
+  const artefatos = engineDescriptor("claude-code").sessionArtifacts(doPayload);
+  assert.deepEqual(artefatos.map(({ kind }) => kind), ["subagent", "tool-result"],
+    "dois tipos medidos em disco: o raciocínio dos subagentes e a saída derramada de ferramenta");
+
+  const [subagente, ferramenta] = artefatos;
+  assert.deepEqual(subagente.dir, ["/casa/.claude/projects/-proj/abc-123", "subagents"],
+    "o payload aponta o .jsonl da sessão, e o resto fica no diretório irmão sem a extensão");
+  assert.ok(subagente.pattern.test("agent-a085616553fb902ed.jsonl"), "nome real medido em disco");
+  assert.ok(!subagente.pattern.test("agent-a085616553fb902ed.meta.json"),
+    "o .meta.json vive ao lado e não é transcript: incluí-lo poria metadado no lugar de conversa");
+
+  assert.deepEqual(ferramenta.dir, ["/casa/.claude/projects/-proj/abc-123", "tool-results"]);
+  assert.ok(ferramenta.pattern.test("toolu_01MARfHko7Lq2ySD7TitB8Fp.txt"), "nome real medido");
+  assert.ok(ferramenta.pattern.test("bsqw855y0.txt"),
+    "medido em disco: o nome NÃO é sempre `toolu_<id>`, e casar pelo prefixo perderia arquivo calado");
+
+  assert.deepEqual(engineDescriptor("copilot").sessionArtifacts(doPayload), [],
+    "layout não medido neste motor: vazio é não-se-sabe, e preencher seria palpite sobre terceiro");
+});
+
 test("o descritor é dado PURO: nenhum campo de hook depende de IO ou de caminho da máquina", () => {
   for (const id of engineIds()) {
     const motor = engineDescriptor(id);

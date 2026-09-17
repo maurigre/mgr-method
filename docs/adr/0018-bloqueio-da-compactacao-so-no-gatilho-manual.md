@@ -149,6 +149,16 @@ continuam declarados como a outra metade da dívida.
 - O método passa a poder interromper um pedido explícito do usuário, o que é comportamento novo e
   precisa ser óbvio quando acontece.
 - Mais um evento de hook em arquivo que é do usuário, com a reconciliação que isso implica.
+- **Medido em 2026-09-17, e calibra o que esperar desta decisão:** varridos **todos os cinco transcripts de
+  sessão** deste projeto, as **três** compactações registradas tiveram `trigger: auto` — nenhuma foi
+  `manual`. O
+  `compactMetadata` de cada boundary registra isso, junto de `preTokens` perto de **1 milhão** contra
+  `postTokens` de **18 a 27 mil**, ou seja cerca de **97% do contexto descartado** por compactação.
+  **Então o bloqueio desta decisão não teria agido em nenhuma delas.** A decisão continua certa pelas
+  razões acima — bloquear no `auto` pode derrubar a requisição em curso, e a doc é explícita —, mas o
+  que ela protege na prática é o caso menos frequente. Quem contar com ela para evitar perda de
+  contexto vai depender do hand-off, não do bloqueio. Medição em
+  `specs/dump-de-contexto-antes-da-compactacao/medicao-boundary.md`.
 - No copilot o aviso **não tem canal nenhum**, e isso é da plataforma: o hand-off é gravado e o
   usuário não é avisado. A degradação é declarada no CHANGELOG e nos READMEs, que é onde ele pode ler.
 - O método passa a depender de um campo de saída estruturado do claude-code (`systemMessage` e

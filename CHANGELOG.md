@@ -24,6 +24,15 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   arquivo em `src/engines/` mais uma linha no mapa de motores. Isso paga metade da dívida que o
   ADR-0010 tinha nomeado — a outra metade segue nomeada e aberta: `src/adapters.js`, o instalador e a
   saída do hook de sessão em `src/detector.js`.
+- **O contexto da conversa passa a ser REFERENCIADO antes da compactação** (ADR-0019). O hand-off diz
+  em que ponto o trabalho está; ele não sabe **por que** as decisões foram tomadas, e declara isso.
+  Agora, quando o motor anuncia a compactação, o método também registra **onde está a conversa
+  inteira** — o arquivo que o próprio motor mantém, mais o raciocínio dos subagentes e a saída de
+  ferramenta que ficou grande e foi para disco.
+- **Um arquivo de contexto por projeto, e só ele.** `~/.mgr-core/context/<projeto>.json`, de
+  kilobytes, com caminho, tamanho, número de registros e checksum medidos no instante. **Nada é
+  copiado:** o transcript persiste no motor e sobrevive à compactação — medido —, então duplicá-lo
+  seria acumular megabytes sem proteger de nada.
 - **O hook de pré-compactação declara um teto de tempo de 15s.** Ele lê o payload do stdin, e o
   default que a doc do Claude Code declara para hook de comando é de 600s — dez minutos pendurado
   se algo não fechar a entrada. O hook de início de sessão **não** foi tocado.
@@ -35,6 +44,22 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   contrário do evento de início de sessão, que aceita contexto adicional. O hand-off **é gravado
   igual**; o que não existe ali é canal de aviso. O método prefere calar a imprimir num canal que a
   plataforma descarta, porque isso o faria parecer avisar.
+- **O método APONTA para o contexto, ele não o guarda.** Quem limpar o histórico do motor, trocar de
+  máquina ou apagar a pasta de sessões perde o que a referência apontava. Por isso o registro grava
+  **checksum e tamanho**: quem for consumir descobre que o arquivo mudou ou desapareceu, em vez de
+  supor que está lá.
+- **A consolidação na memória estendida AINDA NÃO EXISTE.** Esta versão só **registra a
+  referência** — nada é enviado ao `mgr-code`, e o comando **nem tenta** falar com ele. Recuperar o
+  contexto numa sessão nova depende dessa segunda metade, que é trabalho próprio e está declarado.
+- **No Copilot o registro acontece, e o aviso não chega.** Mesma razão de sempre: o evento dele é só
+  notificação e não tem canal de volta.
+- **O bloqueio protege o caso MENOS frequente, e isto foi medido.** Varridos **todos os cinco
+  transcripts de sessão** deste projeto, há **três** compactações, e o gatilho de todas foi
+  **automático** — nenhuma foi `/compact` pedido. Como o
+  método só impede no pedido manual (bloquear no automático pode derrubar a requisição em curso), o
+  bloqueio **não teria agido em nenhuma delas**. O que protege no automático é o hand-off gravado
+  antes, não o bloqueio. De passagem, a medida do problema: cerca de **97% do contexto é descartado**
+  em cada compactação (perto de 1 milhão de tokens antes, 18 a 27 mil depois).
 - **No claude-code o aviso chega em todo caminho, e não só no bloqueio.** Ele vai pelo campo que a
   doc indica para falar com você (`systemMessage` no JSON de saída). O `stdout` do hook, que a versão
   anterior desta fatia usava, vai para o **debug log** neste evento — quem só olhasse a sessão não

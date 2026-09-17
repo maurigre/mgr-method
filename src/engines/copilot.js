@@ -87,6 +87,12 @@ export default {
     // degradação é declarada ao usuário no CHANGELOG e nos READMEs, que é onde ele pode ler.
     notice: null,
   },
+  // Sem convenção conhecida para o que mais pertence à sessão (ADR-0019). `[A CONFIRMAR]`: não foi
+  // medido — o layout do claude-code foi apurado em disco em 2026-09-13 e 2026-09-17, o deste não.
+  //
+  // Lista **vazia** é "não se sabe onde", e o núcleo a trata como ausência, não como erro. Preencher
+  // com caminhos plausíveis seria palpite sobre layout de terceiro, que é o que a RN-2 proíbe.
+  sessionArtifacts: () => [],
   capabilities: {
     agentModel: true,
     agentEffort: false,

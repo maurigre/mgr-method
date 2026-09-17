@@ -92,6 +92,7 @@ code-analyzer ─ final 2-axis review: Standards (THE project's guide) + Spec (d
 | `adr-create` | Nygard-format ADRs: auto-detects the directory, sequential numbering, immutability of accepted ones, standalone or invoked mode. |
 | `code-analyzer` | Rigorous **two-axis** reviewer, reported side by side: **Standards** (does the code follow `docs/sdd/09-review-rules.md`?) and **Spec** (did the code fulfill its originating spec?). **Critical Restriction** on both: every reproval quotes textually — the guide rule or the spec line; no citation, no reproval (§3.1). Two-axis model adapted from Matt Pocock's `code-review` ([MIT](https://github.com/mattpocock/skills)). Runs in the **validation gate**: its own agent, with declared model and effort, **no write tools**, and without the conversation that produced the code (ADR-0010). Tunable in `.mgr-core/config.json` → `reviewGate`. |
 | `diagnosing-bugs` | Discipline for diagnosing hard bugs: requires a **red** reproduction loop before any hypothesis (*signal before theory*), 3–5 falsifiable hypotheses, a regression test before the fix. Finds the cause and stops (hands the repair to `spec-create`). Adapted from Matt Pocock's `diagnosing-bugs` ([MIT](https://github.com/mattpocock/skills)). |
+| **Context reference before compaction** | When the engine announces compaction, the method records **where this session's conversation lives** — the transcript the engine itself keeps, plus subagent reasoning and tool output spilled to disk — in a single per-project manifest, with size and checksum measured at that moment. Nothing is copied: the transcript survives compaction, so duplicating it would pile up megabytes and protect nothing. The method **points** at the context, it does not keep it, and consolidation into `mgr-code` is a separate piece that does not exist yet (ADR-0019). |
 | **Pre-compaction hand-off** | When the engine announces it is about to compact the context, the method writes the hand-off **first**, states the reason and suggests a new session. On a `/compact` you asked for, in claude-code, it blocks once so you decide with the state already safe on disk. In copilot the event is notification only: the hand-off is still written, but the platform gives the hook no way to block and no way to reach you (ADR-0018). |
 | `configure-agents` | Guides the choice of model and effort per intent (`drafting`, `execution`, `review`) and writes it with `mgr agents set`. It says what each intent does and shows the identifiers each engine documents, and it **never suggests** a model for an intent: the available models and the bill both belong to your account. |
 | `evidence-capture` | Records AI-First evidence per feature (prompts, reviews, skills) in `specs/<feature>/ai/` + a global index; organizes and asks, never invents. |
@@ -125,11 +126,18 @@ decision automatically generates an ADR. Out comes the same SDD as brownfield; t
 ## Repository structure
 
 ```
-bin/mgr.js          # CLI (install · status · update · uninstall · build · validate · list · add · remove · registry)
-src/                # bundle · builder · installer · manifest · validator · plugin · registry · lockfile · adapters
+bin/mgr.js          # CLI: install · status · update · uninstall · build · validate · list · version
+                    #      add · remove · registry · detect · agents · tokens · spec · precompact
+src/                # the core, 33 modules: install and build · per-engine descriptor · plugin
+                    # skill · spec artifact (parser/rules/validator) · session and context (hooks,
+                    # pre-compaction, context reference) · messages
+src/engines/        # what each engine supports, as DATA — never an `if` on the engine name
 skills/             # the 13 skills (source)
-shared/scripts/     # sdd-check.sh (checks the spec-create prerequisites)
+agents/             # the 3 agent moulds (drafting, execution, review gate)
+shared/             # cross-cutting sources: architecture and quality rules, laws, sdd-check.sh
+docs/adr/           # the decisions, Nygard format — versioned and self-contained
 docs/plugins.md     # plugin skill format: manifest, registry, lockfile, capability matrix
+docs/engine-hooks.md # hook capability matrix for the six engines studied, with source and date
 test/               # node:test
 ```
 

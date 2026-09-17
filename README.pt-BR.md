@@ -97,6 +97,7 @@ code-analyzer ─ review final de 2 eixos: Standards (guia DO projeto) + Spec (c
 | `adr-create` | ADRs formato Nygard: auto-detecta diretório, numeração sequencial, imutabilidade de aceitos, modo avulso ou invocado. |
 | `code-analyzer` | Revisor rigoroso de **dois eixos**, reportados lado a lado: **Standards** (o código segue `docs/sdd/09-review-rules.md`?) e **Spec** (o código cumpriu a spec de origem?). **Restrição Crítica** nos dois: toda reprovação cita textualmente — a regra do guia ou a linha da spec; sem citação, não reprova (§3.1). Modelo de dois eixos adaptado de `code-review` de Matt Pocock ([MIT](https://github.com/mattpocock/skills)). Roda no **gate de validação**: agente próprio, com modelo e esforço declarados, **sem ferramenta de escrita** e sem o histórico da conversa que produziu o código (ADR-0010). Ajustável em `.mgr-core/config.json` → `reviewGate`. |
 | `diagnosing-bugs` | Disciplina de diagnóstico de bug difícil: exige um loop de reprodução **vermelho** antes de qualquer hipótese (*sinal antes de teoria*), 3–5 hipóteses falsificáveis, teste de regressão antes do fix. Acha a causa e para (entrega o conserto ao `spec-create`). Adaptada de `diagnosing-bugs` de Matt Pocock ([MIT](https://github.com/mattpocock/skills)). |
+| **Referência ao contexto antes da compactação** | Quando o motor anuncia a compactação, o método registra **onde está a conversa desta sessão** — o transcript que o próprio motor mantém, mais o raciocínio dos subagentes e a saída de ferramenta que foi para disco — num único manifesto por projeto, com tamanho e checksum medidos no instante. Nada é copiado: o transcript sobrevive à compactação, então duplicá-lo acumularia megabytes sem proteger de nada. O método **aponta** para o contexto, não o guarda, e a consolidação no `mgr-code` é peça própria que ainda não existe (ADR-0019). |
 | **Hand-off antes da compactação** | Quando o motor anuncia que vai compactar o contexto, o método grava o hand-off **antes**, diz o motivo e sugere sessão nova. No `/compact` que você pediu, no claude-code, ele impede uma vez para você decidir com o estado já a salvo. No copilot o evento é só notificação: o hand-off continua sendo gravado, mas a plataforma não dá ao hook como impedir nem como falar com você (ADR-0018). |
 | `configure-agents` | Conduz a escolha de modelo e esforço por intenção (`drafting`, `execution`, `review`) e escreve com `mgr agents set`. Diz o que cada intenção faz e mostra os identificadores que cada motor documenta, e **nunca sugere** modelo para uma intenção: os modelos disponíveis e a conta são seus. |
 | `evidence-capture` | Registra evidências AI-First por funcionalidade (prompts, revisões, habilidades) em `specs/<feature>/ai/` + índice global; organiza e pergunta, nunca inventa. |
@@ -128,11 +129,18 @@ feature, idêntico.
 ## Estrutura do repositório
 
 ```
-bin/mgr.js          # CLI (install · status · update · uninstall · build · validate · list · add · remove · registry)
-src/                # bundle · builder · installer · manifest · validator · plugin · registry · lockfile · adapters
+bin/mgr.js          # CLI: install · status · update · uninstall · build · validate · list · version
+                    #      add · remove · registry · detect · agents · tokens · spec · precompact
+src/                # o núcleo, 33 módulos: instalação e build · descritor por motor · skill
+                    # plugável · artefato de spec (parser/regras/validador) · sessão e contexto
+                    # (hooks, pré-compactação, referência ao contexto) · mensagens
+src/engines/        # o que cada motor suporta, como DADO — nunca `if` por nome de motor
 skills/             # as 13 skills (fonte)
-shared/scripts/     # sdd-check.sh (verifica pré-requisitos do spec-create)
+agents/             # os 3 moldes de agente (redação, implementação, gate de review)
+shared/             # fontes transversais: regras de arquitetura e qualidade, leis, sdd-check.sh
+docs/adr/           # as decisões, formato Nygard — versionadas e autocontidas
 docs/plugins.md     # formato de skill plugável: manifest, registry, lockfile, matriz de suporte
+docs/engine-hooks.md # matriz de capacidade de hook dos seis motores estudados, com fonte e data
 test/               # node:test
 ```
 

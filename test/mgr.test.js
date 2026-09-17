@@ -1187,6 +1187,30 @@ test("o descritor publica arquivo, evento e forma da entrada de cada motor", () 
     { type: "command", bash: "CMD", timeout: 15, matcher: "manual|auto" });
 });
 
+// P1.1 — o descritor publica ONDE vivem os transcripts de subagente, como dado. Layout medido em
+// disco em 2026-09-13, em quatro sessões deste projeto. Esta task não tem consumidor: só o dado.
+test("o descritor diz onde achar o que mais pertence à sessão, no layout medido", () => {
+  const doPayload = "/casa/.claude/projects/-proj/abc-123.jsonl";
+  const artefatos = engineDescriptor("claude-code").sessionArtifacts(doPayload);
+  assert.deepEqual(artefatos.map(({ kind }) => kind), ["subagent", "tool-result"],
+    "dois tipos medidos em disco: o raciocínio dos subagentes e a saída derramada de ferramenta");
+
+  const [subagente, ferramenta] = artefatos;
+  assert.deepEqual(subagente.dir, ["/casa/.claude/projects/-proj/abc-123", "subagents"],
+    "o payload aponta o .jsonl da sessão, e o resto fica no diretório irmão sem a extensão");
+  assert.ok(subagente.pattern.test("agent-a085616553fb902ed.jsonl"), "nome real medido em disco");
+  assert.ok(!subagente.pattern.test("agent-a085616553fb902ed.meta.json"),
+    "o .meta.json vive ao lado e não é transcript: incluí-lo poria metadado no lugar de conversa");
+
+  assert.deepEqual(ferramenta.dir, ["/casa/.claude/projects/-proj/abc-123", "tool-results"]);
+  assert.ok(ferramenta.pattern.test("toolu_01MARfHko7Lq2ySD7TitB8Fp.txt"), "nome real medido");
+  assert.ok(ferramenta.pattern.test("bsqw855y0.txt"),
+    "medido em disco: o nome NÃO é sempre `toolu_<id>`, e casar pelo prefixo perderia arquivo calado");
+
+  assert.deepEqual(engineDescriptor("copilot").sessionArtifacts(doPayload), [],
+    "layout não medido neste motor: vazio é não-se-sabe, e preencher seria palpite sobre terceiro");
+});
+
 test("o descritor é dado PURO: nenhum campo de hook depende de IO ou de caminho da máquina", () => {
   for (const id of engineIds()) {
     const motor = engineDescriptor(id);
@@ -2623,10 +2647,11 @@ const repoComFeature = () => {
   return repo;
 };
 
-const rodarPrecompact = (repo, engine, payload) => {
+const rodarPrecompact = (repo, engine, payload, env = {}) => {
   const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const base = ptBR(repo);
   const { stdout, stderr, status } = spawnSync("node", [bin, "precompact", "--hook", engine],
-    { ...ptBR(repo), input: payload });
+    { ...base, env: { ...base.env, ...env }, input: payload });
   return { stdout, stderr, status };
 };
 
@@ -2818,6 +2843,80 @@ test("mgr precompact: sem feature em andamento, não bloqueia nem carimba", () =
   assert.equal(status, 0, "bloquear sem ter gravado nada só obstrui: não há estado para preservar");
   assert.equal(existsSync(path.join(repo, ".mgr-core")), false,
     "a invariante 2 diz que sem feature em andamento NENHUM arquivo é escrito");
+});
+
+// P1.4 — a referência ao contexto (ADR-0019). O `done_when` mais duro da fatia: o que a fatia
+// anterior entrega tem de continuar EXATAMENTE igual.
+const transcriptFalso = (repo, linhas) => {
+  const dir = path.join(repo, "conversas");
+  mkdirSync(dir, { recursive: true });
+  const arquivo = path.join(dir, "sessao-1.jsonl");
+  writeFileSync(arquivo, `${linhas.join("\n")}\n`, "utf8");
+  return arquivo;
+};
+
+const repoInstalado = () => {
+  const repo = repoComFeature();
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  execFileSync("node", [bin, "install", repo, "--engine", "claude-code", "--scope", "project",
+    "-y", "--project-id", "proj-de-teste"], { ...ptBR(repo), stdio: "ignore" });
+  return repo;
+};
+
+test("mgr precompact: referencia o contexto no manifesto do escopo GLOBAL", () => {
+  const repo = repoInstalado();
+  const lar = diretorioTemporario();
+  const transcript = transcriptFalso(repo, ['{"type":"user"}', '{"type":"assistant"}']);
+  const { stdout, status } = rodarPrecompact(repo, "claude-code",
+    JSON.stringify({ trigger: "auto", transcript_path: transcript, session_id: "sessao-1" }),
+    { HOME: lar });
+
+  assert.equal(status, 0);
+  const manifesto = path.join(lar, ".mgr-core", "context", "proj-de-teste.json");
+  assert.ok(existsSync(manifesto), "o manifesto vai para o escopo global, nunca para o repositório");
+  const { spoolFormat, entries } = JSON.parse(readFileSync(manifesto, "utf8"));
+  assert.equal(spoolFormat, 1);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].transcriptRecords, 2, "medido, não estimado");
+  assert.equal(entries[0].sessionId, "sessao-1");
+  assert.deepEqual(entries[0].previousBoundaries, []);
+
+  assert.match(envelopeDe(stdout).systemMessage, /Contexto desta sessão referenciado/);
+  assert.match(envelopeDe(stdout).systemMessage, /APONTA para o contexto, não o guarda/,
+    "o usuário precisa saber que limpar o histórico do motor perde o que a referência aponta");
+});
+
+// A invariante 6 e o `done_when`: nada desta fatia escreve dentro do repositório do usuário.
+test("mgr precompact: a referência NÃO escreve nada no repositório do usuário", () => {
+  const repo = repoInstalado();
+  const lar = diretorioTemporario();
+  const transcript = transcriptFalso(repo, ['{"type":"user"}']);
+  execFileSync("git", ["init", "-q", "."], { cwd: repo });
+  execFileSync("git", ["add", "-A"], { cwd: repo });
+  const antes = execFileSync("git", ["status", "--short"], { cwd: repo, encoding: "utf8" });
+
+  rodarPrecompact(repo, "claude-code",
+    JSON.stringify({ trigger: "auto", transcript_path: transcript }), { HOME: lar });
+
+  const depois = execFileSync("git", ["status", "--short"], { cwd: repo, encoding: "utf8" });
+  const novos = depois.split("\n").filter((linha) => linha && !antes.includes(linha.trim()));
+  assert.deepEqual(novos.filter((linha) => linha.includes("context")), [],
+    "manifesto de contexto dentro do repositório seria conversa commitada por instrução do método");
+  assert.equal(existsSync(path.join(repo, ".mgr-core", "context")), false);
+  assert.ok(existsSync(path.join(lar, ".mgr-core", "context", "proj-de-teste.json")));
+});
+
+test("mgr precompact: sem `transcript_path` no payload, o hand-off é gravado de todo jeito", () => {
+  const repo = repoInstalado();
+  const lar = diretorioTemporario();
+  const { stdout, status } = rodarPrecompact(repo, "claude-code", '{"trigger":"auto"}', { HOME: lar });
+
+  assert.equal(status, 0);
+  assert.match(readFileSync(path.join(repo, "specs", "alfa", ".handoff.md"), "utf8"), /Feature:/,
+    "a referência é acréscimo: falhar nela não pode custar o hand-off (RN-5)");
+  assert.match(envelopeDe(stdout).systemMessage, /NÃO pôde ser referenciado/);
+  assert.equal(existsSync(path.join(lar, ".mgr-core", "context")), false,
+    "sem contexto a referenciar, nem o diretório aparece");
 });
 
 test("mgr precompact: manifesto corrompido não derruba o hook", () => {

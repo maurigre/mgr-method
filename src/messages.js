@@ -233,6 +233,18 @@ const en = {
     + "comes from a summary.",
   // Logs do comando de hook (LOG-1/LOG-2). Vão para o stderr, que a doc do claude-code manda para o
   // debug log quando o hook sai 0 — destino de diagnóstico, e não canal de usuário.
+  precompactLogContextBefore: (file) => `referencing the conversation context in ${file}`,
+  precompactLogContextAfter: (file, entries) => `context referenced in ${file} (${entries} entries)`,
+  precompactContextReferenced: ({ file, records, bytes, artifacts }) =>
+    `Context of this session referenced in ${file}: ${records} records, ${bytes} bytes`
+    + `${artifacts ? `, plus ${artifacts} session file(s)` : ""}. The extended memory was NOT `
+    + "consulted: consolidation into mgr-code happens later. The method POINTS at the context, it "
+    + "does not keep it — clearing the engine history loses what the reference pointed to.",
+  precompactContextMissed: (reason) =>
+    `The conversation context could NOT be referenced (${reason}): the hand-off was still written.`,
+  precompactContextRecovered:
+    "The previous context manifest was corrupt and had to be replaced: references not yet "
+    + "consolidated were lost.",
   precompactLogGitBefore: "reading the git working tree",
   precompactLogGitAfter: (count) => `git reported ${count} uncommitted file(s)`,
   precompactLogWriteBefore: (file) => `writing the hand-off to ${file}`,
@@ -538,6 +550,18 @@ const ptBR = {
     + "janela vem de um resumo.",
   // Logs do comando de hook (LOG-1/LOG-2). Vão para o stderr, que a doc do claude-code manda para o
   // debug log quando o hook sai 0 — destino de diagnóstico, e não canal de usuário.
+  precompactLogContextBefore: (file) => `referenciando o contexto da conversa em ${file}`,
+  precompactLogContextAfter: (file, entries) => `contexto referenciado em ${file} (${entries} entradas)`,
+  precompactContextReferenced: ({ file, records, bytes, artifacts }) =>
+    `Contexto desta sessão referenciado em ${file}: ${records} registros, ${bytes} bytes`
+    + `${artifacts ? `, mais ${artifacts} arquivo(s) da sessão` : ""}. A memória estendida NÃO foi `
+    + "consultada: a consolidação no mgr-code é posterior. O método APONTA para o contexto, não o "
+    + "guarda — limpar o histórico do motor faz a referência apontar para o vazio.",
+  precompactContextMissed: (reason) =>
+    `O contexto da conversa NÃO pôde ser referenciado (${reason}): o hand-off foi gravado de todo jeito.`,
+  precompactContextRecovered:
+    "O manifesto de contexto anterior estava corrompido e foi substituído: as referências ainda não "
+    + "consolidadas foram perdidas.",
   precompactLogGitBefore: "lendo a árvore de trabalho do git",
   precompactLogGitAfter: (count) => `git devolveu ${count} arquivo(s) não commitado(s)`,
   precompactLogWriteBefore: (file) => `gravando o hand-off em ${file}`,

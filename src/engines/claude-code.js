@@ -99,6 +99,37 @@ export default {
       ...(message ? { systemMessage: message } : {}),
     }),
   },
+  // O que mais pertence à conversa de uma sessão, além do arquivo que o payload aponta (ADR-0019).
+  // É convenção de LAYOUT da plataforma, e não campo do payload — por isso mora aqui, como dado por
+  // motor, e não como regra do núcleo.
+  //
+  // Medido em 2026-09-13 e reconferido em 2026-09-17, nos transcripts deste projeto. O payload aponta
+  // `<dir>/<sessionId>.jsonl`, e o que pertence à sessão fica no diretório IRMÃO
+  // `<dir>/<sessionId>/`:
+  //
+  //   - `subagents/agent-<id>.jsonl` — o raciocínio de cada subagente. Conferido em cinco sessões:
+  //     14, 10, 8, 0 e 4 arquivos. **Zero é caso comum**, e ausência do diretório não é erro. O
+  //     `pattern` exclui os `agent-<id>.meta.json` que vivem ao lado: são metadado, não transcript;
+  //   - `tool-results/*.txt` — saída GRANDE de ferramenta derramada para disco. O transcript a
+  //     referencia e o conteúdo vive fora dele, então sem isto uma referência aponta para registros
+  //     que dizem "veja `toolu_XXX`" sem dizer onde. Medidos 0,5 MB no projeto. **O nome NÃO é
+  //     sempre `toolu_<id>`**: há `bsqw855y0.txt` em disco, então o padrão é a extensão, não o
+  //     prefixo — assumir o prefixo perderia arquivo em silêncio.
+  //
+  // É LISTA, e não um campo por tipo, porque já se conhecem dois tipos: o ponto de extensão desenhado
+  // para um só seria o errado, que foi a lição da migração de hook do ADR-0018.
+  //
+  // `dir` vem em segmentos para o descritor não precisar importar `node:path` — e a semelhança com o
+  // `hookFile` para aí: o primeiro segmento é um caminho ABSOLUTO de máquina, derivado do payload,
+  // então ele contém separadores, ao contrário dos segmentos do `hookFile`, que têm invariante de
+  // não conter nenhum.
+  sessionArtifacts: (transcriptPath) => {
+    const daSessao = transcriptPath.replace(/\.jsonl$/, "");
+    return [
+      { kind: "subagent", dir: [daSessao, "subagents"], pattern: /^agent-.+\.jsonl$/ },
+      { kind: "tool-result", dir: [daSessao, "tool-results"], pattern: /\.txt$/ },
+    ];
+  },
   capabilities: {
     agentModel: true,
     agentEffort: true,

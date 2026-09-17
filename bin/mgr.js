@@ -36,6 +36,8 @@ import { diff as lockfileDiff, readLockfile, replacedByEngine, LOCKFILE_NAME } f
 import { collectSuggestions, detect, hookReport, lawsPreamble } from "../src/detector.js";
 import { hookFilePath, removeHook, writeHook, writtenEvents } from "../src/hooks.js";
 import { ASSEMBLED, assemble, decide, notice, persist, readStamp, writeStamp } from "../src/precompact.js";
+import * as contexto from "../src/context-manifest.js";
+import { readManifest } from "../src/manifest.js";
 
 const SCOPES = ["project", "global"];
 // Comandos de skill plugável: o posicional é o nome da skill/registry, nunca o repositório.
@@ -826,6 +828,21 @@ async function cmdPrecompact(flags) {
       logHook(M.precompactLogWriteAfter(montado.destination, appended));
     }
 
+    // A referência ao contexto da conversa (ADR-0019). Vem junto do hand-off, e pela mesma razão:
+    // é preservação de estado, e preservar vem antes de decidir.
+    //
+    // O caminho do transcript vem do payload em duas grafias, porque as duas plataformas o nomeiam
+    // diferente — `transcript_path` no claude-code e `transcriptPath` no copilot.
+    const referencia = referenciarContexto(repo, {
+      engine,
+      trigger,
+      // Só string vale como caminho: número truthy chegaria a `readFileSync` como **file
+      // descriptor**, lendo algo que ninguém pediu. A recusa é silenciosa, como todo o resto deste
+      // comando (DT-8), em vez do fail fast ruidoso que a QUAL-2 prescreve em geral.
+      transcriptPath: caminhoDoTranscript(payload),
+      sessionId: payload.session_id ?? payload.sessionId ?? null,
+    });
+
     // A borda passa o FATO de ter gravado; quem conjuga isso com gatilho e carimbo é o núcleo.
     const veredito = decide({ engine, trigger, blockedAt: readStamp(core, engine), saved: gravou });
     if (veredito.block) {
@@ -836,7 +853,7 @@ async function cmdPrecompact(flags) {
       // reason from your JSON's blocking decision when it makes one, and your stderr text
       // otherwise" — declarando a decisão, o stderr fica livre para ser canal de log.
       const entregue = emitirAviso(engine, {
-        message: M.precompactWroteBlocked(montado.destination, montado.slug),
+        message: `${M.precompactWroteBlocked(montado.destination, montado.slug)}${referencia}`,
         deny: M.precompactBlocked(montado.destination),
       });
       // Bloquear sem conseguir entregar o motivo obstruiria o usuário sem explicação — e é pior que
@@ -854,11 +871,50 @@ async function cmdPrecompact(flags) {
       ? M.precompactWrote(montado.destination, montado.slug)
       : M.precompactNothingToSave;
     const seguinte = veredito.repeated ? M.precompactProceeding : M.precompactSuggestNewSession;
-    emitirAviso(engine, { message: `${gravacao} ${seguinte}` });
+    emitirAviso(engine, { message: `${gravacao} ${seguinte}${referencia}` });
     return 0;
   } catch {
     // Silêncio é melhor que ruído no contexto do agente. O aviso, quando houve, já saiu acima.
     return 0;
+  }
+}
+
+// Registra a referência ao contexto e devolve o TEXTO a acrescentar ao aviso — nunca lança, e
+// qualquer falha vira string vazia: perder a referência não pode custar o hand-off nem a sessão
+// (RN-5). O núcleo mede e escreve; aqui se resolve o destino e se escolhe a palavra (INV-5).
+//
+// O manifesto vai para o escopo GLOBAL de propósito: ele carrega caminhos absolutos e ids de sessão
+// da máquina, e o `.mgr-core/` do projeto é o que o README manda versionar.
+const caminhoDoTranscript = (payload) => {
+  const bruto = payload.transcript_path ?? payload.transcriptPath ?? null;
+  return typeof bruto === "string" && bruto ? bruto : null;
+};
+
+function referenciarContexto(repo, { engine, trigger, transcriptPath, sessionId }) {
+  try {
+    const projectId = readManifest(installer.coreDir("project", repo))?.projectId;
+    // Sem projeto instalado não há por onde endereçar o manifesto. Silêncio, como todo o resto deste
+    // comando: quem só abriu o editor não pode receber ruído.
+    if (!projectId) return "";
+
+    const entrada = contexto.entryFor({ engine, trigger, transcriptPath, sessionId });
+    if (entrada.outcome !== contexto.REFERENCED) return ` ${M.precompactContextMissed(entrada.reason)}`;
+
+    const global = installer.coreDir("global", repo);
+    logHook(M.precompactLogContextBefore(contexto.manifestPath(global, projectId)));
+    const { file, entries, recovered } = contexto.write(global, projectId, entrada);
+    logHook(M.precompactLogContextAfter(file, entries));
+
+    const perda = recovered ? ` ${M.precompactContextRecovered}` : "";
+    return ` ${M.precompactContextReferenced({
+      file,
+      records: entrada.transcriptRecords,
+      bytes: entrada.transcriptBytes,
+      artifacts: entrada.sessionArtifacts.length,
+    })}${perda}`;
+  } catch {
+    // Referência é acréscimo: se ela falhar, o hand-off e o aviso da fatia anterior seguem intactos.
+    return "";
   }
 }
 

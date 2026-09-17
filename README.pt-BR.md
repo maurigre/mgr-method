@@ -129,11 +129,18 @@ feature, idêntico.
 ## Estrutura do repositório
 
 ```
-bin/mgr.js          # CLI (install · status · update · uninstall · build · validate · list · add · remove · registry)
-src/                # bundle · builder · installer · manifest · validator · plugin · registry · lockfile · adapters
+bin/mgr.js          # CLI: install · status · update · uninstall · build · validate · list · version
+                    #      add · remove · registry · detect · agents · tokens · spec · precompact
+src/                # o núcleo, 33 módulos: instalação e build · descritor por motor · skill
+                    # plugável · artefato de spec (parser/regras/validador) · sessão e contexto
+                    # (hooks, pré-compactação, referência ao contexto) · mensagens
+src/engines/        # o que cada motor suporta, como DADO — nunca `if` por nome de motor
 skills/             # as 13 skills (fonte)
-shared/scripts/     # sdd-check.sh (verifica pré-requisitos do spec-create)
+agents/             # os 3 moldes de agente (redação, implementação, gate de review)
+shared/             # fontes transversais: regras de arquitetura e qualidade, leis, sdd-check.sh
+docs/adr/           # as decisões, formato Nygard — versionadas e autocontidas
 docs/plugins.md     # formato de skill plugável: manifest, registry, lockfile, matriz de suporte
+docs/engine-hooks.md # matriz de capacidade de hook dos seis motores estudados, com fonte e data
 test/               # node:test
 ```
 

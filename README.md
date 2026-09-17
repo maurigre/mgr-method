@@ -126,11 +126,18 @@ decision automatically generates an ADR. Out comes the same SDD as brownfield; t
 ## Repository structure
 
 ```
-bin/mgr.js          # CLI (install · status · update · uninstall · build · validate · list · add · remove · registry)
-src/                # bundle · builder · installer · manifest · validator · plugin · registry · lockfile · adapters
+bin/mgr.js          # CLI: install · status · update · uninstall · build · validate · list · version
+                    #      add · remove · registry · detect · agents · tokens · spec · precompact
+src/                # the core, 33 modules: install and build · per-engine descriptor · plugin
+                    # skill · spec artifact (parser/rules/validator) · session and context (hooks,
+                    # pre-compaction, context reference) · messages
+src/engines/        # what each engine supports, as DATA — never an `if` on the engine name
 skills/             # the 13 skills (source)
-shared/scripts/     # sdd-check.sh (checks the spec-create prerequisites)
+agents/             # the 3 agent moulds (drafting, execution, review gate)
+shared/             # cross-cutting sources: architecture and quality rules, laws, sdd-check.sh
+docs/adr/           # the decisions, Nygard format — versioned and self-contained
 docs/plugins.md     # plugin skill format: manifest, registry, lockfile, capability matrix
+docs/engine-hooks.md # hook capability matrix for the six engines studied, with source and date
 test/               # node:test
 ```
 

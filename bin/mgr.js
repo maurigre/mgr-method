@@ -12,6 +12,7 @@ import * as catalogo from "../src/catalog.js";
 import * as planValidator from "../src/plan-validator.js";
 import * as specValidator from "../src/spec-validator.js";
 import * as provValidator from "../src/prov-validator.js";
+import * as docValidator from "../src/doc-validator.js";
 import * as planNext from "../src/plan-next.js";
 import * as specStatus from "../src/spec-status.js";
 import { repoRoot, slugs } from "../src/artifacts.js";
@@ -494,14 +495,16 @@ async function proposeDetected(repo, scope, targets) {
 function cmdSpecValidate(flags, positional) {
   const repo = repoRoot(process.cwd());
   const slug = flags.all ? null : (positional[0] || planValidator.slugFromCwd(repo, process.cwd()));
-  // Três verificações, um comando: o plano (ADR-0012), a spec (ADR-0013) e a proveniência
-  // (ADR-0016). As duas primeiras leem UM arquivo por feature; a terceira vale para qualquer
-  // artefato, e por isso a lista de arquivos é a UNIÃO das três, sem repetir quem aparece em duas.
+  // Quatro verificações, um comando: o plano (ADR-0012), a spec (ADR-0013), a proveniência
+  // (ADR-0016) e a documentação declarada no fechamento (ADR-0020). As duas primeiras leem UM
+  // arquivo por feature, a terceira vale para qualquer artefato e a quarta só para o fechamento —
+  // por isso a lista de arquivos é a UNIÃO das quatro, sem repetir quem aparece em mais de uma.
   const planos = planValidator.validatePlans(repo, { slug });
   const specs = specValidator.validateSpecs(repo, { slug });
   const proveniencia = provValidator.validateProvenance(repo, { slug });
-  const arquivos = [...new Set([...planos.files, ...specs.files, ...proveniencia.files])];
-  const achados = [...planos.findings, ...specs.findings, ...proveniencia.findings];
+  const documentacao = docValidator.validateDocs(repo, { slug });
+  const arquivos = [...new Set([...planos.files, ...specs.files, ...proveniencia.files, ...documentacao.files])];
+  const achados = [...planos.findings, ...specs.findings, ...proveniencia.findings, ...documentacao.findings];
 
   if (!arquivos.length) {
     console.error(M.errorPrefix(M.specValidateNoSpecs(slug || path.join(repo, "specs"))));

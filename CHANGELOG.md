@@ -24,6 +24,21 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   arquivo em `src/engines/` mais uma linha no mapa de motores. Isso paga metade da dívida que o
   ADR-0010 tinha nomeado — a outra metade segue nomeada e aberta: `src/adapters.js`, o instalador e a
   saída do hook de sessão em `src/detector.js`.
+- **Documentação defasada passa a reprovar** (ADR-0020), por dois mecanismos que pegam falhas
+  diferentes. A fonte única de regras transversais — a que **todo projeto** herda no `spec-init` —
+  ganhou **`DOC-1`**, que exige capacidade nova nomeada na documentação **onde ela pertence** — módulo
+  na de arquitetura, comando ou chave de configuração na de contrato, e **no README tudo o que você
+  vê**; e **`DOC-2`**, que reprova documento que nomeia o que não existe mais ou cuja
+  fonte declarada não existe. Com elas, o gate de review passa a **poder** reprovar citando texto —
+  antes ele via a defasagem e não tinha o que citar.
+- **O `mgr spec validate` ganhou um quarto eixo**, o de documentação: `src/doc-rules.js` e
+  `src/doc-validator.js`. Ele exige que o fechamento de uma feature **declare** o que mudou na
+  documentação — ou declare, com a razão, que nada mudou. É **erro**, e não aviso, porque a adesão
+  medida no repositório era de 13 em 14: a regra formaliza prática que já existia.
+- **`LOG-1` e `LOG-2` ficaram mais amplas na fonte única**: a primeira passou a alcançar escrita em
+  **arquivo em disco**, e a segunda, **subprocesso**. Não é regra nova inventada — é a redação que
+  este repositório já usava e que pegou defeito real nas duas últimas features; ela subiu para a
+  fonte em vez de o projeto descer para a redação mais fraca.
 - **O contexto da conversa passa a ser REFERENCIADO antes da compactação** (ADR-0019). O hand-off diz
   em que ponto o trabalho está; ele não sabe **por que** as decisões foram tomadas, e declara isso.
   Agora, quando o motor anuncia a compactação, o método também registra **onde está a conversa
@@ -44,6 +59,14 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   contrário do evento de início de sessão, que aceita contexto adicional. O hand-off **é gravado
   igual**; o que não existe ali é canal de aviso. O método prefere calar a imprimir num canal que a
   plataforma descarta, porque isso o faria parecer avisar.
+- **As regras novas só valem no seu projeto depois que o guia dele for regenerado.** Quem não roda
+  comando nenhum não é afetado; quem regenerar o `09-review-rules.md` pelo `spec-init` passa a ter
+  `DOC-1`/`DOC-2` e as `LOG` ampliadas — e **código que passava pode reprovar**, porque as regras
+  alcançam mais do que antes. O `mgr update` **não** toca esse arquivo.
+- **O eixo mecânico verifica a DECLARAÇÃO, não a correção.** Ele confere que o fechamento declarou o
+  diff da documentação e que o que ele nomeia existe. Escrever "nenhuma alteração" numa feature que
+  mudou documentação **passa por ele** — quem pega isso é a `DOC-1`/`DOC-2` no gate de review, por
+  julgamento com citação. Os dois mecanismos existem juntos por essa razão.
 - **O método APONTA para o contexto, ele não o guarda.** Quem limpar o histórico do motor, trocar de
   máquina ou apagar a pasta de sessões perde o que a referência apontava. Por isso o registro grava
   **checksum e tamanho**: quem for consumir descobre que o arquivo mudou ou desapareceu, em vez de

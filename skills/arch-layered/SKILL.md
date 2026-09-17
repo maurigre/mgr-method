@@ -1,6 +1,6 @@
 ---
 name: arch-layered
-description: Provider of the review rules guide for projects with layered architecture (Layered / N-tier, Martin Fowler), LANGUAGE-AGNOSTIC. Invoked by spec-init with the project's language; assembles docs/sdd/09-review-rules.md combining the layered principles (Presentation/Domain/Data Source layers, top-down dependency) with the shared UNIVERSAL cross-cutting rules (design, tests, logs, mutation and the language profile). Unlike the inversion architectures (hexagonal/clean/onion): layered does not push infrastructure toward the center. Rules numbered with IDs citable by the code-analyzer. Use when the project's architecture is layered.
+description: Provider of the review rules guide for projects with layered architecture (Layered / N-tier, Martin Fowler), LANGUAGE-AGNOSTIC. Invoked by spec-init with the project's language; assembles docs/sdd/09-review-rules.md combining the layered principles (Presentation/Domain/Data Source layers, top-down dependency) with the shared UNIVERSAL cross-cutting rules (design, tests, logs, documentation, mutation and the language profile). Unlike the inversion architectures (hexagonal/clean/onion): layered does not push infrastructure toward the center. Rules numbered with IDs citable by the code-analyzer. Use when the project's architecture is layered.
 ---
 
 # arch-layered — Rules guide (Layered / N-tier)
@@ -25,7 +25,7 @@ You receive the **project's language**. Generate `docs/sdd/09-review-rules.md` b
 
 1. **Theoretical Foundations** and **Principles** (from this file — verbatim).
 2. From the single source `{{MGR_ARCH_RULES}}`, include **only** the **UNIVERSAL**
-   sections: **Mandatory rules** (design, tests, logs, mutation) + the project's
+   sections: **Mandatory rules** (design, tests, logs, documentation, mutation) + the project's
    **language profile** + the **Good Practices** of naming and Screaming Architecture.
    Do **NOT** include the source's "Cross-cutting anti-patterns" nor its "Checklist"
    (they assume dependency inversion) — use the ones **from this file** (top-down).

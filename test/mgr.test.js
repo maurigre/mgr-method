@@ -70,6 +70,18 @@ test("install autossuficiente: só o subconjunto na pasta do motor, sem .mgr-cor
 
   assert.ok(existsSync(path.join(sk, "_shared", "arch", "cross-cutting-rules.md")));
   assert.ok(existsSync(path.join(sk, "_shared", "quality", "quality-rules.md")), "fonte de qualidade co-locada (spec-init)");
+
+  // ADR-0020: as regras de documentação e as de log ampliadas viajam para o projeto instalado, e é
+  // de lá que o `spec-init` monta o guia de review dele. Conferir só a existência do arquivo não
+  // provaria isso — foi assim que a defasagem passou.
+  const transversais = readFileSync(path.join(sk, "_shared", "arch", "cross-cutting-rules.md"), "utf8");
+  for (const regra of ["(DOC-1)", "(DOC-2)"]) {
+    assert.ok(transversais.includes(regra), `${regra} tem de chegar ao projeto: sem ela o gate não tem o que citar`);
+  }
+  assert.match(transversais, /\(LOG-1\)[^\n]*\n?[^\n]*file on disk/,
+    "a LOG-1 ampliada: foi a redação com disco que exigiu o par de logs em volta da escrita do hand-off");
+  assert.match(transversais, /\(LOG-2\)[^\n]*\n?[^\n]*subprocess/,
+    "a LOG-2 ampliada: foi ela que exigiu o par em volta do subprocesso do git");
   const archMd = readFileSync(path.join(sk, "arch-hexagonal", "SKILL.md"), "utf8");
   assert.ok(!archMd.includes("{{MGR_ARCH_RULES}}"), "token deve ser resolvido");
   assert.ok(archMd.includes("_shared/arch/cross-cutting-rules.md"), "deve apontar para a fonte co-locada");

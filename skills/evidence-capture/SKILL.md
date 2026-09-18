@@ -1,6 +1,7 @@
 ---
 name: evidence-capture
 description: Records a feature's AI-First evidence - prompts used, reviews (what was corrected or rejected from the AI) and delegated skills - inside specs/<feature>/ai/, and maintains a global index at ai/index.md. Made for AI-First challenges and projects that require the ai/ folder (skills.md, prompts.md, reviews.md - or the file names the challenge statement demands). Use when finishing a feature, when the user asks to record evidence, document AI usage, generate the ai/ folder, or prepare a technical challenge delivery. Invoked by spec-create/spec-execute when closing a feature, or directly. It organizes and asks; it never invents the content of the reviews.
+license: Source-Available v1.0. LICENSE has complete terms
 ---
 
 # evidence-capture — AI-First evidence per feature

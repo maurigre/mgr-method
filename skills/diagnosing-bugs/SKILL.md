@@ -1,6 +1,7 @@
 ---
 name: diagnosing-bugs
 description: Discipline for diagnosing hard bugs and performance regressions — requires a reproduction loop that goes RED on the bug BEFORE any hypothesis (signal before theory). Finds the root cause and stops; the non-trivial fix is handed to spec-create. Use when the user asks to diagnose or debug something, or reports something broken, throwing, failing or slow.
+license: Source-Available v1.0. LICENSE has complete terms
 ---
 
 # diagnosing-bugs — Disciplined diagnosis

@@ -1,6 +1,8 @@
 ---
 name: junit-clean
 description: Standardizes Java unit tests with JUnit 5 following 13 strict rules of quality, performance and clarity (no inheritance, should+camelCase naming, no comments, ParameterizedTest, self-contained scope, AAA, boundary+MC/DC depth, Sonar-safe assertThatThrownBy). Operates in CREATION mode (generate new tests), REFACTOR mode (clean existing tests) or MIXED. Use when the user asks to create, generate, standardize, clean or refactor Java unit tests, convert to parameterized, or remove DisplayName and comments. Also invoked by spec-create on test tasks of Java projects.
+license: Source-Available v1.0. LICENSE has complete terms
+compatibility: Java 8+ with JUnit 5 (Jupiter)
 ---
 
 # junit-clean — Standardized Java tests (13 rules)

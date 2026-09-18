@@ -1,6 +1,7 @@
 ---
 name: code-analyzer
 description: Rigorous TWO-AXIS code reviewer. Standards - does the code follow THE PROJECT's rules guide (docs/sdd/09-review-rules.md)? Spec - did the code fulfill its originating spec/PRD (did it do what was asked)? The two are measured separately and reported side by side; a reproval is always anchored in a textual citation (a guide rule OR a spec line) - it never invents. Use when the user asks to review code, analyze conformity, do a code review, check whether the code follows the standards or fulfilled the spec, or when spec-create suggests a review at the end of a feature. Agnostic to architecture and language.
+license: Source-Available v1.0. LICENSE has complete terms
 ---
 
 # code-analyzer — Rigorous two-axis reviewer

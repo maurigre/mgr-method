@@ -1,6 +1,7 @@
 ---
 name: spec-init
 description: Initializes a project's SDD (Specification-Driven Development) structure. On an EXISTING project, runs a phased deep analysis with chunking and generates /docs/sdd/ (00-overview to 08-glossary), CONSTITUTION.md and the review rules guide. On an EMPTY project (greenfield), conducts a guided interview about stack/architecture/domain and generates the same artifacts from the choices. Use whenever the user asks to analyze, document or map a project, generate SDD, extract contracts, onboard a repository, start a project from scratch with SDD, or generate instructions for Copilot/Cursor. Prerequisite of the spec-create skill.
+license: Source-Available v1.0. LICENSE has complete terms
 ---
 
 # spec-init — SDD initialization

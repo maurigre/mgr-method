@@ -1,6 +1,7 @@
 ---
 name: spec-execute
 description: Executes the approved plan of an SDD feature (specs/<feature>/04-plan.md) task by task, respecting the dependency DAG and the P0/P1/P2 priorities, applying the development premises (security, performance, resource usage, clarity) and active context control (tiers, hand-off). Invoked by spec-create after plan approval, or directly to resume an interrupted execution. Use when the user asks to execute the plan, implement the approved tasks, continue or resume a feature's implementation. Requires an approved plan; no automatic git action.
+license: Source-Available v1.0. LICENSE has complete terms
 ---
 
 # spec-execute — Executing the plan

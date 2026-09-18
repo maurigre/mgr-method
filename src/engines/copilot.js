@@ -37,6 +37,16 @@ export default {
   //
   // `edit` cobre Edit, MultiEdit, Write e NotebookEdit de uma vez — por isso a escrita é `read` e
   // `search` mais ele, e não uma lista de nomes soltos.
+  // O mesmo campo, no copilot (ADR-0021, CA-10). Verificado em
+  // https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills, lido em
+  // 2026-09-17: "the tools Copilot may use WITHOUT ASKING FOR CONFIRMATION each time. If a tool is
+  // not listed in the allowed-tools field, Copilot will PROMPT YOU FOR PERMISSION before using it."
+  // A doc dele traz aviso de segurança próprio: "When in doubt, OMIT shell and bash from
+  // allowed-tools." Não há campo restritivo equivalente, e os campos de skill documentados são
+  // quatro: `name`, `description`, `license` e `allowed-tools`.
+  // `separators` fica "undocumented" de propósito: a doc do copilot não traz frase sobre o formato,
+  // e inferi-lo do padrão aberto seria afirmação sem a fonte que o CA-10 exige.
+  skillAllowedTools: { honors: true, semantics: "grant", separators: "undocumented", restrictiveField: null },
   agentTools: {
     read: '["read", "search"]',
     write: '["read", "search", "edit"]',

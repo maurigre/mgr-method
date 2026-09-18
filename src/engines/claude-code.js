@@ -21,6 +21,15 @@ export default {
   // `read` é o valor de sempre, intocado: um revisor que não pode editar não tem como "corrigir" o
   // que deveria reprovar (ADR-0010). `write` acrescenta escrita ao mesmo conjunto de leitura, em
   // vez de trocá-lo — quem implementa também precisa ler.
+  // O que a plataforma faz com `allowed-tools` no frontmatter de uma skill (ADR-0021, CA-10).
+  // Verificado em https://code.claude.com/docs/en/skills, lido em 2026-09-17:
+  //   "Tools Claude can use WITHOUT ASKING PERMISSION during the turn that invokes this skill. The
+  //    grant clears when you send your next message. Accepts a space- or comma-separated string, or
+  //    a YAML list."
+  // E, em campo SEPARADO, `disallowed-tools`: "Tools removed from Claude's available pool while this
+  // skill is active." Ou seja: `allowed-tools` **concede**; quem restringe é o outro campo, que
+  // **não existe** no padrão aberto.
+  skillAllowedTools: { honors: true, semantics: "grant", separators: "space, comma or YAML list", restrictiveField: "disallowed-tools" },
   agentTools: {
     read: "Read, Grep, Glob",
     write: "Read, Grep, Glob, Write, Edit",

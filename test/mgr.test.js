@@ -388,6 +388,8 @@ test("CLI: comandos básicos e ciclo de vida (smoke)", () => {
   // presença do subcomando novo só é protegida aqui.
   assert.match(run(["help"]), /spec validate\s+valida o plano e a spec deste projeto/);
   assert.match(helpEn, /spec validate\s+validates this project's plan and spec artifacts/);
+  assert.match(run(["help"]), /audit\s+infere as capacidades perigosas de cada skill/);
+  assert.match(helpEn, /audit\s+infers each skill's dangerous capabilities/);
 
   const repo = diretorioTemporario();
   const flags = ["--engine", "claude-code", "--arch", "hexagonal", "--project-id", "x", "-y"];
@@ -2997,5 +2999,53 @@ test("o uninstall tira os DOIS eventos, e não deixa resto", () => {
   for (const id of engineIds()) {
     assert.equal(existsSync(path.join(repo, ...engineDescriptor(id).hookFile)), false,
       `${id}: o arquivo era só do MGR e não sobrou nada dele`);
+  }
+});
+
+const rodarAudit = (args = []) => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  try {
+    return { stdout: execFileSync("node", [bin, "audit", ...args], ptBR(".")), status: 0 };
+  } catch (erro) {
+    return { stdout: `${erro.stdout}`, status: erro.status };
+  }
+};
+
+test("mgr audit: sai 0 quando nenhuma skill está em EXCEEDS", () => {
+  const { status, stdout } = rodarAudit();
+  assert.equal(status, 0,
+    "o ADR-0007 manda bloqueio só para `declarou X e detectou X+Y`; `não declarou` pede confirmação, não falha de gate");
+  assert.match(stdout, /undeclared/, "as 5 que mandam rodar comando aparecem como não declaradas");
+  assert.match(stdout, /nenhuma das quatro classes/, "as 8 limpas aparecem como tal");
+});
+
+test("mgr audit: a saída declara que ausência de achado NÃO é atestado", () => {
+  assert.match(rodarAudit().stdout, /NÃO é atestado de segurança/,
+    "o ADR-0007 vetou prometer scanner que garante segurança: o veto tem de aparecer para quem lê");
+});
+
+test("mgr audit: cada achado carrega a linha e o trecho", () => {
+  assert.match(rodarAudit().stdout, /embedded-shell · linha \d+:/,
+    "sem a linha, descartar um falso positivo custa uma leitura inteira");
+});
+
+test("mgr audit --json tem schemaVersion e o contrato estável", () => {
+  const { stdout, status } = rodarAudit(["--json"]);
+  assert.equal(status, 0);
+  const payload = JSON.parse(stdout);
+  assert.equal(payload.schemaVersion, 1);
+  assert.equal(payload.blocks, false);
+  assert.deepEqual(payload.classes, ["exfiltration", "embedded-shell", "self-modification", "override-attempt"]);
+  assert.equal(payload.skills.length, 13);
+  const configure = payload.skills.find(({ name }) => name === "configure-agents");
+  assert.deepEqual(configure.undeclared, ["embedded-shell", "self-modification"]);
+  assert.ok(configure.findings.every(({ line, excerpt }) => line > 0 && excerpt.length > 0));
+});
+
+test("mgr audit: a borda não tem lógica de inferência", () => {
+  const borda = readFileSync(fileURLToPath(new URL("../bin/mgr.js", import.meta.url)), "utf8");
+  for (const vazamento of ["ignore previous", "exfiltration\"", "__proto__", "EXECUTAVEIS"]) {
+    assert.ok(!borda.includes(vazamento),
+      `\`${vazamento}\` em bin/mgr.js seria a lógica que a §2.1 manda ficar no núcleo`);
   }
 });

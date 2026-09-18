@@ -18,6 +18,7 @@ import * as specStatus from "../src/spec-status.js";
 import { repoRoot, slugs } from "../src/artifacts.js";
 import { CONFIGURED, readAgents, writeAgentPolicy } from "../src/registry.js";
 import * as tokens from "../src/tokens.js";
+import * as audit from "../src/audit.js";
 import { ids as engineIds } from "../src/engines/index.js";
 import { blocking, summarize } from "../src/findings.js";
 import { buildRuntime, gateSummary, inheritingModel } from "../src/builder.js";
@@ -1239,6 +1240,60 @@ function cmdBuild(flags) {
   return 0;
 }
 
+// `mgr audit` — a Camada 1 da defesa do ADR-0007, e o comparador que aquele ADR situou na Fase 2.
+//
+// A borda faz o que a §2.2 manda: despacha, formata e devolve exit code. A inferência, a comparação
+// e a leitura das skills vivem em `src/audit.js` — e o `done_when` desta task proíbe o contrário.
+//
+// **Só `EXCEEDS` sai com 1.** O ADR-0007 manda "bloqueio ou warning forte" para "declarou X e
+// detectou X+Y", e para "não declarou" manda CONFIRMAÇÃO OBRIGATÓRIA, que é exigência do fluxo de
+// instalação e não falha de gate.
+function cmdAudit(flags) {
+  const resultados = audit.auditAll();
+  const bloqueia = audit.blocks(resultados);
+
+  if (flags.json) {
+    console.log(JSON.stringify({
+      schemaVersion: 1,
+      classes: audit.CLASSES,
+      blocks: bloqueia,
+      skills: resultados,
+    }, null, 2));
+    return bloqueia ? 1 : 0;
+  }
+
+  const cor = { [audit.EXCEEDS]: pc.red, [audit.UNDECLARED]: pc.yellow, [audit.MATCHES]: pc.green };
+  for (const { name, outcome, branch, inferred, declared, undeclared, findings } of resultados) {
+    // O `branch` é nulo quando o arquivo não abre, então a mensagem é própria.
+    if (outcome === audit.UNREADABLE) {
+      console.log(`${pc.yellow("?")} ${name} — SKILL.md não pôde ser lido`);
+      continue;
+    }
+    if (branch === audit.NOTHING_TO_DECLARE) {
+      console.log(`${pc.green("✓")} ${name} — nenhuma das quatro classes`);
+      continue;
+    }
+    console.log(cor[branch](`• ${name} — ${branch}`));
+    if (declared.length) console.log(`    declarado:     ${declared.join(", ")}`);
+    // `inferred`, e não `undeclared`: este é o conjunto inferido, e o que sobra sai na linha abaixo.
+    console.log(`    inferido:      ${inferred.join(", ")}`);
+    if (undeclared.length && undeclared.length !== inferred.length) {
+      console.log(`    não declarado: ${undeclared.join(", ")}`);
+    }
+    // O trecho e a linha de cada achado, porque quem julga é o humano e ele precisa do fato para
+    // descartar um falso positivo em segundos. É o veto do ADR-0007 a prometer scanner que garante
+    // segurança, virando forma de saída.
+    for (const { capability, line, excerpt } of findings) {
+      console.log(pc.dim(`      ${capability} · linha ${line}: ${excerpt}`));
+    }
+  }
+
+  console.log("");
+  console.log("A inferência é a fonte de verdade (ADR-0007); a declaração é a afirmação que ela confere.");
+  console.log("Ausência de achado NÃO é atestado de segurança: a análise tem falsos positivos e negativos.");
+  return bloqueia ? 1 : 0;
+}
+
 function cmdValidate() {
   let ok = true;
   for (const [name, problems] of Object.entries(validateAll())) {
@@ -1278,6 +1333,7 @@ async function main() {
       case "uninstall": return await cmdUninstall(flags, positional);
       case "build": return cmdBuild(flags);
       case "validate": return cmdValidate();
+      case "audit": return cmdAudit(flags);
       case "spec": return cmdSpec(flags, positional);
       case "agents": return cmdAgents(flags, positional);
       case "tokens": return cmdTokens(flags, positional);

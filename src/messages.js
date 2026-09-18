@@ -295,6 +295,7 @@ Usage: mgr <command> [options]
   uninstall [repo] removes the installed skills (--scope, -y)
   build            generates a directory with the full content (--out)
   validate         validates the SKILL.md files (skill authoring)
+  audit            infers each skill's dangerous capabilities and compares with what it declares
   spec validate    validates this project's plan and spec artifacts
                    ([<slug>], --all, --strict, --json)
   spec next        the next action from the plan ([<slug>], --json)
@@ -610,6 +611,7 @@ Uso: mgr <comando> [opções]
   uninstall [repo] remove as skills instaladas (--scope, -y)
   build            gera um diretório com todo o conteúdo (--out)
   validate         valida as SKILL.md (autoria de skill)
+  audit            infere as capacidades perigosas de cada skill e compara com o declarado
   spec validate    valida o plano e a spec deste projeto
                    ([<slug>], --all, --strict, --json)
   spec next        a próxima ação a partir do plano ([<slug>], --json)

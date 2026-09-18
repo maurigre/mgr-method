@@ -1,6 +1,7 @@
 ---
 name: configure-agents
 description: Guides the user through declaring which model and which effort each MGR intent uses - drafting, execution and review - reading the current state, explaining what each intent does, and writing the choice with `mgr agents set`. It conducts the decision and NEVER suggests a model for an intent, because the available models and the bill both belong to the user's account. Use when the user asks to configure or change the model of a step, set the effort of the review gate, acts on the warning that the agents are running on the session model, or asks how to stop editing `.mgr-core/config.json` by hand.
+license: Source-Available v1.0. LICENSE has complete terms
 ---
 
 # configure-agents — model and effort per intent

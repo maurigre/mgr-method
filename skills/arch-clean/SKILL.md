@@ -1,6 +1,7 @@
 ---
 name: arch-clean
 description: Provider of the review rules guide for projects with Clean Architecture (Robert C. Martin), LANGUAGE-AGNOSTIC. Invoked by spec-init with the project's language; assembles docs/sdd/09-review-rules.md combining the Clean Architecture principles (the Dependency Rule, the Entities/Use Cases/Interface Adapters/Frameworks rings) with the shared cross-cutting rules (design, tests, logs, documentation, mutation and the language profile). Rules numbered with stable IDs, textually citable by the code-analyzer. Use when the project's architecture is Clean Architecture.
+license: Source-Available v1.0. LICENSE has complete terms
 ---
 
 # arch-clean — Rules guide (Clean Architecture)

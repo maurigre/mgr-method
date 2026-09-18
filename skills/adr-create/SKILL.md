@@ -1,6 +1,7 @@
 ---
 name: adr-create
 description: Creates Architecture Decision Records (ADRs) in Michael Nygard's canonical format. Auto-detects the project's ADR directory on every run (no persisted configuration), generates sequential numbering, and operates in STANDALONE mode (questions to the user) or INVOKED mode (receives pre-filled context from another skill such as spec-create or spec-init and asks only for the Deciders). Use when the user asks to create an ADR, document or record an architectural decision, or a new architecture decision record. Agnostic to language and stack.
+license: Source-Available v1.0. LICENSE has complete terms
 ---
 
 # adr-create — Architecture Decision Records

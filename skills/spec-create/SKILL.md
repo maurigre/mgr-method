@@ -1,6 +1,7 @@
 ---
 name: spec-create
 description: Implements the full SDD flow to EVOLVE a project already initialized by spec-init - receives a feature, bugfix or refactor brief, generates the PRD, technical spec and task plan with blocking human checkpoints, and after approval delegates the implementation to the spec-execute skill and, on closing, records the AI-First evidence via evidence-capture when the project policy enables it (no automatic commit). Use whenever the user asks to add or implement a feature, fix a bug with SDD, refactor preserving behavior, create a spec and implement it, or resume a feature in progress. Requires /docs/sdd/ and CONSTITUTION.md to exist.
+license: Source-Available v1.0. LICENSE has complete terms
 ---
 
 # spec-create — Evolving the project via SDD

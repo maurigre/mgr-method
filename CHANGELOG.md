@@ -4,6 +4,43 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 
 ## [Não lançado]
 ### Adicionado
+- **`mgr audit`** (ADR-0021, e a Camada 1 que o ADR-0007 tinha prometido).
+
+  **O que ele NÃO faz, e vem antes do que ele faz:**
+
+  - **não atesta segurança.** Lista de achados vazia significa *"nenhuma das quatro apareceu"*, nunca
+    *"é seguro"*. A análise de texto tem falsos positivos e negativos, e o ADR-0007 vetou prometer o
+    contrário;
+  - **não infere a lista de ferramentas** de uma skill. Tentar isso foi **medido e rejeitado**: varrer
+    prosa por palavra marca uma skill de arquitetura hexagonal como acesso a rede (ela fala de
+    adaptadores web) e **não** marca uma skill que escreve arquivos (ela não usa a palavra);
+  - **a comparação é por classe**, então declarar de menos **dentro** da mesma classe não é pego, e
+    declarar de menos **fora** das quatro classes também não;
+  - **o padrão marca `allowed-tools` como experimental** e avisa que o suporte varia entre
+    implementações. **Medido em 2026-09-17: os dois motores que o método suporta honram o campo**,
+    com a mesma semântica de concessão — a ressalva do padrão é real e não se materializou entre
+    estes dois. O que segue valendo é que **nenhum motor é obrigado** a honrar, não que nenhum honre;
+  - **só um dos casos sai com erro:** declarar um escopo e o conteúdo exceder. Não declarar nada
+    **não** é falha — é o caso em que o motor pergunta sempre, que é o comportamento seguro.
+
+  **E o que ele faz:** infere do conteúdo de cada skill as **quatro classes de capacidade perigosa**
+  — envio de conteúdo para fora, comando shell embutido, alteração da config do MGR ou instalação de
+  skill, e tentativa de override —, compara com o que a skill declara e mostra **a linha e o trecho**
+  de cada achado, para você julgar com o fato na mão.
+- **As skills passam a declarar a licença**, e a `junit-clean` também o ambiente que ela exige
+  (Java 8+ com JUnit 5). São campos do padrão aberto Agent Skills, lidos pelas plataformas.
+
+  **O `allowed-tools` NÃO foi declarado em nenhuma das 13, e isso é decisão, não esquecimento.** Esse
+  campo **remove a pergunta de permissão** — ele concede, não restringe. Declará-lo faria o método
+  tirar, de todo projeto que instala, uma confirmação que hoje existe. E você já tem o mesmo ganho
+  quando quiser: ao aprovar um comando, o motor oferece *"não perguntar novamente"* e guarda a regra
+  **na sua máquina**, num arquivo que você lê e apaga.
+- **`mgr validate` confere os campos opcionais do padrão**, quando presentes: tamanho de `name` e de
+  `compatibility`, e a forma de `metadata` e de `allowed-tools`. **Código que passava pode reprovar** —
+  só se já declarava um desses campos com forma inválida, e aí a reprovação é defeito real.
+- **Uma leitura errada e silenciosa foi corrigida:** o `mgr validate` lia `metadata:` aninhado como
+  campo vazio e promovia as chaves de dentro dele para o topo. Quem declarasse `metadata` teria o
+  valor lido errado **sem erro nenhum aparecer**.
 - **`mgr agents set <intenção> [--model] [--effort] [--engine]`**: escreve a política de uma
   intenção sem você abrir o JSON. Escrever um motor **não apaga** o outro, escrever uma intenção não
   mexe nas vizinhas, e passar `--effort` não apaga o `model`. Valor inválido é recusado **antes** de
@@ -53,6 +90,15 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   se algo não fechar a entrada. O hook de início de sessão **não** foi tocado.
 
 ### O que degrada, declarado
+- **No Copilot, `compatibility` e `metadata` não fazem nada em skill.** A documentação de skills dele
+  (`docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills`, lida em
+  2026-09-17) documenta **quatro** campos — `name`, `description`, `license` e `allowed-tools` — e
+  não os outros dois. Declará-los é correto pelo padrão aberto e pelo claude-code, e **inerte** lá:
+  não quebra e não faz efeito.
+- **A auditoria marca a `description` quando ela MENCIONA um comando.** A linha 3 de uma skill é o
+  campo `description`, e mencionar não é executar. O achado carrega a linha, então você descarta num
+  segundo — mas distinguir menção de instrução em prosa é exatamente o que foi medido e rejeitado, e
+  por isso o ruído fica.
 - **No Copilot a compactação não pode ser impedida, e o aviso não tem como chegar a você.** A
   documentação oficial classifica o evento de pré-compactação dele como *"notification only"*, diz
   que a saída do hook não é processada e não oferece nenhum campo por onde falar com você — ao

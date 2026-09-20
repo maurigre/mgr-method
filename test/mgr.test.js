@@ -390,6 +390,8 @@ test("CLI: comandos básicos e ciclo de vida (smoke)", () => {
   assert.match(helpEn, /spec validate\s+validates this project's plan and spec artifacts/);
   assert.match(run(["help"]), /audit\s+infere as capacidades perigosas de cada skill/);
   assert.match(helpEn, /audit\s+infers each skill's dangerous capabilities/);
+  assert.match(run(["help"]), /doctor\s+confere se a instalacao esta integra/);
+  assert.match(helpEn, /doctor\s+checks whether the installation is intact/);
 
   const repo = diretorioTemporario();
   const flags = ["--engine", "claude-code", "--arch", "hexagonal", "--project-id", "x", "-y"];
@@ -3047,5 +3049,78 @@ test("mgr audit: a borda não tem lógica de inferência", () => {
   for (const vazamento of ["ignore previous", "exfiltration\"", "__proto__", "EXECUTAVEIS"]) {
     assert.ok(!borda.includes(vazamento),
       `\`${vazamento}\` em bin/mgr.js seria a lógica que a §2.1 manda ficar no núcleo`);
+  }
+});
+
+const rodarDoctor = (args = []) => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  try {
+    return { stdout: execFileSync("node", [bin, "doctor", ...args], ptBR(".")), status: 0 };
+  } catch (erro) {
+    return { stdout: `${erro.stdout}`, status: erro.status };
+  }
+};
+
+test("mgr doctor: sai 1 com defeito e nomeia esperado e encontrado", () => {
+  const { status, stdout } = rodarDoctor();
+  assert.equal(status, 1, "este repositorio tem tres orfas, e orfa e defeito");
+  assert.match(stdout, /orphan-skill/);
+  assert.match(stdout, /esperado:/);
+  assert.match(stdout, /encontrado:/);
+});
+
+test("mgr doctor declara que ausencia de achado nao e atestado", () => {
+  assert.match(rodarDoctor().stdout, /nunca que está íntegro/,
+    "mesma disciplina do audit: a lista de verificacoes e finita e conhecida");
+});
+
+test("mgr doctor separa remediacao de ausencia de correcao", () => {
+  const { stdout } = rodarDoctor();
+  assert.match(stdout, /sem correcao automatica/, "a orfa nao tem, e a razao esta no ADR da fatia");
+  assert.match(stdout, /resolva com: mgr update/, "a instalacao velha tem, e e o comando que ja existe");
+});
+
+test("mgr doctor em projeto sem instalacao sai 0 e diz por que", () => {
+  const vazio = diretorioTemporario();
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const saida = execFileSync("node", [bin, "doctor", vazio], ptBR(vazio));
+  assert.match(saida, /sem instalação do MGR/, "sem manifesto nao ha o que comparar, e isso nao e defeito");
+});
+
+test("mgr doctor: instalacao recem-feita nao produz achado nenhum", () => {
+  const novo = diretorioTemporario();
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  execFileSync("node", [bin, "install", "--engine", "claude-code", "--language", "java",
+    "--arch", "layered", "--project-id", "recem", "-y", novo], ptBR(novo));
+  const payload = JSON.parse(execFileSync("node", [bin, "doctor", "--json", novo], ptBR(novo)));
+  const alarmes = payload.findings.filter(({ severity }) => severity !== "unavailable");
+  assert.deepEqual(alarmes, [],
+    `a CA-3 nomeia este caso como a prova: recem-instalado nao produz defeito nem aviso, e produziu ${JSON.stringify(alarmes)}`);
+  assert.ok(payload.findings.every(({ severity }) => severity === "unavailable"),
+    "o unico achado aceitavel aqui e declaracao de indisponibilidade, que e honestidade do instrumento e nao alarme");
+  assert.equal(payload.blocks, false, "sem defeito nao ha o que bloquear");
+  assert.equal(payload.checks, 9, "as nove rodaram: zero achado nao e zero verificacao");
+});
+
+test("mgr doctor --json tem schemaVersion e a lista fechada", () => {
+  const { stdout } = rodarDoctor(["--json"]);
+  const payload = JSON.parse(stdout);
+  assert.equal(payload.schemaVersion, 1);
+  assert.equal(payload.checks, 9, "a lista e fechada: mudar exige decidir");
+  assert.equal(payload.blocks, true);
+  assert.ok(payload.findings.every(({ check, file, expected, found }) => check && file && expected && found));
+});
+
+test("mgr doctor NAO tem --fix, e nao escreve nada", () => {
+  const antes = readFileSync(".mgr-core/manifest.json", "utf8");
+  rodarDoctor(["--fix"]);
+  assert.equal(readFileSync(".mgr-core/manifest.json", "utf8"), antes,
+    "a flag nao existe, e mesmo passada o comando segue sendo diagnostico");
+});
+
+test("mgr doctor: a borda nao tem logica de verificacao", () => {
+  const borda = readFileSync(fileURLToPath(new URL("../bin/mgr.js", import.meta.url)), "utf8");
+  for (const vazamento of ["orphan-skill", "divergent-body", "{{MGR_", "unresolved-token"]) {
+    assert.ok(!borda.includes(vazamento), `\`${vazamento}\` na borda seria a logica que a secao 2.1 manda ficar no nucleo`);
   }
 });

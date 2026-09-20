@@ -4,6 +4,45 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 
 ## [Não lançado]
 ### Adicionado
+- **`mgr doctor`** — o comando que diz se a instalação está **íntegra**, e não só o que está
+  instalado.
+
+  **O que ele NÃO faz, e vem antes do que ele faz:**
+
+  - **não atesta integridade.** Nenhum achado significa *"nenhuma das nove verificações apareceu"*,
+    nunca *"está íntegro"*. A lista é **finita e fechada**, e o que está fora dela ele não vê;
+  - **não tem `--fix`, e isso é decisão medida.** Cinco das seis correções eram rodar o `mgr update`,
+    que **já existe e já pede confirmação**. Um `--fix` que o chamasse passaria o `-y` por você — e
+    instalar sem confirmação humana é exatamente o que o método proíbe. Ele **nomeia** a remediação;
+    a ação continua sua;
+  - **dois defeitos não têm remediação nenhuma**, e ele diz isso na cara: skill órfã (ninguém sabe
+    de onde ela veio — pode ser plugin seu, resto de instalação antiga, ou arquivo que você mesmo
+    pôs) e hook apontando para binário inexistente (reescrever seu `settings` mexe em configuração
+    que não é do método);
+  - **não diz o porquê.** Ele mostra que a skill sumiu, não por que sumiu; que a versão está atrás,
+    não se a diferença importa para a sua versão;
+  - **não julga o conteúdo.** Se a skill está correta é o `mgr validate`; se ela tem capacidade
+    perigosa é o `mgr audit`; reparar divergência é o `mgr update`. O `doctor` não faz nenhum dos três;
+  - **não alcança projeto que nunca instalou o método** — sem `.mgr-core/manifest.json` não há com o
+    que comparar, e ele sai dizendo isso, sem erro.
+
+  **E o que ele faz:** nove verificações sobre a sua instalação — skill órfã, skill declarada e
+  ausente, agente declarado sem arquivo, arquitetura escolhida sem a skill dela, corpo divergente da
+  fonte, token `{{MGR_*}}` não resolvido, manifesto atrás do pacote, hook quebrado e divergência
+  contra o lockfile. Cada achado traz **arquivo, esperado, encontrado** e a remediação quando existe.
+  Sai com erro **só quando há defeito**: manifesto atrás do pacote é **aviso**, porque é o caso normal
+  de quem ainda não rodou `mgr update`, e fazê-lo reprovar quebraria CI sem defeito real.
+
+  **Instalação velha não é arquivo adulterado, e ele não confunde os dois.** Enquanto o seu manifesto
+  estiver atrás do pacote, a comparação de corpo se declara **indisponível** em vez de gritar: divergir
+  ali é o estado esperado de quem ainda não rodou `mgr update`. Com as versões iguais, corpo divergente
+  vira defeito — porque aí é adulteração ou instalação parcial, e o alarme é devido.
+
+  **Uma verificação foi cortada durante a construção, e o corte é o ganho.** O método exige que toda
+  verificação tenha um **caso negativo conhecido** — e a medição em instalação recém-feita mostrou
+  que a comparação de corpo, como estava desenhada, acusava **7 de 7 instalações limpas**. Era falso
+  positivo do método de comparação, não instalação velha. Sem esse critério, o comando teria saído
+  gritando em todo projeto do mundo.
 - **`mgr audit`** (ADR-0021, e a Camada 1 que o ADR-0007 tinha prometido).
 
   **O que ele NÃO faz, e vem antes do que ele faz:**

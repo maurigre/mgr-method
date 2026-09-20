@@ -273,6 +273,9 @@ const en = {
   specStatusHandoffNone: "  handoff:   none",
   specStatusHandoffOn: (file) => `  handoff:   ${file} (on disk; it is never removed automatically)`,
   specStatusLine: (slug, resumo) => `  ${slug.padEnd(26)} ${resumo}`,
+  doctorSemInstalacao: "no MGR installation here: nothing to compare against",
+  doctorResumo: (checks, achados) => `  ${checks} checks, ${achados} finding(s).`,
+  doctorNaoAtesta: "  No finding means the checks I run found nothing, never that the install is sound.",
   specStatusWarning:
     "This is FILE EXISTENCE, not progress. It does not know which checkpoint you approved, and an artifact on disk is not an approved artifact.",
   specStatusNotFound: (slug) => `no feature \`${slug}\` in specs/`,
@@ -296,6 +299,7 @@ Usage: mgr <command> [options]
   build            generates a directory with the full content (--out)
   validate         validates the SKILL.md files (skill authoring)
   audit            infers each skill's dangerous capabilities and compares with what it declares
+  doctor           checks whether the installation is intact, and never writes anything
   spec validate    validates this project's plan and spec artifacts
                    ([<slug>], --all, --strict, --json)
   spec next        the next action from the plan ([<slug>], --json)
@@ -589,6 +593,9 @@ const ptBR = {
   specStatusHandoffNone: "  handoff:   nenhum",
   specStatusHandoffOn: (file) => `  handoff:   ${file} (em disco; ele nunca é removido automaticamente)`,
   specStatusLine: (slug, resumo) => `  ${slug.padEnd(26)} ${resumo}`,
+  doctorSemInstalacao: "sem instalação do MGR aqui: não há com o que comparar",
+  doctorResumo: (checks, achados) => `  ${checks} verificações, ${achados} achado(s).`,
+  doctorNaoAtesta: "  Nenhum achado significa que as verificações que eu faço não acharam nada, nunca que está íntegro.",
   specStatusWarning:
     "Isto é EXISTÊNCIA DE ARQUIVO, não progresso. Ele não sabe qual checkpoint você aprovou, e artefato em disco não é artefato aprovado.",
   specStatusNotFound: (slug) => `não há a feature \`${slug}\` em specs/`,
@@ -612,6 +619,7 @@ Uso: mgr <comando> [opções]
   build            gera um diretório com todo o conteúdo (--out)
   validate         valida as SKILL.md (autoria de skill)
   audit            infere as capacidades perigosas de cada skill e compara com o declarado
+  doctor           confere se a instalacao esta integra, e nunca escreve nada
   spec validate    valida o plano e a spec deste projeto
                    ([<slug>], --all, --strict, --json)
   spec next        a próxima ação a partir do plano ([<slug>], --json)

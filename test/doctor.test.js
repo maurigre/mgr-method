@@ -8,6 +8,7 @@ import {
   AUDITED, NO_INSTALL, diagnose, hasDefect,
 } from "../src/doctor.js";
 import { diff } from "../src/lockfile.js";
+import { ORFA, VERSAO_VELHA, descartar, instalacaoComDefeitos, instalacaoLimpa } from "./fixtures/instalacao.js";
 
 const DIR = ".claude/skills";
 
@@ -92,10 +93,6 @@ test("todo achado carrega arquivo, esperado e encontrado", () => {
   }
 });
 
-const AS_TREZE = readdirSync("skills").filter((nome) => existsSync(`skills/${nome}/SKILL.md`)).sort();
-const daFonte = (nome) => readFileSync(`skills/${nome}/SKILL.md`, "utf8");
-const doInstalado = (nome) => readFileSync(`.claude/skills/${nome}/SKILL.md`, "utf8");
-
 test("a linha que carrega token na fonte NAO conta como divergencia", () => {
   const fonte = "---\nname: x\n---\nOutput language: {{MGR_USER_LANGUAGE}}\nigual";
   const instalado = "---\nname: x\ncontext: fork\n---\nOutput language: pt-BR\nigual";
@@ -111,17 +108,22 @@ test("linha SEM token que difere e achado", () => {
   assert.match(achado.found, /a partir da linha 1/, "a primeira linha do corpo e a linha 1, nao a 2");
 });
 
-test("a instalacao deste repositorio esta velha em parte das skills, e integra no resto", () => {
-  const instaladas = AS_TREZE.filter((nome) => existsSync(`.claude/skills/${nome}/SKILL.md`));
-  const divergem = instaladas.filter((nome) =>
-    divergentBody({ name: nome, source: daFonte(nome), installed: doInstalado(nome), file: nome }).length > 0);
-  const integras = instaladas.filter((nome) => !divergem.includes(nome));
-  assert.ok(divergem.includes("spec-create"),
-    "a copia instalada do spec-create nao tem a secao de comissionamento que a fonte tem: instalacao velha de verdade");
-  assert.ok(integras.includes("code-analyzer"),
-    "e o metodo antigo acusava esta tambem, so porque o install resolve token nela");
-  assert.ok(integras.length >= 3 && divergem.length >= 3,
-    "o repositorio tem os dois casos, e por isso serve de fixture para os dois");
+test("instalacao recem-feita NAO tem corpo divergente em skill nenhuma", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const instaladas = readdirSync(`${repo}/.claude/skills`).filter((nome) => nome !== "_shared");
+    const divergem = instaladas.filter((nome) => divergentBody({
+      name: nome,
+      source: readFileSync(`skills/${nome}/SKILL.md`, "utf8"),
+      installed: readFileSync(`${repo}/.claude/skills/${nome}/SKILL.md`, "utf8"),
+      file: nome,
+    }).length > 0);
+    assert.deepEqual(divergem, [],
+      "o metodo antigo acusava 7 de 7 aqui, so porque o install resolve token; pular a linha com token e o que corrigiu isso");
+    assert.ok(instaladas.length >= 8, `a fixture tem de instalar de verdade, e instalou ${instaladas.length}`);
+  } finally {
+    descartar(repo);
+  }
 });
 
 test("a divergencia reporta a PRIMEIRA linha, nao a contagem", () => {
@@ -198,10 +200,17 @@ test("hook ausente no arquivo nao produz achado", () => {
   assert.deepEqual(brokenHooks({ hooks: undefined, exists: () => false, file: "s" }), []);
 });
 
-test("hook do proprio repositorio resolve", () => {
-  const { hooks } = JSON.parse(readFileSync(".claude/settings.local.json", "utf8"));
-  assert.deepEqual(brokenHooks({ hooks, exists: (caminho) => existsSync(caminho), file: "s" }), [],
-    "o caminho e absoluto e de maquina: se o projeto mudar de lugar, este teste avisa");
+test("hook de instalacao recem-feita resolve", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const arquivo = `${repo}/.claude/settings.local.json`;
+    if (!existsSync(arquivo)) return;
+    const { hooks } = JSON.parse(readFileSync(arquivo, "utf8"));
+    assert.deepEqual(brokenHooks({ hooks, exists: (caminho) => existsSync(caminho), file: "s" }), [],
+      "o caminho e absoluto e de maquina: o install tem de escreve-lo apontando para binario que existe");
+  } finally {
+    descartar(repo);
+  }
 });
 
 test("sem lockfile a verificacao se declara INDISPONIVEL, e isso nao e defeito", () => {
@@ -239,20 +248,28 @@ test("projeto sem instalacao do metodo devolve outcome proprio, nao erro", () =>
   assert.deepEqual(resultado.findings, [], "sem manifesto nao ha o que comparar, e isso nao e defeito");
 });
 
-test("diagnose acha os defeitos reais deste repositorio", () => {
-  const { outcome, findings, checks } = diagnose(".");
-  assert.equal(outcome, AUDITED);
-  assert.equal(checks, 9, "a lista e FECHADA: mudar o numero aqui exige decidir, nao descobrir depois");
-  const porTipo = (nome) => findings.filter(({ check }) => check === nome);
-  assert.equal(porTipo("orphan-skill").length, 3, "arch-hexagonal, evidence-capture e junit-clean estao fora do manifesto");
-  const corpo = porTipo("divergent-body");
-  assert.equal(corpo.length, 1, "este repositorio esta atras do pacote, entao a comparacao de corpo e UMA declaracao, nao um alarme por skill");
-  assert.equal(corpo[0].severity, UNAVAILABLE, "com o manifesto atras do pacote ela nao separa velho de adulterado");
-  assert.equal(porTipo("stale-install").length, 1, "beta.9 no manifesto contra a versao do pacote");
+test("diagnose acha cada defeito plantado na fixture", () => {
+  const repo = instalacaoComDefeitos();
+  try {
+    const { outcome, findings, checks } = diagnose(repo);
+    assert.equal(outcome, AUDITED);
+    assert.equal(checks, 9, "a lista e FECHADA: mudar o numero aqui exige decidir, nao descobrir depois");
+    const porTipo = (nome) => findings.filter(({ check }) => check === nome);
+    assert.equal(porTipo("orphan-skill").length, 1, `a fixture planta ${ORFA} fora do manifesto, e so ela`);
+    assert.equal(porTipo("broken-hook").length, 1, "a fixture aponta o SessionStart para um binario que nao existe");
+    assert.equal(porTipo("stale-install").length, 1, `a fixture poe ${VERSAO_VELHA} no manifesto contra a versao do pacote`);
+    const corpo = porTipo("divergent-body");
+    assert.equal(corpo.length, 1, "com o manifesto atras do pacote a comparacao e UMA declaracao, nao um alarme por skill");
+    assert.equal(corpo[0].severity, UNAVAILABLE, "atras do pacote ela nao separa velho de adulterado");
+  } finally {
+    descartar(repo);
+  }
 });
 
 test("o manifesto atras do pacote entra como AVISO e nao faz bloquear sozinho", () => {
-  const soAviso = { findings: diagnose(".").findings.filter(({ check }) => check === "stale-install") };
+  const repo = instalacaoComDefeitos();
+  const soAviso = { findings: diagnose(repo).findings.filter(({ check }) => check === "stale-install") };
+  descartar(repo);
   assert.equal(hasDefect(soAviso), false,
     "instalacao velha e o estado normal de quem nao rodou update; bloquear por isso deixaria quase todo projeto vermelho");
 });
@@ -263,19 +280,22 @@ test("hasDefect ignora indisponivel", () => {
 });
 
 test("diagnose NAO escreve nada em disco", () => {
-  const antes = readdirSync(".claude/skills").sort().join("|")
-    + readFileSync(".mgr-core/manifest.json", "utf8")
-    + readFileSync(".claude/settings.local.json", "utf8");
-  diagnose(".");
-  const depois = readdirSync(".claude/skills").sort().join("|")
-    + readFileSync(".mgr-core/manifest.json", "utf8")
-    + readFileSync(".claude/settings.local.json", "utf8");
+  const repo = instalacaoComDefeitos();
+  const estado = () => readdirSync(`${repo}/.claude/skills`).sort().join("|")
+    + readFileSync(`${repo}/.mgr-core/manifest.json`, "utf8")
+    + readFileSync(`${repo}/.claude/settings.local.json`, "utf8");
+  const antes = estado();
+  diagnose(repo);
+  const depois = estado();
+  descartar(repo);
   assert.equal(depois, antes,
     "nao ha --fix e o comando e diagnostico: a garantia e nao escrever, nao apenas nao escrever sem confirmacao");
 });
 
 test("toda verificacao declara remediacao ou a razao de nao haver", () => {
-  const { findings } = diagnose(".");
+  const repo = instalacaoComDefeitos();
+  const { findings } = diagnose(repo);
+  descartar(repo);
   for (const achado of findings) {
     const temRemediacao = typeof achado.fix === "string" && achado.fix.length > 0;
     assert.ok(temRemediacao || achado.fix === null,

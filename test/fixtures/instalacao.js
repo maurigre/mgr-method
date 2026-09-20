@@ -19,11 +19,18 @@ export const ORFA = "arch-hexagonal";
 export const VERSAO_VELHA = "0.0.1-fixture";
 export const HOOK_QUEBRADO = "/nao/existe/mgr.js";
 
-/** Instala num temporario e devolve o caminho. Sem defeito nenhum: e o caso NEGATIVO da `RN-3`. */
-export function instalacaoLimpa({ arch = "layered", language = "java" } = {}) {
+/**
+ * Instala num temporario e devolve o caminho. Sem defeito nenhum: e o caso NEGATIVO da `RN-3`.
+ *
+ * O `--user-language` e DECLARADO de proposito. Sem ele o manifesto herda o idioma do ambiente, e o
+ * runner do CI nao tem locale pt_BR: a saida saia em ingles e o teste que afirma a frase em portugues
+ * reprovava so ali. Fixture que depende do ambiente nao e fixture.
+ */
+export function instalacaoLimpa({ arch = "layered", language = "java", userLanguage = "pt-BR" } = {}) {
   const repo = mkdtempSync(path.join(os.tmpdir(), "mgr-doctor-"));
   execFileSync("node", [BIN, "install", "--engine", "claude-code", "--language", language,
-    "--arch", arch, "--project-id", "fixture", "-y", repo], { encoding: "utf8", cwd: repo });
+    "--arch", arch, "--user-language", userLanguage, "--project-id", "fixture", "-y", repo],
+  { encoding: "utf8", cwd: repo });
   return repo;
 }
 

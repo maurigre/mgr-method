@@ -19,6 +19,7 @@ import { repoRoot, slugs } from "../src/artifacts.js";
 import { CONFIGURED, readAgents, writeAgentPolicy } from "../src/registry.js";
 import * as tokens from "../src/tokens.js";
 import * as audit from "../src/audit.js";
+import * as doctor from "../src/doctor.js";
 import { ids as engineIds } from "../src/engines/index.js";
 import { blocking, summarize } from "../src/findings.js";
 import { buildRuntime, gateSummary, inheritingModel } from "../src/builder.js";
@@ -1248,6 +1249,38 @@ function cmdBuild(flags) {
 // **Só `EXCEEDS` sai com 1.** O ADR-0007 manda "bloqueio ou warning forte" para "declarou X e
 // detectou X+Y", e para "não declarou" manda CONFIRMAÇÃO OBRIGATÓRIA, que é exigência do fluxo de
 // instalação e não falha de gate.
+// `mgr doctor` — diz se a instalacao esta INTEGRA, e nao so o que esta instalada (U2).
+//
+// **Nao escreve nada, em nenhum modo.** Nao ha `--fix`: cinco das seis correcoes eram rodar o
+// `mgr update`, e chama-lo passaria `-y` pela pessoa. O comando nomeia a remediacao; a acao e dela.
+function cmdDoctor(repo, flags) {
+  const resultado = doctor.diagnose(repo);
+
+  if (resultado.outcome === doctor.NO_INSTALL) {
+    console.log(M.doctorSemInstalacao);
+    return 0;
+  }
+
+  const bloqueia = doctor.hasDefect(resultado);
+  if (flags.json) {
+    console.log(JSON.stringify({ schemaVersion: 1, blocks: bloqueia, ...resultado }, null, 2));
+    return bloqueia ? 1 : 0;
+  }
+
+  const cor = { [doctor.DEFECT]: pc.red, [doctor.WARNING]: pc.yellow, [doctor.UNAVAILABLE]: pc.dim };
+  for (const { check, severity, file, expected, found, fix } of resultado.findings) {
+    console.log(cor[severity](`${severity === doctor.DEFECT ? "x" : "!"} ${check} — ${file}`));
+    console.log(`    esperado:  ${expected}`);
+    console.log(`    encontrado: ${found}`);
+    console.log(fix ? `    resolva com: ${fix}` : pc.dim("    sem correcao automatica"));
+  }
+
+  console.log("");
+  console.log(M.doctorResumo(resultado.checks, resultado.findings.length));
+  console.log(M.doctorNaoAtesta);
+  return bloqueia ? 1 : 0;
+}
+
 function cmdAudit(flags) {
   const resultados = audit.auditAll();
   const bloqueia = audit.blocks(resultados);
@@ -1334,6 +1367,7 @@ async function main() {
       case "build": return cmdBuild(flags);
       case "validate": return cmdValidate();
       case "audit": return cmdAudit(flags);
+      case "doctor": return cmdDoctor(repo, flags);
       case "spec": return cmdSpec(flags, positional);
       case "agents": return cmdAgents(flags, positional);
       case "tokens": return cmdTokens(flags, positional);

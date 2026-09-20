@@ -25,6 +25,7 @@ import { addRegistry, readAgents, writeAgentPolicy, writeConfig } from "../src/r
 import { eventsFor, hookCommand, removeHook, writeHook, writtenEvents } from "../src/hooks.js";
 import { readLockfile } from "../src/lockfile.js";
 import { captureCli } from "../scripts/capture-cli-baseline.mjs";
+import { descartar, instalacaoComDefeitos } from "./fixtures/instalacao.js";
 
 const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-"));
 const CORE = ["spec-init", "spec-create", "spec-execute", "adr-create", "code-analyzer", "diagnosing-bugs"];
@@ -390,6 +391,8 @@ test("CLI: comandos básicos e ciclo de vida (smoke)", () => {
   assert.match(helpEn, /spec validate\s+validates this project's plan and spec artifacts/);
   assert.match(run(["help"]), /audit\s+infere as capacidades perigosas de cada skill/);
   assert.match(helpEn, /audit\s+infers each skill's dangerous capabilities/);
+  assert.match(run(["help"]), /doctor\s+confere se a instalacao esta integra/);
+  assert.match(helpEn, /doctor\s+checks whether the installation is intact/);
 
   const repo = diretorioTemporario();
   const flags = ["--engine", "claude-code", "--arch", "hexagonal", "--project-id", "x", "-y"];
@@ -3047,5 +3050,99 @@ test("mgr audit: a borda não tem lógica de inferência", () => {
   for (const vazamento of ["ignore previous", "exfiltration\"", "__proto__", "EXECUTAVEIS"]) {
     assert.ok(!borda.includes(vazamento),
       `\`${vazamento}\` em bin/mgr.js seria a lógica que a §2.1 manda ficar no núcleo`);
+  }
+});
+
+// O alvo e uma instalacao PLANTADA num temporario, nunca a deste repositorio: aquela e gitignored,
+// nao existe no CI, e mesmo aqui o estado dela e acidente que um `mgr update` mudaria.
+const rodarDoctor = (args = [], repo = ".") => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  try {
+    return { stdout: execFileSync("node", [bin, "doctor", ...args, repo], ptBR(repo)), status: 0 };
+  } catch (erro) {
+    return { stdout: `${erro.stdout}`, status: erro.status };
+  }
+};
+
+const comDoctor = (corpo) => {
+  const repo = instalacaoComDefeitos();
+  try {
+    corpo(repo);
+  } finally {
+    descartar(repo);
+  }
+};
+
+test("mgr doctor: sai 1 com defeito e nomeia esperado e encontrado", () => {
+  comDoctor((repo) => {
+    const { status, stdout } = rodarDoctor([], repo);
+    assert.equal(status, 1, "a fixture planta uma orfa, e orfa e defeito");
+    assert.match(stdout, /orphan-skill/);
+    assert.match(stdout, /esperado:/);
+    assert.match(stdout, /encontrado:/);
+  });
+});
+
+test("mgr doctor declara que ausencia de achado nao e atestado", () => {
+  comDoctor((repo) => {
+    assert.match(rodarDoctor([], repo).stdout, /nunca que está íntegro/,
+      "mesma disciplina do audit: a lista de verificacoes e finita e conhecida");
+  });
+});
+
+test("mgr doctor separa remediacao de ausencia de correcao", () => {
+  comDoctor((repo) => {
+    const { stdout } = rodarDoctor([], repo);
+    assert.match(stdout, /sem correcao automatica/, "a orfa nao tem, e a razao esta no ADR da fatia");
+    assert.match(stdout, /resolva com: mgr update/, "a instalacao velha tem, e e o comando que ja existe");
+  });
+});
+
+test("mgr doctor em projeto sem instalacao sai 0 e diz por que", () => {
+  const vazio = diretorioTemporario();
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const saida = execFileSync("node", [bin, "doctor", vazio], ptBR(vazio));
+  assert.match(saida, /sem instalação do MGR/, "sem manifesto nao ha o que comparar, e isso nao e defeito");
+});
+
+test("mgr doctor: instalacao recem-feita nao produz achado nenhum", () => {
+  const novo = diretorioTemporario();
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  execFileSync("node", [bin, "install", "--engine", "claude-code", "--language", "java",
+    "--arch", "layered", "--project-id", "recem", "-y", novo], ptBR(novo));
+  const payload = JSON.parse(execFileSync("node", [bin, "doctor", "--json", novo], ptBR(novo)));
+  const alarmes = payload.findings.filter(({ severity }) => severity !== "unavailable");
+  assert.deepEqual(alarmes, [],
+    `a CA-3 nomeia este caso como a prova: recem-instalado nao produz defeito nem aviso, e produziu ${JSON.stringify(alarmes)}`);
+  assert.ok(payload.findings.every(({ severity }) => severity === "unavailable"),
+    "o unico achado aceitavel aqui e declaracao de indisponibilidade, que e honestidade do instrumento e nao alarme");
+  assert.equal(payload.blocks, false, "sem defeito nao ha o que bloquear");
+  assert.equal(payload.checks, 9, "as nove rodaram: zero achado nao e zero verificacao");
+});
+
+test("mgr doctor --json tem schemaVersion e a lista fechada", () => {
+  comDoctor((repo) => {
+    const payload = JSON.parse(rodarDoctor(["--json"], repo).stdout);
+    assert.equal(payload.schemaVersion, 1);
+    assert.equal(payload.checks, 9, "a lista e fechada: mudar exige decidir");
+    assert.equal(payload.blocks, true);
+    assert.ok(payload.findings.every(({ check, file, expected, found }) => check && file && expected && found));
+  });
+});
+
+test("mgr doctor NAO tem --fix, e nao escreve nada", () => {
+  comDoctor((repo) => {
+    const manifesto = `${repo}/.mgr-core/manifest.json`;
+    const antes = readFileSync(manifesto, "utf8");
+    rodarDoctor(["--fix"], repo);
+    assert.equal(readFileSync(manifesto, "utf8"), antes,
+      "a flag nao existe, e mesmo passada o comando segue sendo diagnostico");
+  });
+});
+
+test("mgr doctor: a borda nao tem logica de verificacao", () => {
+  const borda = readFileSync(fileURLToPath(new URL("../bin/mgr.js", import.meta.url)), "utf8");
+  for (const vazamento of ["orphan-skill", "divergent-body", "{{MGR_", "unresolved-token"]) {
+    assert.ok(!borda.includes(vazamento), `\`${vazamento}\` na borda seria a logica que a secao 2.1 manda ficar no nucleo`);
   }
 });

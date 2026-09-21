@@ -4,6 +4,43 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 
 ## [Não lançado]
 ### Adicionado
+- **Dois gates novos, e uma lei para o que eles não alcançam.** A ordem importa: o que deu para
+  virar check virou check; a lei ficou só com o resto.
+
+  **O que isso NÃO faz, e vem antes do que faz:**
+
+  - **não previne erro nenhum.** O que se compra é que o erro da classe coberta **não chega ao
+    commit**. A lei nova declara isso de si mesma, porque prometer prevenção seria a garantia que a
+    própria `L1.9` proíbe;
+  - **o check vê forma, nunca intenção.** Ele não sabe se a faixa de caracteres era proposital, nem
+    se o `\n` era literal de propósito. Lista vazia significa *"nenhum dos três padrões apareceu"*,
+    jamais *"está correto"*;
+  - **três padrões, não uma varredura geral.** Dos onze casos medidos, **três** viraram padrão e
+    **oito** ficaram na lei, porque nenhum parser os decide;
+  - **faixa escrita por escape passa.** Limite conhecido: quem escreve `\u00C0` sabe o que faz; quem
+    cola o caractere é quem erra, e foi assim nas duas vezes;
+  - **o `check:clean` não substitui o CI.** Ele reproduz duas condições — árvore sem os gitignorados
+    e locale neutro — e não reproduz sistema, versão de Node nem rede. **Verde ali não prova verde no
+    CI; vermelho ali prova vermelho no CI.**
+
+  **E o que eles fazem.** `npm run check:claims`, no hook `pre-commit` e no CI, reprova três padrões
+  que vêm de erros reais: `\n`/`\t` literal em markdown distribuído (vazou em dois READMEs e ficou
+  dois commits no repositório), código de saída lido depois de um pipe (`cmd | tail; echo $?` lê o
+  status do `tail`, e isso fez uma sessão inteira reportar lint verde), e faixa de caracteres com
+  limite não-ASCII usada para achar letra acentuada (`[À-ÿ]` casa o sinal de multiplicação —
+  aconteceu **duas** vezes).
+
+  `npm run check:clean` reproduz a condição do CI num comando. Ele existe porque o CI reprovou duas
+  vezes o que passava na máquina, e na segunda a conferência manual não pegou porque foi rodada com
+  o locale local e não repetida depois de mudar código.
+
+  **A `LAW-5` foi generalizada:** ela pega agora **qualquer** `{{MGR_*}}` em **qualquer** `.md` de
+  uma árvore instalada. Antes olhava só o token das leis e só `SKILL.md`, então nada sob `_shared/`
+  era conferido — nem pelo `mgr doctor`, que não lê aquela árvore.
+
+  **E o template do `adr-create` passou a cobrar a evidência:** toda mitigação declara
+  `proved by: <a execução que falharia se ela não existisse>` ou o literal `[NOT VERIFIED]`. É o
+  ponto exato onde uma mitigação inexistente foi afirmada num ADR.
 - **A carta de primícias** (ADR-0022) — o que o método promete, escrito onde ele já dizia que era
   soberano e nunca tinha definido.
 

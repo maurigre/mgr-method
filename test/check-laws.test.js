@@ -62,7 +62,24 @@ test("LAW-5 acusa token cru sobrando numa skill instalada", () => {
   writeFileSync(path.join(dir, "spec-create", "SKILL.md"), `ponteiro: ${LAWS_TOKEN}\n`, "utf8");
   const problemas = checkResolved(dir);
   assert.equal(problemas.length, 1);
-  assert.match(problemas[0], /^LAW-5 spec-create: .* left unresolved/);
+  assert.match(problemas[0], /^LAW-5 spec-create\/SKILL\.md: .* left unresolved/,
+    "a mensagem nomeia o ARQUIVO e nao a pasta: com varios .md por skill, a pasta nao diz onde esta");
+});
+
+test("shouldReproveAnyMethodTokenAndNotOnlyTheLawsOne", () => {
+  const dir = path.join(diretorioTemporario(), "skills");
+  mkdirSync(path.join(dir, "code-analyzer"), { recursive: true });
+  writeFileSync(path.join(dir, "code-analyzer", "SKILL.md"), "idioma: {{MGR_USER_LANGUAGE}}\n", "utf8");
+  assert.match(checkResolved(dir)[0], /\{\{MGR_USER_LANGUAGE\}\} left unresolved/,
+    "a versao anterior so procurava o token das leis, entao os outros tres sobravam sem ninguem ver");
+});
+
+test("shouldReproveATokenLeftUnderSharedAndNotOnlyInsideASkill", () => {
+  const dir = path.join(diretorioTemporario(), "skills");
+  mkdirSync(path.join(dir, "_shared", "charter"), { recursive: true });
+  writeFileSync(path.join(dir, "_shared", "charter", "core-principles.md"), "aponta: {{MGR_CHARTER}}\n", "utf8");
+  assert.match(checkResolved(dir)[0], /^LAW-5 _shared\/charter\/core-principles\.md:/,
+    "e o buraco que a emenda do ADR-0022 declarou: nada sob _shared/ era conferido, nem pelo doctor");
 });
 
 test("LAW-5 não acusa quando o token já foi resolvido", () => {

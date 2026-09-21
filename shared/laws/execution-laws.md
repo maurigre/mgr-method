@@ -176,6 +176,39 @@ A threshold unreachable without an artificial test → **report it to the user**
 scope what has no logic is the correct answer; testing it to move the number is metric fraud.
 Coverage is a metric, not a goal.
 
+### L2.6 — No claim about a mechanism without a run that could have failed `[All]`
+
+Descends from `CP-1` and `CP-4` of the charter: a guarantee that depends on remembering is not a
+guarantee, and what the method demands it must be able to check.
+
+**1. Coverage.** Writing that an existing mechanism covers a risk, a case or a requirement is a
+claim about external state, and `L2.1` governs it: external state is consulted, never supposed.
+Before writing *"X covers Y"*, *"X already handles that"*, *"the risk is mitigated by X"*, run the
+check that would **fail** if it were false — plant the defect and watch X catch it — and record what
+you ran beside the claim. If you cannot run it, write **[NOT VERIFIED]** in place of the claim. An
+unverified claim marked as such is honest; unmarked, it is false documentation.
+
+**2. Instruments.** A measurement counts as evidence only when the instrument **could have failed**.
+An instrument that returns something plausible for every input measures nothing. Before trusting a
+measurement that decides design: confirm the left side matched something (equality between two
+empty results is not evidence), enumerate a closed set instead of approximating it with a range, and
+read an exit code from the process you mean and never after a pipe.
+
+**Where it binds hardest:** an ADR's mitigation, a spec's decision, a slice's closure and a test's
+assertion message. In those places a false claim stops someone from building the protection.
+
+> **Status: this law is the residue, and it does not prevent.** What could be mechanised was
+> mechanised and lives in `scripts/check-claims.mjs`, which runs in the commit hook and in CI: three
+> patterns, each one from a real error. What remains here is what no parser decides. This law gives
+> the review gate a text to cite; it does not stop the error being made, and saying otherwise would
+> be the guarantee `L1.9` forbids.
+>
+> **Measured on 2026-09-20, and that is why it exists:** the same false coverage claim appeared on
+> **three** surfaces of one slice — an ADR, a check and a test message — and none had been run. The
+> gate had to reprove it by analogical extension of a documentation rule, and said so, because there
+> was no law to cite. Of the eleven instrument failures recorded in the same series, **three** became
+> patterns in the check and the rest stayed here.
+
 ---
 
 ## L3 — Context: the defence against the cognitive harness

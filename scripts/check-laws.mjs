@@ -11,7 +11,8 @@
 //   LAW-2  papel fora da matriz declarada
 //   LAW-3  skill do CORE sem a linha-ponteiro {{MGR_LAWS}}
 //   LAW-4  lei órfã: papel que não mapeia para nenhuma skill do CORE
-//   LAW-5  token {{MGR_LAWS}} sobrando (fonte instalada com o token cru)
+//   LAW-5  QUALQUER token {{MGR_*}} sobrando numa arvore instalada, em qualquer .md
+//          -> a versao anterior so olhava <skill>/SKILL.md, e nada sob `_shared/` era conferido
 //   CHT-1  ID de primícia duplicado na carta
 //   CHT-2  primícia sem uma das três partes obrigatórias
 //   CHT-3  cabeçalho `###` na carta fora do formato `CP-<n>`
@@ -138,16 +139,32 @@ export function checkCharterResolved(installedSkillsDir) {
   return problems;
 }
 
-// LAW-5: o token não pode sobrar numa árvore INSTALADA (onde já deveria estar resolvido).
+// Qualquer token do metodo, e nao so o das leis: o `{{MGR_CHARTER}}` mora DENTRO do arquivo de
+// leis, e o `{{MGR_ARCH_RULES}}` e o `{{MGR_USER_LANGUAGE}}` moram nas skills. Um so padrao cobre
+// os quatro e os que vierem.
+const QUALQUER_TOKEN = /\{\{MGR_[A-Z_]+\}\}/;
+
+// Todo arquivo de texto de uma arvore instalada, e nao so `SKILL.md`. A versao anterior olhava
+// apenas `<skill>/SKILL.md`, entao NENHUM arquivo sob `_shared/` era conferido — foi o buraco que a
+// emenda do ADR-0022 declarou, e que fazia o ponteiro da carta ficar sem guarda.
+function arquivosDeTexto(dir, prefixo = "") {
+  const arquivos = [];
+  for (const entrada of readdirSync(path.join(dir, prefixo), { withFileTypes: true })) {
+    const relativo = path.join(prefixo, entrada.name);
+    if (entrada.isDirectory()) arquivos.push(...arquivosDeTexto(dir, relativo));
+    else if (relativo.endsWith(".md")) arquivos.push(relativo);
+  }
+  return arquivos;
+}
+
+// LAW-5: nenhum token do metodo pode sobrar numa árvore INSTALADA (onde já deveria estar resolvido).
 export function checkResolved(installedSkillsDir) {
   const problems = [];
   if (!existsSync(installedSkillsDir)) return problems;
-  for (const entry of readdirSync(installedSkillsDir, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const md = path.join(installedSkillsDir, entry.name, "SKILL.md");
-    if (!existsSync(md)) continue;
-    if (readFileSync(md, "utf8").includes(LAWS_TOKEN)) {
-      problems.push(`LAW-5 ${entry.name}: ${LAWS_TOKEN} left unresolved in an installed skill`);
+  for (const relativo of arquivosDeTexto(installedSkillsDir)) {
+    const encontrado = readFileSync(path.join(installedSkillsDir, relativo), "utf8").match(QUALQUER_TOKEN);
+    if (encontrado) {
+      problems.push(`LAW-5 ${relativo}: ${encontrado[0]} left unresolved in an installed tree`);
     }
   }
   return problems;

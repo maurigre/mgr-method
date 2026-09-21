@@ -28,7 +28,9 @@
     "build": "esbuild bin/mgr.js --bundle --minify --platform=node --format=esm --external:@clack/prompts --external:picocolors --outfile=dist/mgr.min.js",
     "prepack": "npm run build",
     "prepare": "git config core.hooksPath .githooks || true",
-    "check:laws": "node scripts/check-laws.mjs"
+    "check:laws": "node scripts/check-laws.mjs",
+    "check:claims": "node scripts/check-claims.mjs",
+    "check:clean": "node scripts/check-clean.mjs"
   },
   "keywords": [
     "spec-driven-development",

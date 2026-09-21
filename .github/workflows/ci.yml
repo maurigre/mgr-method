@@ -41,6 +41,11 @@ jobs:
       - name: Verifica as fontes unicas de leis e de primicias (ADR-0011, ADR-0022)
         run: npm run check:laws
 
+      # O mesmo script que o .githooks/pre-commit roda. Ele esta nos DOIS lugares de proposito:
+      # `--no-verify` contorna hook local, e o CI nao.
+      - name: Verifica padrao de verificacao defeituosa
+        run: npm run check:claims
+
       # Gate de cobertura: o script `coverage` traz --test-coverage-lines=95 e sai != 0 abaixo disso.
       - run: npm run coverage
 

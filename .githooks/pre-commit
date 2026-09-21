@@ -1,0 +1,11 @@
+#!/bin/sh
+# Gate local de padrao de verificacao defeituosa (feature leis-de-verificacao).
+# Ativado pelo script `prepare` do package.json, via core.hooksPath — sem husky, sem dependencia.
+#
+# Varre a ARVORE INTEIRA, e nao so o que esta em stage. Medido: 12 ms para 127 arquivos, contra os
+# 927 ms que o commit-msg ao lado ja custa. E varrer tudo pega defeito que entrou num commit
+# anterior — o `\n` literal ficou dois commits no repo antes de alguem achar.
+#
+# Este hook e conveniencia: falha cedo, na maquina do autor. O gate REAL e o CI,
+# porque `--no-verify` contorna hook local e o CI nao.
+node scripts/check-claims.mjs

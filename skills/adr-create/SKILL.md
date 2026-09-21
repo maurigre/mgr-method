@@ -43,7 +43,9 @@ hyphen (`0001-`), OR the first line is a heading `# ADR-NNN:`.
 6. **Alternatives considered** (optional, recommended): each with its rejection reason in
    1-2 sentences. If "I did not consider any": warn that an ADR without alternatives has
    reduced value, but allow it.
-7. **Consequences:** what becomes easier · harder · risks · mitigations.
+7. **Consequences:** what becomes easier · harder · risks · mitigations. For each mitigation, ask
+   **what run proves it** — and record `[NOT VERIFIED]` when there is none, rather than leaving the
+   claim bare (`L2.6`).
 8. **Confirmation:** show the full preview → create / adjust a field / abort.
 
 ## INVOKED mode (by spec-create, spec-init or another skill)
@@ -88,8 +90,14 @@ Deciders: <Name1>, <Name2>
 - <what becomes harder>
 
 ### Risks and Mitigations
-- **Risk:** <description> — **Mitigation:** <action>
+- **Risk:** <description> — **Mitigation:** <action> — **proved by:** <the run that would have failed if the mitigation were absent>
 ```
+
+**A mitigation carries `proved by:` or the literal `[NOT VERIFIED]`, never nothing.** Naming an
+existing mechanism as the mitigation is a claim about external state (`L2.6`): run the check that
+would fail if it were false, or say you did not. Measured in 2026-09-20: an ADR named two existing
+mechanisms as covering a risk and **neither covered it** — the sentences were what stopped anyone
+from building the protection.
 
 Formatting: ISO date; no HTML comments; no `<...>` placeholders in the final file;
 blank line between sections. Alternatives section only when there are alternatives.

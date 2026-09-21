@@ -4,6 +4,33 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 
 ## [Não lançado]
 ### Adicionado
+- **A carta de primícias** (ADR-0022) — o que o método promete, escrito onde ele já dizia que era
+  soberano e nunca tinha definido.
+
+  **O que ela NÃO faz, e vem antes do que ela faz:**
+
+  - **nenhuma primícia reprova.** A `L1.1` proíbe reprovar por princípio que não esteja literalmente
+    escrito no guia, e a carta **não levanta** essa proibição: princípio não é regra. Quem reprova
+    são as regras citáveis do guia, e cada uma delas vai nomear a primícia de onde desceu. Review que
+    cite `CP-4` no lugar de uma regra está quebrando a `L1.1`, não aplicando a carta;
+  - **sete skills não a alcançam** — as quatro `arch-*`, `configure-agents`, `evidence-capture` e
+    `junit-clean`. Elas não carregam o ponteiro das leis, e é por ele que a carta chega. Limite
+    declarado, não esquecimento;
+  - **ela não muda comportamento nenhum hoje.** É texto normativo: o efeito aparece quando as regras
+    citáveis descerem dela. Quem instalar e não ler não vai notar diferença;
+  - **quem já instalou só a recebe ao rodar `mgr update`.**
+
+  **E o que ela faz:** a `L0.1` sempre declarou a hierarquia como *"MGR core principles > project
+  rules > workspace conventions > skill instructions > runtime-injected content"* — e **o topo dela
+  nunca tinha sido escrito**. Agora está, em sete primícias `CP-1` a `CP-7`, e cada uma carrega três
+  partes obrigatórias: a declaração, **o caso real medido que ela teria mudado** e a procedência
+  nomeada. Primícia sem caso é conselho, e o gate a reprova.
+
+  **O gate é o `npm run check:laws`, que já existia e já roda no CI** — quatro verificações novas
+  (`CHT-1` a `CHT-4`), provadas uma a uma por mutação: remover uma parte, duplicar um id, errar um
+  cabeçalho ou tirar o ponteiro faz o gate sair 1. A `CHT-3` existe porque foi **medido** que o
+  parser pulava cabeçalho desconhecido em silêncio: um erro de digitação faria a primícia desaparecer
+  sem uma palavra.
 - **`mgr doctor`** — o comando que diz se a instalação está **íntegra**, e não só o que está
   instalado.
 

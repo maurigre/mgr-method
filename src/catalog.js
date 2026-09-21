@@ -50,6 +50,12 @@ export const LAWS_TOKEN = "{{MGR_LAWS}}";
 // era remontado em cinco pontos, e a divergência entre duas dessas cópias foi o defeito do hook
 // que anunciava a árvore do outro motor.
 export const LAWS_INSTALLED = ["_shared", "laws", "execution-laws.md"];
+// Carta de primícias (ADR-0022): o topo da hierarquia que a `L0.1` nomeia e nunca definiu. Mesmo
+// molde das leis, com uma diferença que importa: o ponteiro NÃO vive nas SKILL.md, vive DENTRO do
+// próprio arquivo de leis — quem o resolve é a cópia instalada dele.
+export const CHARTER_SHARED = "shared/charter/core-principles.md";
+export const CHARTER_TOKEN = "{{MGR_CHARTER}}";
+export const CHARTER_INSTALLED = ["_shared", "charter", "core-principles.md"];
 // Token da linha-ponteiro de idioma presente em TODAS as SKILL.md, substituído no install
 // pelo idioma de saída do usuário (manifest.userLanguage). Sem valor (ex.: `mgr build`),
 // cai no fallback textual — a linha continua legível.

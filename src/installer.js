@@ -72,6 +72,12 @@ function lawsRulesRef(engineDir, scope, repo) {
   return scope === "project" ? path.relative(repo, shared) : shared;
 }
 
+// Referência que substitui o token {{MGR_CHARTER}} DENTRO das leis instaladas (ADR-0022).
+function charterRulesRef(engineDir, scope, repo) {
+  const shared = path.join(engineDir, ...catalog.CHARTER_INSTALLED);
+  return scope === "project" ? path.relative(repo, shared) : shared;
+}
+
 // Fonte de leis JÁ INSTALADA de um motor, ou `null` se aquele motor não está instalado.
 // Mora no núcleo porque é DECISÃO sobre estado persistido (INV-5/INV-6): a borda só formata.
 // Resolvida pelo diretório do próprio motor, nunca por posição em `skillsDirs` — indexar por
@@ -150,6 +156,7 @@ export function execute(plan) {
     installEngine(t.dir, t.skills || plan.skills, {
       archRulesRef: ref,
       lawsRulesRef: t.engine === "custom" ? undefined : lawsRulesRef(t.dir, plan.scope, plan.repo),
+      charterRulesRef: t.engine === "custom" ? undefined : charterRulesRef(t.dir, plan.scope, plan.repo),
       userLanguage: plan.userLanguage, engineId, reviewGate: engineId ? gate : undefined,
     });
     // Motor "custom" (--skills-dir) não é plataforma: não há diretório de agentes para ele.

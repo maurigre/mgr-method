@@ -12,6 +12,14 @@
 //   LAW-3  skill do CORE sem a linha-ponteiro {{MGR_LAWS}}
 //   LAW-4  lei órfã: papel que não mapeia para nenhuma skill do CORE
 //   LAW-5  token {{MGR_LAWS}} sobrando (fonte instalada com o token cru)
+//   CHT-1  ID de primícia duplicado na carta
+//   CHT-2  primícia sem uma das três partes obrigatórias
+//   CHT-3  cabeçalho `###` na carta fora do formato `CP-<n>`
+//   CHT-4  a L0.1 sem o ponteiro {{MGR_CHARTER}}
+//
+// Por que o CHT-3 existe, e foi medido antes de escrito: `parseLaws` pula em SILÊNCIO todo
+// cabeçalho que não comece com `### L`. Um erro de digitação no cabeçalho de uma primícia a faria
+// desaparecer sem uma palavra, e carta que perde primícia calada é pior que carta nenhuma.
 //
 // O que ele NÃO verifica, de propósito: se a lei "diz a mesma coisa" que a skill dizia. Isso é
 // julgamento, não parsing, e cabe ao inventário de não-regressão. Um verificador que prometesse
@@ -104,6 +112,32 @@ export function checkLaws(laws, pointers) {
   return problems;
 }
 
+// CHT-4 (segunda metade): numa árvore INSTALADA o ponteiro da carta tem de estar resolvido E o
+// caminho apontado tem de existir. Isto é o que o `guarda.md` seção 5 especificou, e o que faz a
+// mitigação do ADR-0022 ser verdadeira: sem isto, o ponteiro pode apontar para o vazio e o único
+// guarda seria um teste. O `mgr doctor` NÃO alcança isto — a verificação `unresolved-token` dele só
+// lê `SKILL.md` de skill em disco, e `_shared` é excluído por construção.
+export function checkCharterResolved(installedSkillsDir) {
+  const problems = [];
+  const leis = path.join(installedSkillsDir, ...LAWS_INSTALLED_SEGMENTS);
+  if (!existsSync(leis)) return problems;
+  const texto = readFileSync(leis, "utf8");
+  if (texto.includes(CHARTER_TOKEN)) {
+    problems.push(`CHT-4 ${leis}: ${CHARTER_TOKEN} left unresolved in the installed laws`);
+    return problems;
+  }
+  const apontado = texto.match(/core principles are the charter at (\S+?),/)?.[1];
+  if (!apontado) {
+    problems.push(`CHT-4 ${leis}: the installed laws do not name the charter path`);
+    return problems;
+  }
+  const repo = path.resolve(installedSkillsDir, "..", "..");
+  if (!existsSync(path.resolve(repo, apontado)) && !existsSync(apontado)) {
+    problems.push(`CHT-4 ${leis}: the charter pointer resolves to ${apontado}, which does not exist`);
+  }
+  return problems;
+}
+
 // LAW-5: o token não pode sobrar numa árvore INSTALADA (onde já deveria estar resolvido).
 export function checkResolved(installedSkillsDir) {
   const problems = [];
@@ -116,6 +150,67 @@ export function checkResolved(installedSkillsDir) {
       problems.push(`LAW-5 ${entry.name}: ${LAWS_TOKEN} left unresolved in an installed skill`);
     }
   }
+  return problems;
+}
+
+export const CHARTER_TOKEN = "{{MGR_CHARTER}}";
+const LAWS_INSTALLED_SEGMENTS = ["_shared", "laws", "execution-laws.md"];
+const CHARTER_HEADER = /^### (CP-\d+) — (.+)$/;
+const CHARTER_PARTS = ["**Statement.**", "**Case.**", "**Provenance.**"];
+
+// Parsing puro, sem IO — o mesmo desenho do parseLaws ao lado.
+export function parseCharter(text) {
+  const principles = [];
+  const linhas = text.split("\n");
+  for (const [index, line] of linhas.entries()) {
+    if (!line.startsWith("### ")) continue;
+    const match = line.match(CHARTER_HEADER);
+    if (!match) {
+      principles.push({ id: null, line: index + 1, raw: line, body: "" });
+      continue;
+    }
+    // Fecha em `### `, `## ` ou `---`: sem os dois últimos, o corpo da ÚLTIMA primícia absorvia a
+    // prosa final do arquivo, e um `**Case.**` escrito ali passaria a satisfazer a CHT-2 por acaso.
+    const fim = linhas.findIndex((l, i) => i > index && (l.startsWith("### ") || l.startsWith("## ") || l === "---"));
+    principles.push({
+      id: match[1],
+      title: match[2],
+      line: index + 1,
+      body: linhas.slice(index + 1, fim === -1 ? linhas.length : fim).join("\n"),
+    });
+  }
+  return principles;
+}
+
+// Regras puras da carta. Recebem o que já foi lido, devolvem problemas. Sem IO, sem process.exit.
+export function checkCharter(principles, lawsText) {
+  const problems = [];
+
+  for (const principle of principles) {
+    if (!principle.id) {
+      problems.push(`CHT-3 line ${principle.line}: heading is not a principle — ${principle.raw}`);
+      continue;
+    }
+    for (const part of CHARTER_PARTS) {
+      if (!principle.body.includes(part)) {
+        problems.push(`CHT-2 ${principle.id}: missing the ${part.replaceAll("*", "").replace(".", "")} part`);
+      }
+    }
+  }
+
+  const seen = new Map();
+  for (const principle of principles.filter((candidate) => candidate.id)) {
+    if (seen.has(principle.id)) {
+      problems.push(`CHT-1 ${principle.id}: duplicate id (also at line ${seen.get(principle.id)})`);
+    } else {
+      seen.set(principle.id, principle.line);
+    }
+  }
+
+  if (lawsText !== undefined && !lawsText.includes(CHARTER_TOKEN)) {
+    problems.push(`CHT-4 L0.1: the laws source does not carry the ${CHARTER_TOKEN} pointer to the charter`);
+  }
+
   return problems;
 }
 
@@ -179,22 +274,31 @@ function selfTest() {
 function main(argv) {
   if (argv.includes("--self-test")) return selfTest();
 
+  const charterArg = argv.indexOf("--charter");
   const lawsArg = argv.indexOf("--laws");
   const skillsArg = argv.indexOf("--skills");
   const installedArg = argv.indexOf("--installed");
   const lawsFile = lawsArg === -1 ? "shared/laws/execution-laws.md" : argv[lawsArg + 1];
   const skillsDir = skillsArg === -1 ? "skills" : argv[skillsArg + 1];
   const installedDir = installedArg === -1 ? null : argv[installedArg + 1];
+  const charterFile = charterArg === -1 ? "shared/charter/core-principles.md" : argv[charterArg + 1];
 
   if (!existsSync(lawsFile)) {
     console.error(`erro: fonte de leis não encontrada: ${lawsFile}`);
     return 1;
   }
 
-  const laws = parseLaws(readFileSync(lawsFile, "utf8"));
-  const problems = checkLaws(laws, readPointers(skillsDir));
+  if (!existsSync(charterFile)) {
+    console.error(`erro: carta de primícias não encontrada: ${charterFile}`);
+    return 1;
+  }
+
+  const lawsText = readFileSync(lawsFile, "utf8");
+  const laws = parseLaws(lawsText);
+  const charter = parseCharter(readFileSync(charterFile, "utf8"));
+  const problems = [...checkLaws(laws, readPointers(skillsDir)), ...checkCharter(charter, lawsText)];
   // LAW-5 só faz sentido contra uma árvore INSTALADA, onde o token já deveria estar resolvido.
-  if (installedDir) problems.push(...checkResolved(installedDir));
+  if (installedDir) problems.push(...checkResolved(installedDir), ...checkCharterResolved(installedDir));
 
   if (problems.length) {
     console.error(`check-laws: ${problems.length} problema(s) em ${lawsFile}`);
@@ -202,7 +306,8 @@ function main(argv) {
     return 1;
   }
   const law5 = installedDir ? `; LAW-5 conferida em ${installedDir}` : "; LAW-5 não conferida (sem --installed)";
-  console.log(`check-laws OK — ${laws.length} leis, ${Object.keys(CORE_ROLES).length} skills do CORE com ponteiro${law5}`);
+  const principios = charter.filter((candidate) => candidate.id).length;
+  console.log(`check-laws OK — ${laws.length} leis, ${principios} primícias, ${Object.keys(CORE_ROLES).length} skills do CORE com ponteiro${law5}`);
   return 0;
 }
 

@@ -11,7 +11,7 @@ import path from "node:path";
 import * as bundle from "../src/bundle.js";
 import {
   AGENT_MARKER, agentDeclares, agentFrontmatter, buildRuntime, inheritingModel, buildSkill, gateSummary, installAgents,
-  installEngine, isOurAgent, resolveLaws, resolveUserLanguage, routeReviewSkill,
+  installEngine, isOurAgent, resolveCharter, resolveLaws, resolveUserLanguage, routeReviewSkill,
 } from "../src/builder.js";
 import * as installer from "../src/installer.js";
 import * as catalog from "../src/catalog.js";
@@ -25,7 +25,7 @@ import { addRegistry, readAgents, writeAgentPolicy, writeConfig } from "../src/r
 import { eventsFor, hookCommand, removeHook, writeHook, writtenEvents } from "../src/hooks.js";
 import { readLockfile } from "../src/lockfile.js";
 import { captureCli } from "../scripts/capture-cli-baseline.mjs";
-import { descartar, instalacaoComDefeitos } from "./fixtures/instalacao.js";
+import { descartar, instalacaoComDefeitos, instalacaoLimpa } from "./fixtures/instalacao.js";
 
 const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-"));
 const CORE = ["spec-init", "spec-create", "spec-execute", "adr-create", "code-analyzer", "diagnosing-bugs"];
@@ -3138,6 +3138,44 @@ test("mgr doctor NAO tem --fix, e nao escreve nada", () => {
     assert.equal(readFileSync(manifesto, "utf8"), antes,
       "a flag nao existe, e mesmo passada o comando segue sendo diagnostico");
   });
+});
+
+test("shouldResolveTheCharterPointerWithoutTouchingDisk", () => {
+  assert.equal(resolveCharter("x {{MGR_CHARTER}} y", "caminho/real.md"), "x caminho/real.md y");
+  assert.match(resolveCharter("x {{MGR_CHARTER}} y", null), /shared\/charter\/core-principles\.md/,
+    "sem referencia o fallback e a fonte, como o resolveLaws ao lado ja faz");
+});
+
+test("shouldInstallTheCharterAndResolveItsPointerInsideTheLaws", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const leis = `${repo}/.claude/skills/_shared/laws/execution-laws.md`;
+    const texto = readFileSync(leis, "utf8");
+    assert.ok(!texto.includes("{{MGR_CHARTER}}"),
+      "a LAW-5 so varre SKILL.md e so procura MGR_LAWS: quem guarda ESTE ponteiro e a CHT-4 mais este teste");
+    const apontado = texto.match(/core principles are the charter at (\S+?),/)?.[1];
+    assert.ok(apontado, "a L0.1 tem de nomear o caminho da carta depois do install");
+    assert.ok(existsSync(path.join(repo, apontado)),
+      `a L0.1 aponta para ${apontado} e o arquivo nao existe: sem a copia o ponteiro aponta para o vazio`);
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("shouldReachTheCharterFromTheExecutorAndFromTheReviewer", () => {
+  const repo = instalacaoLimpa();
+  try {
+    for (const skill of ["spec-execute", "code-analyzer"]) {
+      const texto = readFileSync(`${repo}/.claude/skills/${skill}/SKILL.md`, "utf8");
+      const leis = texto.match(/Execution laws \(binding[^)]*\): (\S+)/)?.[1];
+      assert.ok(leis, `${skill} tem de carregar a linha-ponteiro das leis, senao nao alcanca a carta`);
+      assert.ok(existsSync(path.join(repo, leis)), `${skill} aponta para ${leis} e o arquivo nao existe`);
+      assert.match(readFileSync(path.join(repo, leis), "utf8"), /core principles are the charter at/,
+        `as leis que o ${skill} carrega tem de apontar para a carta: e por elas que o CP-4 chega aos dois lados`);
+    }
+  } finally {
+    descartar(repo);
+  }
 });
 
 test("mgr doctor: a borda nao tem logica de verificacao", () => {

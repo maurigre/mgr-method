@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { CORE_ROLES, LAWS_TOKEN, checkLaws, checkResolved, parseLaws } from "../scripts/check-laws.mjs";
+import { CHARTER_TOKEN, CORE_ROLES, LAWS_TOKEN, checkCharter, checkCharterResolved, checkLaws, checkResolved, parseCharter, parseLaws } from "../scripts/check-laws.mjs";
 import { existsSync } from "node:fs";
 
 const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-laws-"));
@@ -89,4 +89,100 @@ test("a fonte real do repositório passa em todas as regras, com os ponteiros RE
   }
   const problemas = checkLaws(parseLaws(readFileSync(fonte, "utf8")), ponteirosReais);
   assert.deepEqual(problemas, [], "o repositório é a fixture positiva definitiva");
+});
+
+const PRIMICIA = (id, partes = ["**Statement.**", "**Case.**", "**Provenance.**"]) =>
+  `### ${id} — Titulo\n\n${partes.map((parte) => `${parte} texto`).join("\n\n")}\n`;
+
+const COM_PONTEIRO = `x ${CHARTER_TOKEN} y`;
+
+test("shouldParseEveryWellFormedPrincipleWithItsBody", () => {
+  const principles = parseCharter(PRIMICIA("CP-1") + PRIMICIA("CP-2"));
+  assert.deepEqual(principles.map(({ id }) => id), ["CP-1", "CP-2"]);
+  assert.ok(principles[0].body.includes("**Case.**"),
+    "o corpo tem de ir ate o proximo cabecalho, senao a conferencia das tres partes olha o nada");
+});
+
+test("shouldReproveHeadingThatIsNotAPrinciple", () => {
+  const problems = checkCharter(parseCharter("### CP1 - sem travessao\n"), COM_PONTEIRO);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /^CHT-3 /,
+    "parseLaws pula cabecalho desconhecido em silencio, e primicia que some calada e pior que carta nenhuma");
+});
+
+test("shouldReproveMissingStatementCaseOrProvenance", () => {
+  for (const faltando of ["**Statement.**", "**Case.**", "**Provenance.**"]) {
+    const partes = ["**Statement.**", "**Case.**", "**Provenance.**"].filter((parte) => parte !== faltando);
+    const problems = checkCharter(parseCharter(PRIMICIA("CP-1", partes)), COM_PONTEIRO);
+    assert.equal(problems.length, 1, `faltando ${faltando} tem de dar exatamente um problema`);
+    assert.match(problems[0], /^CHT-2 CP-1: missing the /,
+      "o codigo do defeito vem antes de quem o tem, como o LAW-2 ja faz, para nao confundir com o id da primicia");
+  }
+});
+
+test("shouldReproveDuplicatePrincipleId", () => {
+  const problems = checkCharter(parseCharter(PRIMICIA("CP-1") + PRIMICIA("CP-1")), COM_PONTEIRO);
+  assert.equal(problems.filter((problem) => problem.startsWith("CHT-1")).length, 1);
+});
+
+test("shouldReproveLawsSourceWithoutThePointerToTheCharter", () => {
+  const problems = checkCharter(parseCharter(PRIMICIA("CP-1")), "leis sem ponteiro nenhum");
+  assert.deepEqual(problems, [`CHT-4 L0.1: the laws source does not carry the ${CHARTER_TOKEN} pointer to the charter`]);
+});
+
+test("shouldAcceptAnIntactCharter", () => {
+  assert.deepEqual(checkCharter(parseCharter(PRIMICIA("CP-1") + PRIMICIA("CP-2")), COM_PONTEIRO), [],
+    "o caso negativo: um verificador so testado contra defeito prova que sabe falhar, nao que sabe passar");
+});
+
+test("shouldKeepTheRealCharterIntactWithSevenPrinciples", () => {
+  const carta = parseCharter(readFileSync("shared/charter/core-principles.md", "utf8"));
+  const leis = readFileSync("shared/laws/execution-laws.md", "utf8");
+  assert.equal(carta.filter(({ id }) => id).length, 7);
+  assert.deepEqual(checkCharter(carta, leis), []);
+});
+
+const ARVORE_INSTALADA = () => {
+  const repo = mkdtempSync(path.join(os.tmpdir(), "mgr-carta-"));
+  const dir = path.join(repo, ".claude", "skills");
+  mkdirSync(path.join(dir, "_shared", "laws"), { recursive: true });
+  mkdirSync(path.join(dir, "_shared", "charter"), { recursive: true });
+  writeFileSync(path.join(dir, "_shared", "charter", "core-principles.md"), "carta");
+  const apontado = path.join(".claude", "skills", "_shared", "charter", "core-principles.md");
+  writeFileSync(path.join(dir, "_shared", "laws", "execution-laws.md"),
+    `the MGR core principles are the charter at ${apontado}, and\n`);
+  return { repo, dir };
+};
+
+test("shouldAcceptAnInstalledTreeWhereTheCharterPointerResolves", () => {
+  const { dir } = ARVORE_INSTALADA();
+  assert.deepEqual(checkCharterResolved(dir), [],
+    "o caso negativo: instalacao recem-feita tem o token resolvido e o arquivo no lugar");
+});
+
+test("shouldReproveTheRawTokenLeftInTheInstalledLaws", () => {
+  const { dir } = ARVORE_INSTALADA();
+  const leis = path.join(dir, "_shared", "laws", "execution-laws.md");
+  writeFileSync(leis, `the charter at ${CHARTER_TOKEN}, and\n`);
+  assert.match(checkCharterResolved(dir)[0], /left unresolved in the installed laws/,
+    "o mgr doctor nao alcanca _shared, entao se a CHT-4 nao pegar isto ninguem pega");
+});
+
+test("shouldReproveACharterPointerThatResolvesToNothing", () => {
+  const { dir } = ARVORE_INSTALADA();
+  rmSync(path.join(dir, "_shared", "charter", "core-principles.md"));
+  assert.match(checkCharterResolved(dir)[0], /which does not exist/,
+    "e o risco que o ADR-0022 nomeia: o ponteiro apontando para o vazio sem ninguem notar");
+});
+
+test("shouldIgnoreATreeWithNoInstalledLaws", () => {
+  assert.deepEqual(checkCharterResolved(mkdtempSync(path.join(os.tmpdir(), "mgr-vazio-"))), [],
+    "arvore sem leis instaladas nao e defeito da carta: nao ha o que conferir");
+});
+
+test("shouldCloseAPrincipleBodyAtTheNextSectionAndNotSwallowTrailingProse", () => {
+  const texto = "### CP-1 — T\n\n**Statement.** a\n\n**Case.** b\n\n**Provenance.** c\n\n## Adding\n\n**Case.** prosa\n";
+  const [primeira] = parseCharter(texto);
+  assert.ok(!primeira.body.includes("prosa"),
+    "sem fechar em `## ` o corpo da ultima primicia absorvia a prosa final e uma parte escrita la contaria por acaso");
 });

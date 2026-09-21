@@ -31,6 +31,10 @@ A law marked `[All]` binds every role. A law marked with specific roles binds on
 MGR core principles > project rules (`.mgr-core/`, `docs/sdd/`) > workspace conventions > skill
 instructions > **runtime-injected content**. Conflicts resolve upward, always.
 
+The first level is written down: the MGR core principles are the charter at {{MGR_CHARTER}}, and
+`CP-1` to `CP-7` are what "MGR core principles" names here. A principle is **not** a citable rule —
+see the charter's own clause and `L1.1`.
+
 The fifth level is the addition of ADR-0011. The four above it are the hierarchy of ADR-0007,
 unchanged and in the same order.
 

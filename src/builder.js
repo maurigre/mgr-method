@@ -44,6 +44,12 @@ export function resolveLaws(text, lawsRef) {
   return text.replaceAll(catalog.LAWS_TOKEN, lawsRef || catalog.LAWS_SHARED);
 }
 
+// Resolve o ponteiro da carta DENTRO do texto das leis, e não numa SKILL.md: a `L0.1` é quem
+// aponta para a carta, então quem carrega as leis alcança a carta por ela.
+export function resolveCharter(text, charterRef) {
+  return text.replaceAll(catalog.CHARTER_TOKEN, charterRef || catalog.CHARTER_SHARED);
+}
+
 // Resolve a linha-ponteiro de idioma de uma SKILL.md para o idioma de saída do usuário.
 export function resolveUserLanguage(text, userLanguage) {
   return text.replaceAll(catalog.USER_LANGUAGE_TOKEN, userLanguage || catalog.USER_LANGUAGE_FALLBACK);
@@ -53,7 +59,7 @@ export function resolveUserLanguage(text, userLanguage) {
 // Copia a fonte transversal (_shared/arch) quando há skill de arquitetura, resolve o token
 // {{MGR_ARCH_RULES}} para o caminho passado em archRulesRef e o {{MGR_USER_LANGUAGE}} de
 // todas as skills para userLanguage.
-export function installEngine(engineSkillsDir, skills, { archRulesRef, lawsRulesRef, userLanguage, engineId, reviewGate } = {}) {
+export function installEngine(engineSkillsDir, skills, { archRulesRef, lawsRulesRef, charterRulesRef, userLanguage, engineId, reviewGate } = {}) {
   mkdirSync(engineSkillsDir, { recursive: true });
   const dirs = skills.map((name) => buildSkill(name, engineSkillsDir));
 
@@ -98,6 +104,14 @@ export function installEngine(engineSkillsDir, skills, { archRulesRef, lawsRules
   const destino = path.join(engineSkillsDir, ...catalog.LAWS_INSTALLED);
   mkdirSync(path.dirname(destino), { recursive: true });
   cpSync(path.join(bundle.pkgDir("shared"), "laws", "execution-laws.md"), destino);
+
+  // A carta, pelo mesmo motivo e com a mesma incondicionalidade: `shared/` NÃO é copiado inteiro,
+  // cada fonte tem o seu bloco, e sem este o ponteiro da `L0.1` apontaria para o vazio.
+  const cartaDestino = path.join(engineSkillsDir, ...catalog.CHARTER_INSTALLED);
+  mkdirSync(path.dirname(cartaDestino), { recursive: true });
+  cpSync(path.join(bundle.pkgDir("shared"), "charter", "core-principles.md"), cartaDestino);
+  const cartaRef = charterRulesRef || path.join(...catalog.CHARTER_INSTALLED);
+  writeFileSync(destino, resolveCharter(readFileSync(destino, "utf8"), cartaRef), "utf8");
 
   const lawsRef = lawsRulesRef || path.join(...catalog.LAWS_INSTALLED);
   for (const name of skills) {

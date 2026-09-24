@@ -4,8 +4,9 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { CHARTER_TOKEN, CORE_ROLES, LAWS_TOKEN, checkCharter, checkCharterResolved, checkLaws, checkResolved, parseCharter, parseLaws } from "../scripts/check-laws.mjs";
+import { CHARTER_TOKEN, CORE_ROLES, LAWS_TOKEN, SHARED_TREE_NAME, checkCharter, checkCharterResolved, checkLaws, checkResolved, parseCharter, parseLaws } from "../scripts/check-laws.mjs";
 import { existsSync } from "node:fs";
+import { SHARED_DIR, LAWS_INSTALLED } from "../src/catalog.js";
 
 const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-laws-"));
 const ponteirosOk = Object.fromEntries(
@@ -192,6 +193,26 @@ test("shouldReproveACharterPointerThatResolvesToNothing", () => {
     "e o risco que o ADR-0022 nomeia: o ponteiro apontando para o vazio sem ninguem notar");
 });
 
+test("shouldProveIndependenceFromProcessWorkingDirectory", () => {
+  const { dir } = ARVORE_INSTALADA();
+  rmSync(path.join(dir, "_shared", "charter", "core-principles.md"));
+
+  const chamariz = mkdtempSync(path.join(os.tmpdir(), "mgr-chamariz-"));
+  mkdirSync(path.join(chamariz, ".claude", "skills", "_shared", "charter"), { recursive: true });
+  writeFileSync(path.join(chamariz, ".claude", "skills", "_shared", "charter", "core-principles.md"), "arquivo");
+
+  const cwdAtual = process.cwd();
+  try {
+    process.chdir(chamariz);
+    const problemas = checkCharterResolved(dir);
+    assert.equal(problemas.length, 1);
+    assert.match(problemas[0], /which does not exist/,
+      "resolucao de caminho deve acontecer contra a arvore sob analise e nao contra o CWD do processo");
+  } finally {
+    process.chdir(cwdAtual);
+  }
+});
+
 test("shouldIgnoreATreeWithNoInstalledLaws", () => {
   assert.deepEqual(checkCharterResolved(mkdtempSync(path.join(os.tmpdir(), "mgr-vazio-"))), [],
     "arvore sem leis instaladas nao e defeito da carta: nao ha o que conferir");
@@ -202,4 +223,28 @@ test("shouldCloseAPrincipleBodyAtTheNextSectionAndNotSwallowTrailingProse", () =
   const [primeira] = parseCharter(texto);
   assert.ok(!primeira.body.includes("prosa"),
     "sem fechar em `## ` o corpo da ultima primicia absorvia a prosa final e uma parte escrita la contaria por acaso");
+});
+
+test("shouldLockTheMirrorOfTheScriptAgainstTheCatalogSource", () => {
+  assert.equal(
+    SHARED_TREE_NAME,
+    SHARED_DIR,
+    "the verifier mirror in check-laws.mjs is deliberate to keep it independent from the source it verifies; "
+    + "divergence must become red, never silent",
+  );
+  assert.deepEqual(
+    [SHARED_TREE_NAME, "laws", "execution-laws.md"],
+    LAWS_INSTALLED,
+    "the installed laws segments must match the catalog source — breaking this test means the mirror diverged",
+  );
+  assert.equal(
+    LAWS_TOKEN,
+    "{{MGR_LAWS}}",
+    "the laws token copy in the script must stay in sync",
+  );
+  assert.equal(
+    CHARTER_TOKEN,
+    "{{MGR_CHARTER}}",
+    "the charter token copy in the script must stay in sync",
+  );
 });

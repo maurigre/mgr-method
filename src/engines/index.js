@@ -4,9 +4,10 @@
 //
 // O QUE JÁ MIGROU: o eixo de AGENTES (ADR-0010) e o de HOOKS (ADR-0018) — arquivo, eventos,
 // matcher por evento, forma da entrada, envelope e capacidade de compactação são dado daqui.
-// O QUE FALTA: os mapas de `installer.js` (diretório de skills) e `adapters.js` (tradução de
-// manifest), mais a saída do hook de sessão em `detector.js`. É a outra metade da dívida que o
-// ADR-0010 nomeou, e continua declarada.
+// O diretório de SKILLS migrou em 2026-09-24, junto do de agentes: era um mapa privado em
+// `installer.js`, e o `mgr doctor` precisando dele fazia um diagnóstico read-only depender do
+// instalador. O QUE AINDA FALTA: `adapters.js` (tradução de manifest) e a saída do hook de sessão
+// em `detector.js`. É o resto da dívida que o ADR-0010 nomeou, e continua declarada.
 //
 // Dado puro, sem IO: mesmo padrão de `checkSkill` em src/validator.js.
 import claudeCode from "./claude-code.js";

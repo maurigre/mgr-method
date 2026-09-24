@@ -34,10 +34,16 @@ export const LANGUAGE = {
 // Skills opcionais (o instalador pergunta).
 export const OPTIONAL = ["evidence-capture"];
 
+// Árvore compartilhada dentro do diretório de skills do motor. Fonte única para não haver segunda
+// cópia do literal em cinco pontos do código.
+export const SHARED_DIR = "_shared";
+
 // Dependência das skills arch-*: a fonte transversal única, copiada junto.
 export const ARCH_SHARED = "shared/arch/cross-cutting-rules.md";
 // Token nas SKILL.md das arch-*, substituído no install pelo caminho real da fonte no motor.
 export const ARCH_RULES_TOKEN = "{{MGR_ARCH_RULES}}";
+// Layout da fonte DENTRO do motor, em segmentos.
+export const ARCH_INSTALLED = [SHARED_DIR, "arch", "cross-cutting-rules.md"];
 
 // Leis de execução: fonte única das regras vinculantes do método (ADR-0011). Copiada SEMPRE,
 // sem depender de arquitetura ou de skill escolhida — é núcleo, e o ponteiro existe em todas as
@@ -49,13 +55,18 @@ export const LAWS_TOKEN = "{{MGR_LAWS}}";
 // Layout da fonte DENTRO do motor, em segmentos. Uma constante só: antes deste campo o caminho
 // era remontado em cinco pontos, e a divergência entre duas dessas cópias foi o defeito do hook
 // que anunciava a árvore do outro motor.
-export const LAWS_INSTALLED = ["_shared", "laws", "execution-laws.md"];
+export const LAWS_INSTALLED = [SHARED_DIR, "laws", "execution-laws.md"];
 // Carta de primícias (ADR-0022): o topo da hierarquia que a `L0.1` nomeia e nunca definiu. Mesmo
 // molde das leis, com uma diferença que importa: o ponteiro NÃO vive nas SKILL.md, vive DENTRO do
 // próprio arquivo de leis — quem o resolve é a cópia instalada dele.
 export const CHARTER_SHARED = "shared/charter/core-principles.md";
 export const CHARTER_TOKEN = "{{MGR_CHARTER}}";
-export const CHARTER_INSTALLED = ["_shared", "charter", "core-principles.md"];
+export const CHARTER_INSTALLED = [SHARED_DIR, "charter", "core-principles.md"];
+
+// Fonte de qualidade: usada pelo spec-init ao montar o guia de review. So o caminho INSTALADO e
+// constante — o do pacote nao tem o papel de fallback de token que `LAWS_SHARED` e `CHARTER_SHARED`
+// tem, e export sem consumidor viola a DES-6.
+export const QUALITY_INSTALLED = [SHARED_DIR, "quality", "quality-rules.md"];
 // Token da linha-ponteiro de idioma presente em TODAS as SKILL.md, substituído no install
 // pelo idioma de saída do usuário (manifest.userLanguage). Sem valor (ex.: `mgr build`),
 // cai no fallback textual — a linha continua legível.
@@ -169,4 +180,40 @@ export function selectSkills({ architecture = null, language = null, optional = 
 // O conjunto tem alguma skill de arquitetura? (então precisa da fonte transversal)
 export function needsArchShared(skills) {
   return skills.some((s) => ARCH_SKILLS().includes(s));
+}
+
+// O conjunto tem spec-init? (então precisa da fonte de qualidade)
+export function needsQualityShared(skills) {
+  return skills.includes("spec-init");
+}
+
+// A fonte da verdade sobre QUANDO cada fonte compartilhada é instalada vem da função
+// `installEngine` em `src/builder.js`. Esta tabela existe para que verificação e instalação
+// leiam a mesma coisa.
+export const SHARED_SOURCES = [
+  {
+    inPackage: ["laws", "execution-laws.md"],
+    installed: LAWS_INSTALLED,
+    required: () => true,
+  },
+  {
+    inPackage: ["charter", "core-principles.md"],
+    installed: CHARTER_INSTALLED,
+    required: () => true,
+  },
+  {
+    inPackage: ["arch", "cross-cutting-rules.md"],
+    installed: ARCH_INSTALLED,
+    required: needsArchShared,
+  },
+  {
+    inPackage: ["quality", "quality-rules.md"],
+    installed: QUALITY_INSTALLED,
+    required: needsQualityShared,
+  },
+];
+
+// Retorna só as entradas de SHARED_SOURCES cujo predicado required é verdadeiro
+export function requiredShared(skills) {
+  return SHARED_SOURCES.filter((source) => source.required(skills));
 }

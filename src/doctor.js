@@ -1,6 +1,9 @@
 import path from "node:path";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import * as bundle from "./bundle.js";
+import * as catalog from "./catalog.js";
+import * as engineDescriptors from "./engines/index.js";
+import { routeReviewSkill } from "./builder.js";
 import { diff } from "./lockfile.js";
 
 // Verificacoes de integridade da instalacao (U2 do programa de superioridade).
@@ -81,6 +84,44 @@ export function missingAgents({ declared, exists }) {
 }
 
 /**
+ * Fonte compartilhada cobrada quando o conjunto instalado a exige.
+ *
+ * As fontes compartilhadas sao regras transversais que todas as skills precisam respeitar ou
+ * que algumas skills especializadas usam. `laws` e `charter` sao incondicionais (ADR-0011 e
+ * ADR-0022), instaladas sempre; `arch` e `quality` dependem do conjunto de skills instaladas.
+ * Quando uma fonte esta faltando, a remediacao e `mgr update`, que o `doctor` apenas NOMEIA
+ * em vez de executar.
+ */
+
+/**
+ * O que estas duas verificacoes de `_shared/` NAO alcancam, porque a lista e fechada e cada uma
+ * declara o que omite (`src/doctor.js:11-12`, `RN-7`):
+ *
+ * - **so `.md`**: arquivo de outro formato sob `_shared/` nao entra na varredura de token;
+ * - **conteudo extra nao e cobrado**: nao existe "orfa de `_shared/`", arquivo a mais nao acusa;
+ * - **nada de semantica**: ponteiro que aponta para o arquivo ERRADO, mas existente, passa — isso
+ *   segue sendo assunto do `CHT-4` em `scripts/check-laws.mjs`, que nao e distribuido;
+ * - **nao separa skew de commit dentro da mesma versao**: o escudo compara VERSOES;
+ * - **nao corrige**: o achado nomeia `mgr update`, quem roda e a pessoa;
+ * - **escopo global fora de alcance**: o diretorio e resolvido contra o repositorio;
+ * - **diretorio ilegivel** devolve o que deu para ler, sem achado proprio.
+ *
+ * Ausencia de achado nunca significa "a arvore compartilhada esta integra".
+ */
+export function missingShared({ expected, exists, skillsDir }) {
+  return expected
+    .filter((descritor) => !exists(path.join(skillsDir, ...descritor.installed)))
+    .map((descritor) => achado({
+      check: "missing-shared",
+      severity: DEFECT,
+      file: path.join(skillsDir, ...descritor.installed),
+      expected: "presente, porque o conjunto instalado a exige",
+      found: "ausente",
+      fix: FIX_UPDATE,
+    }));
+}
+
+/**
  * Arquitetura declarada sem a skill correspondente.
  *
  * Arquitetura nula nao e defeito: e instalacao que nao escolheu arquitetura, e o install permite.
@@ -136,7 +177,7 @@ export function divergentBody({ name, source, installed, file }) {
     check: "divergent-body",
     severity: DEFECT,
     file,
-    expected: `o corpo da skill ${name} como o pacote o traz`,
+    expected: `o corpo de ${name} como o pacote o traz`,
     found: `difere a partir da linha ${ondeComeca} do corpo`,
     // A P0.3 MEDIU que o `update` restaura o corpo. `NO_FIX` diria que nao ha o que fazer, e ha —
     // a `CA-8` cobra o comando exato, nao a ausencia de rotina propria de escrita.
@@ -171,6 +212,51 @@ export function bodyCheckAvailability({ manifestVersion, packageVersion, file })
     fix: FIX_UPDATE,
   })];
 }
+
+/**
+ * Fonte compartilhada ausente porque o manifesto esta atras do pacote.
+ *
+ * Com o manifesto atras do pacote, a ausencia de uma fonte compartilhada e o estado ESPERADO
+ * de quem ainda nao rodou `mgr update`. A ausencia de `charter/` e exatamente esse caso: ela
+ * so passou a ser instalada com o ADR-0022, e projetos atualizados em duas fases ficam com o
+ * manifesto declarando uma versao enquanto o pacote ja vem com `charter/`. Reportar como defeito
+ * daria o alarme mais grave ao caso normal, que e o que a `RN-3` proibe.
+ *
+ * E **um** achado, nao um por fonte: a causa e uma so (manifesto velho), e dois alarmes para o
+ * mesmo fato e ruido.
+ */
+export function sharedCheckAvailability({ manifestVersion, packageVersion, file }) {
+  if (manifestVersion === packageVersion) return [];
+  return [achado({
+    check: "missing-shared",
+    severity: UNAVAILABLE,
+    file,
+    expected: "manifesto na versao do pacote, para fontes compartilhadas estarem disponiveis",
+    found: `manifesto em ${manifestVersion} e pacote em ${packageVersion}: a ausencia de fonte compartilhada aqui e esperada`,
+    fix: FIX_UPDATE,
+  })];
+}
+
+/**
+ * Registro que enumera todas as verificações de integridade.
+ *
+ * A contagem de verificações e DERIVADA deste registro e nunca escrita em lugar nenhum do código.
+ * Token e corpo em `_shared/` não são entradas novas, porque são alcance maior da mesma
+ * verificação `divergent-body` e `unresolved-token` — mesmo id, mesma mensagem, mesma remediação.
+ * Um documento que enumere as verificações tem de ter uma linha por entrada daqui.
+ */
+export const CHECKS = [
+  { id: "orphan-skill", cobre: "skill em disco que o manifesto não declara" },
+  { id: "missing-skill", cobre: "skill que o manifesto declara e que não está em disco" },
+  { id: "missing-agent", cobre: "agente que o manifesto declara e cujo arquivo não existe" },
+  { id: "architecture-skill", cobre: "arquitetura declarada sem a skill correspondente" },
+  { id: "divergent-body", cobre: "corpo de arquivo que diverge entre a fonte e o instalado" },
+  { id: "unresolved-token", cobre: "token não resolvido no instalado" },
+  { id: "stale-install", cobre: "manifesto atrás do pacote" },
+  { id: "broken-hook", cobre: "hook que aponta para binário que não existe" },
+  { id: "lockfile-drift", cobre: "plugin travado e não instalado" },
+  { id: "missing-shared", cobre: "fonte compartilhada cobrada quando o conjunto a exige" },
+];
 
 export function unresolvedTokens({ installed, file }) {
   const sobraram = [...new Set(installed.match(new RegExp(TOKEN.source, "g")) || [])];
@@ -308,6 +394,35 @@ const skillsEmDisco = (dir) => {
   }
 };
 
+// Lê recursivamente todos os arquivos `.md` sob o diretório `_shared/` de um motor.
+// Devolve lista vazia se o diretório não existir.
+const arquivosMdEmShared = (dirDoMotor) => {
+  const compartilhadoDir = path.join(dirDoMotor, catalog.SHARED_DIR);
+  if (!existsSync(compartilhadoDir)) return [];
+
+  const resultado = [];
+  const lerRecursivo = (dir) => {
+    try {
+      const entradas = readdirSync(dir, { withFileTypes: true });
+      for (const entrada of entradas) {
+        const caminhoCompleto = path.join(dir, entrada.name);
+        if (entrada.isDirectory()) {
+          lerRecursivo(caminhoCompleto);
+        } else if (entrada.isFile() && entrada.name.endsWith(".md")) {
+          resultado.push(caminhoCompleto);
+        }
+      }
+    } catch {
+      // Ignora erro de leitura: diretorio ilegivel devolve o que deu para ler, e a lista de limites
+  // desta verificacao declara que ela nao alcanca isso. NAO e silencio por descuido — e limite
+  // escrito, que e o que a `L2.6` exige de um instrumento que nao consegue fazer o trabalho todo.
+    }
+  };
+
+  lerRecursivo(compartilhadoDir);
+  return resultado;
+};
+
 /**
  * Roda a lista fechada sobre um projeto.
  *
@@ -323,10 +438,41 @@ export function diagnose(repo, { packageVersion } = {}) {
 
   const versaoDoPacote = packageVersion ?? bundle.readVersion();
   const dirDasSkills = (manifesto.skillsDirs ?? []).map((relativo) => path.join(repo, relativo));
-  const emDisco = [...new Set(dirDasSkills.flatMap(skillsEmDisco))].filter((nome) => nome !== "_shared");
+  const emDisco = [...new Set(dirDasSkills.flatMap(skillsEmDisco))].filter((nome) => nome !== catalog.SHARED_DIR);
   const declaradas = manifesto.skills ?? [];
   const primeiroDir = dirDasSkills[0] ?? path.join(repo, ".claude", "skills");
   const relativoDoDir = path.relative(repo, primeiroDir) || ".";
+
+  // As arvores a conferir, cada uma sabendo de QUE MOTOR e — nunca por posicao em `skillsDirs`, que
+  // e a regra de `src/installer.js:82-83` e o defeito que ela custou.
+  //
+  // A QUEDA importa e foi paga com defeito real: instalacao feita com `--skills-dir` grava
+  // `engines: ["custom"]`, e manifesto legado pode nao ter `engines` nenhum. Filtrar so por motor
+  // conhecido deixava `arvores` VAZIA e o comando saia 0 sem conferir nada — medido em 2026-09-24
+  // contra o commit de partida, que acusava. Sem motor reconhecido, cai para os `skillsDirs` do
+  // manifesto, com `engine: null` (nenhuma transformacao por motor a esperar).
+  const arvoresPorMotor = (manifesto.engines ?? [])
+    .filter((e) => engineDescriptors.ids().includes(e))
+    .map((engine) => ({ engine, dir: path.join(repo, engineDescriptors.get(engine).skillsDir[manifesto.scope]) }));
+  const arvores = arvoresPorMotor.length
+    ? arvoresPorMotor
+    : dirDasSkills.map((dir) => ({ engine: null, dir }));
+
+  // O gate de review e DERIVADO, e nao lido: o manifesto nao grava se ele estava ligado, porque
+  // `src/installer.js:115` decidiu que campo duplicado diverge. O mesmo `gate` que liga o
+  // `routeReviewSkill` instala o agente do gate, entao a presenca do arquivo do agente daquele motor
+  // responde a pergunta. `test/doctor.test.js` trava essa equivalencia: se ela deixar de valer, e
+  // vermelho e nao silencio.
+  const gateLigado = (engine) => engine !== null && (manifesto.agents ?? [])
+    .some((caminho) => path.basename(caminho)
+      === engineDescriptors.get(engine).agentFile(catalog.REVIEW_GATE.agent));
+
+  // O corpo que se ESPERA no motor, e nao a fonte crua: cada motor transforma a skill do gate do
+  // seu jeito (`routing` no descritor), e comparar contra a fonte crua acusaria toda instalacao
+  // limpa daquele motor. Medido em 2026-09-24 no copilot, que acrescenta um bloco ao corpo.
+  const corpoEsperado = (engine, nome, fonte) => (nome === catalog.REVIEW_GATE.skill && gateLigado(engine)
+    ? routeReviewSkill(engine, fonte)
+    : fonte);
 
   const achados = [
     ...orphanSkills({ declared: declaradas, onDisk: emDisco, skillsDir: relativoDoDir }),
@@ -347,20 +493,74 @@ export function diagnose(repo, { packageVersion } = {}) {
   });
   achados.push(...corpoIndisponivel);
 
-  for (const nome of emDisco) {
-    const instalado = path.join(primeiroDir, nome, "SKILL.md");
-    const daFonte = path.join(bundle.skillsDir(), nome, "SKILL.md");
-    if (!existsSync(instalado)) continue;
-    const conteudo = readFileSync(instalado, "utf8");
-    const relativo = path.relative(repo, instalado);
-    achados.push(...unresolvedTokens({ installed: conteudo, file: relativo }));
-    if (!corpoIndisponivel.length && existsSync(daFonte)) {
-      achados.push(...divergentBody({
-        name: nome,
-        source: readFileSync(daFonte, "utf8"),
-        installed: conteudo,
-        file: relativo,
+  // Roda ANTES do laco: se a disponibilidade de fonte compartilhada esta indisponivel,
+  // ela nao roda por motor.
+  const compartilhadoIndisponivel = sharedCheckAvailability({
+    manifestVersion: manifesto.version,
+    packageVersion: versaoDoPacote,
+    file: catalog.SHARED_DIR,
+  });
+  achados.push(...compartilhadoIndisponivel);
+
+  // Por MOTOR, e nunca por posicao em `skillsDirs` — a regra esta em `src/installer.js:82-83`, e o
+  // custo dela tambem: indexar por posicao fazia o hook do copilot anunciar a arvore do claude-code.
+  // Medido em 2026-09-24: sem isto, defeito plantado no segundo motor saia com o comando dando 0.
+  for (const { engine, dir: dirDoMotor } of arvores) {
+    for (const nome of emDisco) {
+      const instalado = path.join(dirDoMotor, nome, "SKILL.md");
+      if (!existsSync(instalado)) continue;
+      const daFonte = path.join(bundle.skillsDir(), nome, "SKILL.md");
+      const conteudo = readFileSync(instalado, "utf8");
+      const relativo = path.relative(repo, instalado);
+      achados.push(...unresolvedTokens({ installed: conteudo, file: relativo }));
+      if (!corpoIndisponivel.length && existsSync(daFonte)) {
+        achados.push(...divergentBody({
+          name: nome,
+          source: corpoEsperado(engine, nome, readFileSync(daFonte, "utf8")),
+          installed: conteudo,
+          file: relativo,
+        }));
+      }
+    }
+
+    // Token nao resolvido em `_shared/` roda SEMPRE, fora do escudo de versao: subarvore pode
+    // legitimamente nao existir numa versao anterior, mas token sobrando nunca e legitimo em versao
+    // alguma — significa que o install falhou em resolve-lo (RN-5, decisao 2 do CHECKPOINT 1).
+    for (const arquivo of arquivosMdEmShared(dirDoMotor)) {
+      const conteudo = readFileSync(arquivo, "utf8");
+      const relativo = path.relative(repo, arquivo);
+      achados.push(...unresolvedTokens({ installed: conteudo, file: relativo }));
+    }
+
+    // Existencia e corpo, esses sim sob o escudo: com o manifesto atras do pacote, a ausencia de uma
+    // fonte compartilhada e o estado esperado de quem ainda nao rodou `mgr update`.
+    if (!compartilhadoIndisponivel.length) {
+      const necessarias = catalog.requiredShared(declaradas);
+      const dirRelativoDoMotor = path.relative(repo, dirDoMotor) || ".";
+      achados.push(...missingShared({
+        expected: necessarias,
+        exists: (caminho) => existsSync(path.join(repo, caminho)),
+        skillsDir: dirRelativoDoMotor,
       }));
+
+      // Corpo divergente em _shared/
+      if (!corpoIndisponivel.length) {
+        for (const descritor of necessarias) {
+          const caminhoInstalado = path.join(dirDoMotor, ...descritor.installed);
+          if (!existsSync(caminhoInstalado)) continue;
+          const daFonte = path.join(bundle.sharedDir(), ...descritor.inPackage);
+          if (!existsSync(daFonte)) continue;
+          const conteudo = readFileSync(caminhoInstalado, "utf8");
+          const relativo = path.relative(repo, caminhoInstalado);
+          const nomeDescritivo = descritor.installed.join("/");
+          achados.push(...divergentBody({
+            name: nomeDescritivo,
+            source: readFileSync(daFonte, "utf8"),
+            installed: conteudo,
+            file: relativo,
+          }));
+        }
+      }
     }
   }
 
@@ -381,7 +581,7 @@ export function diagnose(repo, { packageVersion } = {}) {
     file: "mgr-skills.lock",
   }));
 
-  return { outcome: AUDITED, findings: achados, checks: 9 };
+  return { outcome: AUDITED, findings: achados, checks: CHECKS.length };
 }
 
 /** Se o diagnostico BLOQUEIA: so `defect`. Aviso e indisponivel nao mudam o codigo de saida. */

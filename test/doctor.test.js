@@ -1,14 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, writeFileSync } from "node:fs";
 import {
   DEFECT, FIX_RESTORE, FIX_UPDATE, NO_FIX, UNAVAILABLE, WARNING,
-  architectureSkill, bodyCheckAvailability, brokenHooks, divergentBody, lockfileDrift, missingAgents, missingSkills,
-  orphanSkills, staleInstall, unresolvedTokens,
-  AUDITED, NO_INSTALL, diagnose, hasDefect,
+  architectureSkill, bodyCheckAvailability, brokenHooks, divergentBody, lockfileDrift, missingAgents, missingShared, missingSkills,
+  orphanSkills, sharedCheckAvailability, staleInstall, unresolvedTokens,
+  AUDITED, NO_INSTALL, diagnose, hasDefect, CHECKS,
 } from "../src/doctor.js";
+import path from "node:path";
 import { diff } from "../src/lockfile.js";
-import { ORFA, VERSAO_VELHA, descartar, instalacaoComDefeitos, instalacaoLimpa } from "./fixtures/instalacao.js";
+import * as bundle from "../src/bundle.js";
+import * as catalog from "../src/catalog.js";
+import * as engineDescriptors from "../src/engines/index.js";
+import { ORFA, VERSAO_VELHA, descartar, instalacaoComDefeitos, instalacaoComDefeitosDoisMotores, instalacaoLimpa, instalacaoLimpaDoisMotores, apagarFonteCompartilhada, plantarTokenEmShared, alterarCorpoEmShared } from "./fixtures/instalacao.js";
 
 const DIR = ".claude/skills";
 
@@ -58,6 +62,66 @@ test("os tres agentes presentes NAO produzem achado", () => {
     declared: [".claude/agents/mgr-draft.md", ".claude/agents/mgr-task.md", ".claude/agents/mgr-review.md"],
     exists: () => true,
   }), [], "e o estado deste repositorio e o da instalacao recem-feita");
+});
+
+test("nenhuma fonte compartilhada ausente NAO produz achado", () => {
+  const esperadas = [
+    { installed: ["_shared", "laws", "execution-laws.md"] },
+    { installed: ["_shared", "charter", "core-principles.md"] },
+  ];
+  assert.deepEqual(missingShared({
+    expected: esperadas,
+    exists: () => true,
+    skillsDir: DIR,
+  }), [], "fontes incondicionais sao instaladas sempre, e o arquivo de verdade existe");
+});
+
+test("fonte compartilhada declarada e ausente produz um achado", () => {
+  const esperadas = [
+    { installed: ["_shared", "laws", "execution-laws.md"] },
+  ];
+  const achados = missingShared({
+    expected: esperadas,
+    exists: () => false,
+    skillsDir: DIR,
+  });
+  assert.equal(achados.length, 1, "uma fonte ausente vira um achado");
+  assert.equal(achados[0].check, "missing-shared");
+  assert.equal(achados[0].severity, DEFECT);
+  assert.match(achados[0].file, /_shared.*execution-laws/, "o arquivo e a fonte juntada com o diretorio");
+  assert.equal(achados[0].expected, "presente, porque o conjunto instalado a exige");
+  assert.equal(achados[0].found, "ausente");
+  assert.equal(achados[0].fix, FIX_UPDATE, "medido: o update restaura fonte compartilhada apagada");
+});
+
+test("duas fontes compartilhadas ausentes produzem dois achados, um por descritor", () => {
+  const esperadas = [
+    { installed: ["_shared", "laws", "execution-laws.md"] },
+    { installed: ["_shared", "charter", "core-principles.md"] },
+  ];
+  const achados = missingShared({
+    expected: esperadas,
+    exists: () => false,
+    skillsDir: DIR,
+  });
+  assert.equal(achados.length, 2, "cada descritor ausente vira um achado (RN-11: um achado por subarvore)");
+  assert.match(achados[0].file, /execution-laws/);
+  assert.match(achados[1].file, /core-principles/);
+});
+
+test("fonte compartilhada condicional ausente nao e achado quando o conjunto nao a exige", () => {
+  const conjuntoSemArqESemSpec = ["configure-agents"];
+  const esperadas = catalog.requiredShared(conjuntoSemArqESemSpec);
+  assert.equal(esperadas.length, 2, "o conjunto sem arch e sem spec-init tem so as duas incondicionais");
+  const temArch = esperadas.some((e) => e.installed.includes("arch"));
+  const temQuality = esperadas.some((e) => e.installed.includes("quality"));
+  assert.ok(!temArch && !temQuality, "arch e quality nao sao exigidas");
+  const achados = missingShared({
+    expected: esperadas,
+    exists: (caminho) => caminho.includes("laws") || caminho.includes("charter"),
+    skillsDir: DIR,
+  });
+  assert.equal(achados.length, 0, "as fontes exigidas existem, nenhum achado mesmo que condicionais estejam ausentes");
 });
 
 test("arquitetura declarada sem a skill e achado", () => {
@@ -151,6 +215,25 @@ test("com o manifesto atras do pacote a comparacao de corpo se declara INDISPONI
 test("com as versoes iguais a comparacao de corpo fica disponivel", () => {
   assert.deepEqual(bodyCheckAvailability({ manifestVersion: "1.0.0", packageVersion: "1.0.0", file: "m" }), [],
     "versoes iguais e corpo divergente e adulteracao ou install parcial, e ai o alarme e devido");
+});
+
+test("com as versoes iguais a disponibilidade de fonte compartilhada e garantida", () => {
+  assert.deepEqual(sharedCheckAvailability({ manifestVersion: "1.0.0", packageVersion: "1.0.0", file: "m" }), [],
+    "versoes iguais indicam que manifesto e pacote estao em sincronia; fontes compartilhadas disponiveis");
+});
+
+test("com o manifesto atras do pacote a disponibilidade de fonte compartilhada se declara INDISPONIVEL", () => {
+  const [achado] = sharedCheckAvailability({ manifestVersion: "1.0.0", packageVersion: "1.1.0", file: "m" });
+  assert.equal(achado.check, "missing-shared");
+  assert.equal(achado.severity, UNAVAILABLE,
+    "manifesto atras e o estado ESPERADO de instalacao recem-atualizada; chamar isso de defeito deixaria quase todo projeto vermelho");
+  assert.equal(achado.fix, FIX_UPDATE);
+});
+
+test("o achado de indisponibilidade de fonte compartilhada e um mesmo havendo varias fontes", () => {
+  const [achado] = sharedCheckAvailability({ manifestVersion: "1.0.0", packageVersion: "1.1.0", file: "m" });
+  assert.equal(achado.severity, UNAVAILABLE,
+    "a causa e uma so (manifesto velho); dois alarmes para o mesmo fato seria ruido, nao um por fonte");
 });
 
 test("token que sobrou no instalado e achado, e nomeia qual", () => {
@@ -253,7 +336,7 @@ test("diagnose acha cada defeito plantado na fixture", () => {
   try {
     const { outcome, findings, checks } = diagnose(repo);
     assert.equal(outcome, AUDITED);
-    assert.equal(checks, 9, "a lista e FECHADA: mudar o numero aqui exige decidir, nao descobrir depois");
+    assert.equal(checks, CHECKS.length, "a lista e FECHADA: mudar o numero aqui exige decidir, nao descobrir depois");
     const porTipo = (nome) => findings.filter(({ check }) => check === nome);
     assert.equal(porTipo("orphan-skill").length, 1, `a fixture planta ${ORFA} fora do manifesto, e so ela`);
     assert.equal(porTipo("broken-hook").length, 1, "a fixture aponta o SessionStart para um binario que nao existe");
@@ -304,4 +387,282 @@ test("toda verificacao declara remediacao ou a razao de nao haver", () => {
   const semCorrecao = findings.filter(({ fix }) => fix === null).map(({ check }) => check);
   assert.ok(semCorrecao.includes("orphan-skill"),
     "a orfa nao tem correcao segura: na 0.6.0-beta.1 o remove apagou a skill do proprio metodo");
+});
+
+test("com um motor a saida do diagnose continua identica", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const { outcome, findings, checks } = diagnose(repo);
+    assert.equal(outcome, AUDITED, "instalacao limpa de um motor sai auditado");
+    assert.deepEqual(findings.filter(({ severity }) => severity !== UNAVAILABLE), [],
+      "instalacao limpa de um motor nao ganha defeito nem aviso ao passar a iterar por motor");
+    assert.equal(checks, CHECKS.length, "a contagem de verificacoes nao mudou");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("com dois motores defeito plantado no segundo diretorio e acusado", () => {
+  const repo = instalacaoComDefeitosDoisMotores();
+  try {
+    const { outcome, findings } = diagnose(repo);
+    assert.equal(outcome, AUDITED, "instalacao com defeito sai auditado");
+    const tokensBuscando = findings.filter(({ check }) => check === "unresolved-token");
+    assert.ok(tokensBuscando.length > 0, "defeito plantado no segundo motor foi acusado");
+    const achado = tokensBuscando[0];
+    assert.match(achado.file, /\.github[/\\]skills/,
+      "o file aponta para o segundo diretorio onde o defeito foi plantado");
+    assert.match(achado.found, /MGR_UNRESOLVED/, "nomeia qual token ficou nao resolvido");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("instalacao limpa de dois motores nao ganha achado de corpo", () => {
+  const repo = instalacaoLimpaDoisMotores();
+  try {
+    const corpos = diagnose(repo).findings.filter(({ check, severity }) => check === "divergent-body"
+      && severity !== UNAVAILABLE);
+    assert.deepEqual(corpos, [],
+      "cada motor transforma a skill do gate do seu jeito; comparar contra a fonte crua acusaria "
+      + "toda instalacao limpa daquele motor");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("a derivacao do gate de review esta travada contra o instalador", () => {
+  const repo = instalacaoLimpaDoisMotores();
+  try {
+    const manifesto = JSON.parse(readFileSync(path.join(repo, ".mgr-core", "manifest.json"), "utf8"));
+    for (const engine of manifesto.engines) {
+      const arquivoDoAgente = engineDescriptors.get(engine).agentFile(catalog.REVIEW_GATE.agent);
+      assert.ok(manifesto.agents.some((caminho) => path.basename(caminho) === arquivoDoAgente),
+        "o doctor DERIVA o gate da presenca deste arquivo porque o manifesto nao o grava; se o "
+        + "instalador deixar de instalar o agente junto do gate, o doctor passa a julgar errado "
+        + "em silencio e e esta assercao que tem de reprovar");
+      const instalada = readFileSync(
+        path.join(repo, engine === "copilot" ? ".github/skills" : ".claude/skills",
+          catalog.REVIEW_GATE.skill, "SKILL.md"), "utf8");
+      const daFonte = readFileSync(path.join(bundle.skillsDir(), catalog.REVIEW_GATE.skill, "SKILL.md"), "utf8");
+      assert.notEqual(instalada, daFonte,
+        "o gate ligado tem de transformar a skill instalada; se nao transformar, a derivacao acima "
+        + "perde o sentido");
+    }
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("CHECKS tem exatamente 10 entradas com id unico", () => {
+  assert.equal(CHECKS.length, 10, "registro de verificacoes tem dez entradas e nada mais");
+  const ids = CHECKS.map(({ id }) => id);
+  const idsUnicos = new Set(ids);
+  assert.equal(idsUnicos.size, 10, "cada id do registro deve ser unico");
+});
+
+test("diagnose devolve contagem derivada do registro CHECKS", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const { checks } = diagnose(repo);
+    assert.equal(checks, CHECKS.length, "a contagem deve ser derivada do registro, nao escrita no codigo");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("instalacao limpa produz zero achado de missing-shared", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const { findings } = diagnose(repo);
+    const achados = findings.filter(({ check }) => check === "missing-shared");
+    assert.deepEqual(achados, [], "fontes compartilhadas exigidas estao presentes na instalacao limpa");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("instalacao limpa produz zero achado de token nao resolvido em _shared/", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const { findings } = diagnose(repo);
+    const arquivosDeSuaFonte = findings
+      .filter(({ check, file }) => check === "unresolved-token" && file.includes("_shared"))
+      .map(({ file }) => file);
+    assert.deepEqual(arquivosDeSuaFonte, [], "tokens em _shared/ sao resolvidos no install");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("instalacao limpa produz zero achado de corpo divergente em _shared/", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const { findings } = diagnose(repo);
+    const corposEmShared = findings
+      .filter(({ check, file, severity }) => check === "divergent-body" && file.includes("_shared") && severity !== UNAVAILABLE)
+      .map(({ file }) => file);
+    assert.deepEqual(corposEmShared, [], "corpo em _shared/ bate com a fonte na instalacao limpa");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("com manifesto atras do pacote missing-shared e indisponivel", () => {
+  const repo = instalacaoComDefeitos();
+  try {
+    const { findings } = diagnose(repo);
+    const compartilhado = findings.filter(({ check }) => check === "missing-shared");
+    assert.equal(compartilhado.length, 1, "um unico achado, nao um por motor ou fonte");
+    assert.equal(compartilhado[0].severity, UNAVAILABLE,
+      "manifesto atras e o estado ESPERADO; separar indisponivel de defeito e o que a RN-3 pede");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("com manifesto atras do pacote hasDefect nao e bloqueado pelo achado de missing-shared", () => {
+  const repo = instalacaoComDefeitos();
+  try {
+    const soCompartilhado = { findings: diagnose(repo).findings.filter(({ check }) => check === "missing-shared") };
+    assert.equal(hasDefect(soCompartilhado), false,
+      "indisponivel nao e defeito, e quem so tem esse achado nao bloqueia");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("a frase do divergent-body serve para skill e para fonte compartilhada", () => {
+  const daSkill = divergentBody({
+    name: "spec-create", source: "---\nx: 1\n---\num\n", installed: "---\nx: 1\n---\ndois\n",
+    file: ".claude/skills/spec-create/SKILL.md",
+  })[0];
+  assert.equal(daSkill.expected, "o corpo de spec-create como o pacote o traz",
+    "a frase perdeu a palavra skill de proposito: ela tambem descreve fonte compartilhada, que nao e skill");
+
+  const daFonte = divergentBody({
+    name: "_shared/laws/execution-laws.md", source: "um\n", installed: "dois\n",
+    file: ".claude/skills/_shared/laws/execution-laws.md",
+  })[0];
+  assert.ok(!daFonte.expected.includes("skill"),
+    "chamar de skill um arquivo de _shared/ seria mentira na cara de quem le o relatorio");
+});
+
+test("charter apagada do primeiro motor e achado como missing-shared", () => {
+  const repo = instalacaoLimpaDoisMotores();
+  try {
+    apagarFonteCompartilhada(repo, ".claude/skills", catalog.CHARTER_INSTALLED);
+    const { findings } = diagnose(repo);
+    const achados = findings.filter(({ check }) => check === "missing-shared");
+    assert.equal(achados.length, 1, "apagar uma fonte compartilhada gera exatamente um achado");
+    assert.equal(achados[0].severity, DEFECT);
+    assert.match(achados[0].file, /\.claude[/\\]skills[/\\]_shared[/\\]charter[/\\]core-principles\.md/,
+      "o arquivo aponta o caminho correto da fonte no motor");
+    assert.equal(achados[0].fix, FIX_UPDATE, "a correcao e mgr update");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("token nao resolvido em laws do segundo motor e achado", () => {
+  const repo = instalacaoLimpaDoisMotores();
+  try {
+    plantarTokenEmShared(repo, ".github/skills", catalog.LAWS_INSTALLED);
+    const { findings } = diagnose(repo);
+    const achados = findings.filter(({ check }) => check === "unresolved-token");
+    assert.ok(achados.length > 0, "plantar token nao resolvido gera achado");
+    const emShared = achados.find(({ file }) => file.includes("_shared") && file.includes("laws"));
+    assert.ok(emShared, "um dos achados aponta para o arquivo em .github/skills/_shared/laws/");
+    assert.match(emShared.found, /MGR_FIXTURE/, "nomeia qual token ficou nao resolvido");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("corpo alterado em quality do primeiro motor e achado como divergent-body", () => {
+  const repo = instalacaoLimpaDoisMotores();
+  try {
+    alterarCorpoEmShared(repo, ".claude/skills", catalog.QUALITY_INSTALLED);
+    const { findings } = diagnose(repo);
+    const achados = findings.filter(({ check, severity }) => check === "divergent-body" && severity !== UNAVAILABLE);
+    assert.ok(achados.some(({ file }) => file.includes("_shared") && file.includes("quality")),
+      "alterar uma linha gera achado de corpo divergente apontando aquele arquivo");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("instalacao limpa de dois motores nao ganha achado de corpo em _shared/ mesmo para execution-laws", () => {
+  const repo = instalacaoLimpaDoisMotores();
+  try {
+    const { findings } = diagnose(repo);
+    const corposEmSharedDefectivos = findings
+      .filter(({ check, file, severity }) => check === "divergent-body" && file.includes("_shared") && severity === DEFECT);
+    assert.deepEqual(corposEmSharedDefectivos, [],
+      "comparar sem pular a linha do token acusaria toda instalacao limpa; inclusive para execution-laws.md "
+      + "cuja fonte do pacote tem {{MGR_CHARTER}} que o install resolve");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("com as tres mutacoes juntas o diagnose encontra achados dos tres tipos", () => {
+  const repo = instalacaoLimpaDoisMotores();
+  try {
+    apagarFonteCompartilhada(repo, ".claude/skills", catalog.CHARTER_INSTALLED);
+    plantarTokenEmShared(repo, ".github/skills", catalog.LAWS_INSTALLED);
+    alterarCorpoEmShared(repo, ".claude/skills", catalog.QUALITY_INSTALLED);
+    const { findings } = diagnose(repo);
+    assert.ok(hasDefect({ findings }), "com tres mutacoes o resultado e defectivo");
+    const temMissing = findings.some(({ check }) => check === "missing-shared");
+    const temToken = findings.some(({ check }) => check === "unresolved-token");
+    const temCorpo = findings.some(({ check, severity }) => check === "divergent-body" && severity !== UNAVAILABLE);
+    assert.ok(temMissing && temToken && temCorpo,
+      "todos os tres tipos de achado estao presentes");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("token em _shared/ continua defeito com o manifesto atrás do pacote", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const manifesto = path.join(repo, ".mgr-core", "manifest.json");
+    const dados = JSON.parse(readFileSync(manifesto, "utf8"));
+    writeFileSync(manifesto, JSON.stringify({ ...dados, version: VERSAO_VELHA }, null, 2));
+    plantarTokenEmShared(repo, ".claude/skills", catalog.LAWS_INSTALLED);
+
+    const { findings } = diagnose(repo);
+    const token = findings.filter(({ check }) => check === "unresolved-token");
+    assert.ok(token.length > 0,
+      "o escudo de versão cobre existência e corpo, nunca token: subárvore pode faltar numa versão "
+      + "antiga, mas token sobrando significa que o install falhou em resolvê-lo, e isso não é "
+      + "legítimo em versão alguma");
+    assert.ok(token.every(({ severity }) => severity === DEFECT),
+      "e sai como defeito, não como indisponível");
+
+    const ausencia = findings.filter(({ check }) => check === "missing-shared");
+    assert.ok(ausencia.every(({ severity }) => severity === UNAVAILABLE),
+      "a existência, essa sim, fica indisponível: é o estado esperado de quem não rodou mgr update");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("manifesto sem motor reconhecido cai para os skillsDirs em vez de não conferir nada", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const manifesto = path.join(repo, ".mgr-core", "manifest.json");
+    const dados = JSON.parse(readFileSync(manifesto, "utf8"));
+    writeFileSync(manifesto, JSON.stringify({ ...dados, engines: ["custom"] }, null, 2));
+    plantarTokenEmShared(repo, ".claude/skills", catalog.LAWS_INSTALLED);
+
+    const token = diagnose(repo).findings.filter(({ check }) => check === "unresolved-token");
+    assert.ok(token.length > 0,
+      "instalação com --skills-dir grava engines: ['custom'], e manifesto legado pode não ter "
+      + "engines: filtrar só por motor conhecido deixava a lista de árvores vazia e o comando saía "
+      + "0 sem conferir nada, que é a degradação medida em 2026-09-24 contra o commit de partida");
+  } finally {
+    descartar(repo);
+  }
 });

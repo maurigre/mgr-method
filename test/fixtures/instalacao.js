@@ -35,6 +35,19 @@ export function instalacaoLimpa({ arch = "layered", language = "java", userLangu
 }
 
 /**
+ * Instalacao limpa com dois motores (claude-code e copilot).
+ *
+ * Cria estrutura em `.claude/skills` e `.github/skills`.
+ */
+export function instalacaoLimpaDoisMotores({ arch = "layered", language = "java", userLanguage = "pt-BR" } = {}) {
+  const repo = mkdtempSync(path.join(os.tmpdir(), "mgr-doctor-"));
+  execFileSync("node", [BIN, "install", "--engine", "both", "--language", language,
+    "--arch", arch, "--user-language", userLanguage, "--project-id", "fixture", "-y", repo],
+  { encoding: "utf8", cwd: repo });
+  return repo;
+}
+
+/**
  * Instalacao com os tres defeitos que a fatia nasceu para achar, plantados um a um:
  * skill orfa em disco, manifesto atras do pacote, e hook apontando para binario inexistente.
  */
@@ -61,4 +74,76 @@ export function instalacaoComDefeitos() {
   return repo;
 }
 
+/**
+ * Instalacao com dois motores com defeito plantado no segundo diretorio.
+ *
+ * O defeito e um token nao resolvido em `.github/skills/spec-init/SKILL.md`, que testa se
+ * o diagnose confere todos os diretorios de motor e nao apenas o primeiro.
+ */
+export function instalacaoComDefeitosDoisMotores() {
+  const repo = instalacaoLimpaDoisMotores();
+
+  // O defeito vai no SEGUNDO motor de proposito: e o caso que o diagnose nao enxergava enquanto
+  // olhava so o primeiro diretorio. Plantado por APPEND e nao por substituicao de ancora — a versao
+  // anterior procurava um titulo que nao existe no arquivo e, sem achar, nao plantava nada e nao
+  // reclamava: o teste passava a afirmar sobre um defeito inexistente.
+  const alvo = path.join(repo, ".github", "skills", "spec-init", "SKILL.md");
+  if (!existsSync(alvo)) throw new Error(`fixture quebrada: ${alvo} nao existe apos instalar dois motores`);
+  writeFileSync(alvo, `${readFileSync(alvo, "utf8")}\n{{MGR_UNRESOLVED}}\n`, "utf8");
+
+  return repo;
+}
+
+
 export const descartar = (repo) => rmSync(repo, { recursive: true, force: true });
+
+/**
+ * Remove o arquivo de fonte compartilhada do diretorio do motor especificado.
+ *
+ * Lanca Error se o arquivo nao existir — o padrao corrigido evita plantar defeito dentro de
+ * condicional silencioso que nao reclamava quando nada casava.
+ */
+export function apagarFonteCompartilhada(repo, dirDeSkillsRelativo, segmentos) {
+  const alvo = path.join(repo, dirDeSkillsRelativo, ...segmentos);
+  if (!existsSync(alvo)) throw new Error(`fixture quebrada: ${alvo} nao existe apos instalar`);
+  rmSync(alvo, { recursive: false, force: true });
+}
+
+/**
+ * Acrescenta ao fim do arquivo uma linha com token nao resolvido.
+ *
+ * Lanca Error se o arquivo nao existir.
+ */
+export function plantarTokenEmShared(repo, dirDeSkillsRelativo, segmentos) {
+  const alvo = path.join(repo, dirDeSkillsRelativo, ...segmentos);
+  if (!existsSync(alvo)) throw new Error(`fixture quebrada: ${alvo} nao existe apos instalar`);
+  writeFileSync(alvo, `${readFileSync(alvo, "utf8")}\n{{MGR_FIXTURE}}\n`, "utf8");
+}
+
+/**
+ * Altera uma linha do corpo do arquivo.
+ *
+ * Lanca Error se o arquivo nao existir.
+ */
+export function alterarCorpoEmShared(repo, dirDeSkillsRelativo, segmentos) {
+  const alvo = path.join(repo, dirDeSkillsRelativo, ...segmentos);
+  if (!existsSync(alvo)) throw new Error(`fixture quebrada: ${alvo} nao existe apos instalar`);
+  const conteudo = readFileSync(alvo, "utf8");
+  // Encontra o primeiro corpo (apos o frontmatter) e altera uma linha
+  if (!conteudo.startsWith("---")) {
+    writeFileSync(alvo, "LINHA ALTERADA", "utf8");
+    return;
+  }
+  const fimFrontmatter = conteudo.indexOf("\n---", 3);
+  if (fimFrontmatter === -1) {
+    writeFileSync(alvo, "LINHA ALTERADA", "utf8");
+    return;
+  }
+  const corpo = conteudo.slice(fimFrontmatter + 5);
+  const linhas = corpo.split("\n");
+  if (linhas.length > 0) {
+    linhas[0] = "LINHA ALTERADA";
+  }
+  const novoCorpo = linhas.join("\n");
+  writeFileSync(alvo, conteudo.slice(0, fimFrontmatter + 5) + novoCorpo, "utf8");
+}

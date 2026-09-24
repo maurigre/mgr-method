@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import os from "node:os";
 import path from "node:path";
 import * as bundle from "../src/bundle.js";
+import { CHECKS } from "../src/doctor.js";
 import {
   AGENT_MARKER, agentDeclares, agentFrontmatter, buildRuntime, inheritingModel, buildSkill, gateSummary, installAgents,
   installEngine, isOurAgent, resolveCharter, resolveLaws, resolveUserLanguage, routeReviewSkill,
@@ -28,6 +29,11 @@ import { captureCli } from "../scripts/capture-cli-baseline.mjs";
 import { descartar, instalacaoComDefeitos, instalacaoLimpa } from "./fixtures/instalacao.js";
 
 const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-"));
+
+const arquivosSob = (dir) => (existsSync(dir) ? readdirSync(dir, { withFileTypes: true }) : [])
+  .flatMap((entrada) => (entrada.isDirectory()
+    ? arquivosSob(path.join(dir, entrada.name))
+    : [path.join(dir, entrada.name)]));
 const CORE = ["spec-init", "spec-create", "spec-execute", "adr-create", "code-analyzer", "diagnosing-bugs"];
 
 test("skills do fluxo SDD presentes e válidas", () => {
@@ -50,6 +56,40 @@ test("selectSkills monta o subconjunto por linguagem/arquitetura", () => {
   assert.ok(!s2.includes("junit-clean"));
 
   assert.throws(() => catalog.selectSkills({ architecture: "xyz" }), /arquitetura desconhecida/);
+});
+
+test("requiredShared devolve 4 entradas com skill arch e spec-init", () => {
+  const skills = ["spec-init", "spec-create", "arch-hexagonal"];
+  const required = catalog.requiredShared(skills);
+  assert.equal(required.length, 4, "deve retornar as 4 fontes compartilhadas (laws, charter, arch, quality)");
+  assert.ok(required.map((s) => s.installed).every((inst) => Array.isArray(inst)), "todos os installed sao arrays");
+});
+
+test("requiredShared devolve 2 entradas sem skill arch nem spec-init", () => {
+  const skills = ["spec-create", "spec-execute"];
+  const required = catalog.requiredShared(skills);
+  assert.equal(required.length, 2, "deve retornar so as 2 fontes incondicionais (laws e charter)");
+});
+
+test("requiredShared sempre inclui laws e charter em qualquer conjunto", () => {
+  const vasio = catalog.requiredShared([]);
+  assert.equal(vasio.length, 2, "lista vazia ainda tem laws e charter");
+  const installados = vasio.map((s) => JSON.stringify(s.installed));
+  assert.ok(installados.includes(JSON.stringify(catalog.LAWS_INSTALLED)), "laws sempre presente");
+  assert.ok(installados.includes(JSON.stringify(catalog.CHARTER_INSTALLED)), "charter sempre presente");
+
+  const apenasSpec = catalog.requiredShared(["spec-init"]);
+  assert.ok(apenasSpec.length >= 2, "spec-init sozinho tem pelo menos laws e charter");
+  const instaladasSpec = apenasSpec.map((s) => JSON.stringify(s.installed));
+  assert.ok(instaladasSpec.includes(JSON.stringify(catalog.LAWS_INSTALLED)), "laws com spec-init");
+  assert.ok(instaladasSpec.includes(JSON.stringify(catalog.CHARTER_INSTALLED)), "charter com spec-init");
+});
+
+test("needsQualityShared verdadeiro só com spec-init", () => {
+  assert.ok(!catalog.needsQualityShared(["spec-create", "spec-execute"]), "sem spec-init retorna falso");
+  assert.ok(!catalog.needsQualityShared([]), "lista vazia retorna falso");
+  assert.ok(catalog.needsQualityShared(["spec-init"]), "spec-init sozinho retorna verdadeiro");
+  assert.ok(catalog.needsQualityShared(["spec-init", "spec-create", "arch-hexagonal"]), "spec-init com outros retorna verdadeiro");
 });
 
 test("install autossuficiente: só o subconjunto na pasta do motor, sem .mgr-core", () => {
@@ -211,6 +251,28 @@ test("update e uninstall exigem instalação existente", () => {
   const repo = diretorioTemporario();
   assert.throws(() => installer.update("project", repo), /rode `mgr install`/);
   assert.throws(() => installer.uninstall("project", repo), /nada a desinstalar/);
+});
+
+test("SHARED_SOURCES e instalador leem as mesmas fontes compartilhadas", () => {
+  const repo = diretorioTemporario();
+  const skills = ["spec-init", "spec-create", "spec-execute", "adr-create", "code-analyzer", "diagnosing-bugs", "configure-agents", "arch-hexagonal"];
+  installer.execute(installer.planInstall(["claude-code"], "project", repo, { names: skills }));
+  const sk = path.join(repo, ".claude", "skills");
+
+  const required = catalog.requiredShared(skills);
+  assert.equal(required.length, 4, "conjunto com arch-* e spec-init deve ter 4 fontes");
+
+  for (const source of required) {
+    const instalado = path.join(sk, ...source.installed);
+    assert.ok(existsSync(instalado),
+      "tabela e instalador leem a mesma coisa: cada entrada de requiredShared tem de existir no disco");
+  }
+
+  const emDisco = arquivosSob(path.join(sk, catalog.SHARED_DIR))
+    .map((abs) => path.relative(sk, abs)).sort();
+  const naTabela = required.map((source) => path.join(...source.installed)).sort();
+  assert.deepEqual(emDisco, naTabela,
+    "a direcao inversa importa igual: fonte escrita pelo instalador e ausente da tabela nao seria conferida pelo doctor");
 });
 
 test("getMessages: en é o default e qualquer pt-* seleciona a tabela pt-BR", () => {
@@ -3117,14 +3179,14 @@ test("mgr doctor: instalacao recem-feita nao produz achado nenhum", () => {
   assert.ok(payload.findings.every(({ severity }) => severity === "unavailable"),
     "o unico achado aceitavel aqui e declaracao de indisponibilidade, que e honestidade do instrumento e nao alarme");
   assert.equal(payload.blocks, false, "sem defeito nao ha o que bloquear");
-  assert.equal(payload.checks, 9, "as nove rodaram: zero achado nao e zero verificacao");
+  assert.equal(payload.checks, CHECKS.length, "todas rodaram: zero achado nao e zero verificacao");
 });
 
 test("mgr doctor --json tem schemaVersion e a lista fechada", () => {
   comDoctor((repo) => {
     const payload = JSON.parse(rodarDoctor(["--json"], repo).stdout);
     assert.equal(payload.schemaVersion, 1);
-    assert.equal(payload.checks, 9, "a lista e fechada: mudar exige decidir");
+    assert.equal(payload.checks, CHECKS.length, "a lista e fechada e a contagem deriva do registro: mudar exige decidir, nao descobrir depois");
     assert.equal(payload.blocks, true);
     assert.ok(payload.findings.every(({ check, file, expected, found }) => check && file && expected && found));
   });

@@ -4,6 +4,51 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 
 ## [Não lançado]
 ### Adicionado
+- **O `mgr doctor` deixou de ser cego para a árvore `_shared/`.** Ela não é acessório: é para onde
+  apontam os tokens `{{MGR_LAWS}}`, `{{MGR_CHARTER}}` e `{{MGR_ARCH_RULES}}` que o install resolve,
+  e duas das quatro fontes são instaladas **sempre** (ADR-0011 e ADR-0022). Uma skill podia estar
+  perfeita e apontar para o vazio.
+
+  **Medido antes de escrever o código, por mutação em cópia:** com a carta apagada, um token não
+  resolvido nas leis e um corpo alterado na fonte de qualidade — três quebras ao mesmo tempo — o
+  comando saía **exit 0** e a saída era byte a byte idêntica à de uma instalação íntegra. Agora sai
+  **exit 1** com os três nomeados.
+
+  A verificação nova é `missing-shared`; as já existentes `unresolved-token` e `divergent-body`
+  passaram a alcançar `_shared/` também. Instalação apenas atrasada não vira alarme falso: a
+  existência e o corpo se declaram **indisponíveis** quando o manifesto está atrás do pacote, pelo
+  mesmo mecanismo que o `divergent-body` já usava. Token não resolvido é defeito em qualquer versão.
+
+- **O `mgr doctor` passou a conferir TODOS os motores instalados, não só o primeiro.** Numa
+  instalação `--engine both`, defeito plantado no diretório do segundo motor era pulado **em
+  silêncio** e o comando saía 0. Medido e fechado. O corpo esperado de cada motor é calculado com a
+  mesma função que o instalador usa para transformá-lo, então motor novo entra pelo descritor e o
+  diagnóstico não muda.
+
+- **`npm run check:checks`** — guarda estrutural novo, no hook `pre-commit` e no CI. Ele compara o
+  **conjunto de ids** do registro de verificações do código com a coluna de id das tabelas que as
+  enumeram no contrato e nos dois READMEs. Nunca casa prosa. Tabela não encontrada é **problema**,
+  não silêncio.
+
+### Modificado
+- **A contagem de verificações do `mgr doctor` deixou de ser um número escrito.** Ela é
+  `CHECKS.length`, derivada do registro, e os documentos pararam de reafirmá-la: cada um enumera as
+  verificações em tabela com coluna de `id`. Antes o número estava escrito em sete lugares.
+- **O diretório de skills de cada motor mudou-se para o descritor do motor**, ao lado do de agentes,
+  pagando metade da dívida que o ADR-0010 declarou. Some o mapa privado `ENGINE_DIR`, e o
+  `mgr doctor` deixa de depender do instalador para diagnosticar. Instalação **idêntica byte a byte**.
+- A frase do achado `divergent-body` perdeu a palavra "skill": ela também descreve fonte
+  compartilhada, que não é skill.
+
+### Corrigido
+- **O guarda `CHT-4` do `check-laws` estava desarmado.** Ele decidia a existência da carta com um
+  operando que resolvia o caminho contra o diretório de trabalho do **processo**, e não contra a
+  árvore sob análise — então qualquer árvore era declarada íntegra quando o processo rodava de um
+  repositório que por acaso tivesse um arquivo no mesmo caminho relativo. Ironia medida: ele
+  funcionava por acidente **enquanto a carta não estava instalada**; instalá-la o desarmou.
+- **O hook `pre-commit` mascarava a falha do primeiro guarda.** Sem `set -e`, com mais de um comando
+  o código de saída era o do último. Medido com o primeiro forçado a falhar: o hook saía 0.
+
 - **Dois gates novos, e uma lei para o que eles não alcançam.** A ordem importa: o que deu para
   virar check virou check; a lei ficou só com o resto.
 

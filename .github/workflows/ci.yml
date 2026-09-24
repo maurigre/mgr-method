@@ -46,6 +46,11 @@ jobs:
       - name: Verifica padrao de verificacao defeituosa
         run: npm run check:claims
 
+      # Estrutural: compara CONJUNTOS DE IDS entre o registro do codigo e a coluna de id das tabelas
+      # dos documentos. Nunca casa prosa — a nota de desenho de scripts/check-laws.mjs proibe.
+      - name: Verifica a coerencia da lista de verificacoes do doctor
+        run: npm run check:checks
+
       # Gate de cobertura: o script `coverage` traz --test-coverage-lines=95 e sai != 0 abaixo disso.
       - run: npm run coverage
 

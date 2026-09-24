@@ -18,15 +18,19 @@ primeiro, que vence todos os outros, nao tem documento.
 
 O efeito foi medido em 2026-09-20 neste repositorio, e nao e teorico:
 
-- **Zero** regras `ARCH-*` citaveis no guia de review (as familias sao DES, TST, DOC, QUAL, LOG,
-  NAM, MUT e os perfis por linguagem). `git log --all -S "ARCH-"` sobre o guia, `shared/` e
-  `skills/` devolve **0 commits**: nunca existiram.
+- **Zero** regras com o prefixo `ARCH-` citaveis no guia. **[EMENDA DE 2026-09-21: isto era
+  literalmente verdade e levava a conclusao errada. As regras de arquitetura EXISTEM e sao citaveis
+  — chamam-se `INV-*`. Neste repositorio o guia traz `INV-1` a `INV-6`, geradas pelo `spec-init` a
+  partir dos seis invariantes da `arch-layered`, e os dois reviews isolados de 2026-09-20 CITARAM
+  `INV-2`, `INV-5` e `INV-6`. O erro veio de enumerar prefixos sem incluir `INV`. O lado do revisor
+  FUNCIONA; so o do executor esta aberto.]**
 - A arquitetura tambem **nao esta** entre as cinco premissas do `spec-execute` (seguranca,
   performance, uso de recurso, clareza, qualidade). O token `{{MGR_ARCH_RULES}}` vive em exatamente
   quatro arquivos, as quatro skills `arch-*`.
-- Consequencia: o usuario escolhe a arquitetura na instalacao, a skill dela e instalada, e **nem o
-  executor e mandado usa-la, nem o revisor pode cobra-la** — porque a `L1.1` proibe reprovar por
-  principio que nao esteja literalmente escrito, *"mesmo que o problema seja real"*.
+- Consequencia, **corrigida pela emenda de 2026-09-21**: o usuario escolhe a arquitetura, a skill
+  dela e instalada e o `spec-init` transforma os invariantes dela em regra citavel — entao **o
+  revisor cobra**. O que falta e o outro lado: **o executor nao e mandado aplicar** a arquitetura
+  escolhida.
 
 Tres degradacoes da mesma familia foram apuradas na mesma serie, e as tres estao no mesmo lugar:
 onde o metodo pede em prosa e nao tem nem regra citavel nem gate executavel. Tres skills orfas

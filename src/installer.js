@@ -20,12 +20,7 @@ import * as catalog from "./catalog.js";
 const KNOWN_PROJECT = [".claude/skills", ".github/skills", ".agents/skills", ".cursor/skills"];
 const KNOWN_GLOBAL = [".claude/skills", ".copilot/skills", ".agents/skills"];
 
-const ENGINE_DIR = {
-  "claude-code": { project: ".claude/skills", global: ".claude/skills" },
-  copilot: { project: ".github/skills", global: ".copilot/skills" },
-};
-
-export const ENGINES = Object.keys(ENGINE_DIR);
+export const ENGINES = engineDescriptors.ids();
 
 function countSkills(dir) {
   return readdirSync(dir, { withFileTypes: true })
@@ -47,8 +42,11 @@ export function detect(repo) {
 }
 
 export function engineSkillsDir(engine, scope, repo) {
-  const rel = ENGINE_DIR[engine]?.[scope];
-  if (!rel) throw new Error(`motor inválido: ${engine}`);
+  // O `get` do descritor lança com a mensagem dele; aqui a mensagem é OUTRA e observável — um teste
+  // a afirma desde antes desta mudança, e trocá-la seria degradar o que a pessoa lê.
+  if (!engineDescriptors.ids().includes(engine)) throw new Error(`motor inválido: ${engine}`);
+  const rel = engineDescriptors.get(engine).skillsDir[scope];
+  if (!rel) throw new Error(`escopo desconhecido: ${scope} (use project | global)`);
   return scope === "project" ? path.join(repo, rel) : path.join(os.homedir(), rel);
 }
 
@@ -62,7 +60,7 @@ const absDir = (d, scope, repo) => (path.isAbsolute(d) ? d : (scope === "project
 
 // Referência (string) que substitui o token {{MGR_ARCH_RULES}} nas skills arch-*.
 function archRulesRef(engineDir, scope, repo) {
-  const shared = path.join(engineDir, "_shared", "arch", "cross-cutting-rules.md");
+  const shared = path.join(engineDir, ...catalog.ARCH_INSTALLED);
   return scope === "project" ? path.relative(repo, shared) : shared;
 }
 
@@ -224,7 +222,7 @@ export function uninstall(scope, repo) {
       const p = path.join(base, name);
       if (existsSync(p)) { rmSync(p, { recursive: true, force: true }); removed.push(p); }
     }
-    const sh = path.join(base, "_shared");
+    const sh = path.join(base, catalog.SHARED_DIR);
     if (existsSync(sh)) { rmSync(sh, { recursive: true, force: true }); removed.push(sh); }
     if (existsSync(base) && readdirSync(base).length === 0) { rmSync(base, { recursive: true, force: true }); removed.push(base); }
   }

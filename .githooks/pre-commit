@@ -1,4 +1,8 @@
 #!/bin/sh
+# `set -e` e OBRIGATORIO desde que este hook passou a rodar mais de um comando: sem ele o codigo de
+# saida e o do ULTIMO, e uma falha do primeiro guarda sai mascarada. Medido em 2026-09-24, com o
+# primeiro comando forcado a falhar: o hook saia 0.
+set -e
 # Gate local de padrao de verificacao defeituosa (feature leis-de-verificacao).
 # Ativado pelo script `prepare` do package.json, via core.hooksPath — sem husky, sem dependencia.
 #
@@ -9,3 +13,7 @@
 # Este hook e conveniencia: falha cedo, na maquina do autor. O gate REAL e o CI,
 # porque `--no-verify` contorna hook local e o CI nao.
 node scripts/check-claims.mjs
+
+# Coerencia entre o registro de verificacoes do `mgr doctor` e as tabelas que o enumeram nos
+# documentos. Aqui pelo mesmo motivo do de cima: falhar na maquina de quem escreve, antes do CI.
+node scripts/check-checks.mjs

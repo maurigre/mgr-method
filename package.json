@@ -30,6 +30,7 @@
     "prepare": "git config core.hooksPath .githooks || true",
     "check:laws": "node scripts/check-laws.mjs",
     "check:claims": "node scripts/check-claims.mjs",
+    "check:checks": "node scripts/check-checks.mjs",
     "check:clean": "node scripts/check-clean.mjs"
   },
   "keywords": [

@@ -115,9 +115,10 @@ export function checkLaws(laws, pointers) {
 
 // CHT-4 (segunda metade): numa árvore INSTALADA o ponteiro da carta tem de estar resolvido E o
 // caminho apontado tem de existir. Isto é o que o `guarda.md` seção 5 especificou, e o que faz a
-// mitigação do ADR-0022 ser verdadeira: sem isto, o ponteiro pode apontar para o vazio e o único
-// guarda seria um teste. O `mgr doctor` NÃO alcança isto — a verificação `unresolved-token` dele só
-// lê `SKILL.md` de skill em disco, e `_shared` é excluído por construção.
+// mitigação do ADR-0022 ser verdadeira: sem isto, o ponteiro pode apontar para o vazio.
+// Desde 2026-09-24 o `mgr doctor` alcança `_shared/` — token não resolvido e fonte ausente são
+// achados dele. O que continua SÓ aqui é a parte SEMÂNTICA: se o ponteiro nomeia um caminho que
+// existe mas é o errado, o `doctor` não sabe; este guarda sabe. E este script não é distribuído.
 export function checkCharterResolved(installedSkillsDir) {
   const problems = [];
   const leis = path.join(installedSkillsDir, ...LAWS_INSTALLED_SEGMENTS);
@@ -133,7 +134,7 @@ export function checkCharterResolved(installedSkillsDir) {
     return problems;
   }
   const repo = path.resolve(installedSkillsDir, "..", "..");
-  if (!existsSync(path.resolve(repo, apontado)) && !existsSync(apontado)) {
+  if (!existsSync(path.resolve(repo, apontado))) {
     problems.push(`CHT-4 ${leis}: the charter pointer resolves to ${apontado}, which does not exist`);
   }
   return problems;
@@ -171,7 +172,11 @@ export function checkResolved(installedSkillsDir) {
 }
 
 export const CHARTER_TOKEN = "{{MGR_CHARTER}}";
-const LAWS_INSTALLED_SEGMENTS = ["_shared", "laws", "execution-laws.md"];
+// This is a deliberate copy of what src/catalog.js declares as SHARED_DIR. It exists so that the
+// verifier does not depend on the source it verifies; a divergence must turn red, never silent.
+// A test locks both copies against divergence.
+export const SHARED_TREE_NAME = "_shared";
+const LAWS_INSTALLED_SEGMENTS = [SHARED_TREE_NAME, "laws", "execution-laws.md"];
 const CHARTER_HEADER = /^### (CP-\d+) — (.+)$/;
 const CHARTER_PARTS = ["**Statement.**", "**Case.**", "**Provenance.**"];
 

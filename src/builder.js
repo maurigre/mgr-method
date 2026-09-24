@@ -79,16 +79,15 @@ export function installEngine(engineSkillsDir, skills, { archRulesRef, lawsRules
   // Migração (CONSTITUTION §2.7): instalações ≤ 0.4.x têm a fonte co-locada com os nomes
   // pt antigos; sem esta limpeza o update deixaria o arquivo órfão ao lado do novo.
   for (const legacy of ["arch/regras-transversais.md", "quality/regras-qualidade.md"]) {
-    rmSync(path.join(engineSkillsDir, "_shared", legacy), { force: true });
+    rmSync(path.join(engineSkillsDir, catalog.SHARED_DIR, legacy), { force: true });
   }
 
   if (catalog.needsArchShared(skills)) {
-    const dst = path.join(engineSkillsDir, "_shared", "arch");
-    mkdirSync(dst, { recursive: true });
-    const shared = path.join(bundle.pkgDir("shared"), "arch", "cross-cutting-rules.md");
-    cpSync(shared, path.join(dst, "cross-cutting-rules.md"));
+    const destino = path.join(engineSkillsDir, ...catalog.ARCH_INSTALLED);
+    mkdirSync(path.dirname(destino), { recursive: true });
+    cpSync(path.join(bundle.pkgDir("shared"), "arch", "cross-cutting-rules.md"), destino);
 
-    const ref = archRulesRef || path.join("_shared", "arch", "cross-cutting-rules.md");
+    const ref = archRulesRef || path.join(...catalog.ARCH_INSTALLED);
     const archSkills = Object.values(catalog.ARCHITECTURES);
     for (const name of skills) {
       if (!archSkills.includes(name)) continue;
@@ -121,11 +120,10 @@ export function installEngine(engineSkillsDir, skills, { archRulesRef, lawsRules
   }
 
   // Fonte de qualidade (co-locada) — usada pelo spec-init ao montar o guia de review.
-  if (skills.includes("spec-init")) {
-    const qdst = path.join(engineSkillsDir, "_shared", "quality");
-    mkdirSync(qdst, { recursive: true });
-    cpSync(path.join(bundle.pkgDir("shared"), "quality", "quality-rules.md"),
-      path.join(qdst, "quality-rules.md"));
+  if (catalog.needsQualityShared(skills)) {
+    const destino = path.join(engineSkillsDir, ...catalog.QUALITY_INSTALLED);
+    mkdirSync(path.dirname(destino), { recursive: true });
+    cpSync(path.join(bundle.pkgDir("shared"), "quality", "quality-rules.md"), destino);
   }
   return dirs;
 }

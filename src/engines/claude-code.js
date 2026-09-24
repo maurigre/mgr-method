@@ -11,6 +11,7 @@ const PRE_COMPACT = "PreCompact";
 
 export default {
   id: "claude-code",
+  skillsDir: { project: ".claude/skills", global: ".claude/skills" },
   agentsDir: { project: ".claude/agents", global: ".claude/agents" },
   agentFile: (name) => `${name}.md`,
   // "fork": o desvio até o agente é ESTRUTURAL (frontmatter da skill, a plataforma roteia).

@@ -19,6 +19,7 @@
 // mover o arquivo à mão — declarado, não silencioso.
 export default {
   id: "copilot",
+  skillsDir: { project: ".github/skills", global: ".copilot/skills" },
   agentsDir: { project: ".github/agents", global: ".copilot/agents" },
   agentFile: (name) => `${name}.agent.md`,
   // "instruction": o desvio até o agente é INSTRUÇÃO no corpo da skill (delegar via `task`).

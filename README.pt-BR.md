@@ -67,6 +67,12 @@ existente sem `userLanguage` herda `pt-BR` silenciosamente no `update`. Use `--s
 para forçar um diretório específico. O `uninstall` remove só o que o MGR criou; `docs/`,
 `specs/` e código ficam intactos.
 
+Um `install` que deixa de declarar uma skill que o manifesto anterior declarava **reconcilia**: o
+plano nomeia o que sai do conjunto declarado antes de qualquer escrita, a remoção só acontece com a
+sua confirmação (ou `-y`), e o que você mantiver **continua declarado** — recusar nunca cria órfã.
+Atenção: `mgr install -y` **sem flags** recalcula o conjunto a partir das FLAGS, não do manifesto
+anterior — só o `update` herda.
+
 ## O fluxo
 
 ```

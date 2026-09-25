@@ -1,3 +1,7 @@
+// A classe vem do catalogo: sem a chave COMPUTADA, trocar o valor de uma constante faria as tres
+// razoes cairem no fallback neutro em silencio, que e o que a CA-13 proibe (achado S-1 do gate).
+import * as catalog from "./catalog.js";
+
 // Mensagens da CLI em fonte única, por idioma de saída (userLanguage).
 // `en` é o default (idioma canônico do pacote — ADR-0003); `pt-BR` preserva a
 // experiência original. O núcleo não decide idioma: a borda resolve a precedência
@@ -24,6 +28,18 @@ const en = {
   planSkillsDir: (dir) => `skills   →   ${dir}`,
   planSkills: (count, list) => `skills (${count}): ${list}`,
   dryRun: "(dry-run: nothing was written.)",
+  planAbandoned: (lines) => `leaving the declared set (${lines.length}) — removed only if you confirm:\n${lines.map((line) => `  ${line}`).join("\n")}`,
+  removalReason: (name, klass) => `${name} — ${{
+    [catalog.CLASS_ARCHITECTURE]: "architecture skill no longer selected",
+    [catalog.CLASS_LANGUAGE]: "language helper no longer selected",
+    [catalog.CLASS_OPTIONAL]: "optional skill no longer selected",
+    [catalog.CLASS_UNCLASSIFIED]: "no longer in the declared set",
+  }[klass] || "no longer in the declared set"}`,
+  confirmRemoval: (count) => `Remove the ${count} skill(s) above from disk?`,
+  removedSkills: (paths) => `Removed ${paths.length} skill(s): ${paths.join(" · ")}`,
+  keptByChoice: (names) => `Nothing was removed: ${names.join(", ")} stayed on disk and stay declared, so nothing was orphaned.`,
+  keptNoConsent: (names) => `Nothing was removed: there was no terminal to ask. ${names.join(", ")} stayed on disk and stay declared; \`-y\` authorizes the removal.`,
+  keptNoSource: (names) => `This version no longer ships ${names.join(", ")}: they stay on disk, out of the manifest, and \`mgr doctor\` will report them as orphans.`,
   confirmInstall: "Confirm installation?",
   installing: "Installing skills into the engines",
   installedAt: (dirs) => `Skills installed at ${dirs}.`,
@@ -347,6 +363,18 @@ const ptBR = {
   planSkillsDir: (dir) => `skills   →   ${dir}`,
   planSkills: (count, list) => `skills (${count}): ${list}`,
   dryRun: "(dry-run: nada foi escrito.)",
+  planAbandoned: (lines) => `sai do conjunto declarado (${lines.length}) — só com a sua confirmação:\n${lines.map((line) => `  ${line}`).join("\n")}`,
+  removalReason: (name, klass) => `${name} — ${{
+    [catalog.CLASS_ARCHITECTURE]: "skill de arquitetura que saiu da seleção",
+    [catalog.CLASS_LANGUAGE]: "helper de linguagem que saiu da seleção",
+    [catalog.CLASS_OPTIONAL]: "skill opcional que saiu da seleção",
+    [catalog.CLASS_UNCLASSIFIED]: "fora do conjunto declarado",
+  }[klass] || "fora do conjunto declarado"}`,
+  confirmRemoval: (count) => `Remover do disco a(s) ${count} skill(s) acima?`,
+  removedSkills: (paths) => `Removida(s) ${paths.length} skill(s): ${paths.join(" · ")}`,
+  keptByChoice: (names) => `Nada foi removido: ${names.join(", ")} ficou(aram) em disco e segue(m) declarada(s), então nada virou órfã.`,
+  keptNoConsent: (names) => `Nada foi removido: não havia terminal para perguntar. ${names.join(", ")} ficou(aram) em disco e segue(m) declarada(s); o \`-y\` autoriza a remoção.`,
+  keptNoSource: (names) => `Esta versão já não distribui ${names.join(", ")}: ficou(aram) em disco, fora do manifesto, e o \`mgr doctor\` vai reportá-la(s) como órfã(s).`,
   confirmInstall: "Confirmar instalação?",
   installing: "Instalando skills nos motores",
   installedAt: (dirs) => `Skills instaladas em ${dirs}.`,

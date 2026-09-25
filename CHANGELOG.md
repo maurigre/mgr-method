@@ -4,6 +4,38 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 
 ## [Não lançado]
 ### Adicionado
+- **`mgr doctor` deixou de anunciar remediação que não alcança o alvo.** O comando não corrige nada:
+  ele **nomeia** o comando e quem age é a pessoa. Então o nome do comando é o produto — e um achado
+  que nomeia um comando que não resolve não é diagnóstico incompleto, é diagnóstico **errado**.
+
+  **Medido em 2026-09-24**, plantando o defeito e rodando exatamente o que o achado manda: das 17
+  condições, 14 tiveram a remediação confirmada, **duas não** e uma **não pôde ser medida**. As duas
+  que falham são `divergent-body` e `unresolved-token` em **skill órfã** — o `mgr update` só
+  re-sincroniza o que o manifesto declara, então não a alcança. Caso real: três órfãs neste
+  repositório diziam *"resolva com: mgr update"*; o comando foi rodado e a saída ficou **byte a byte
+  idêntica**. Agora dizem "sem correção automática".
+
+- **O registro de verificações passou a declarar a remediação por condição**, com o **estado da
+  prova** de cada uma. Uma remediação tem três estados e o terceiro não é o primeiro: verificada e
+  funciona; verificada e **não** funciona; **não verificada**. O `lockfile-drift` fica declarado como
+  não medido, com a razão — a medição exige plugin real instalado e depois removido, e não há fonte
+  de plugin disponível. Não medido nunca conta como verificado.
+
+- **Guarda comportamental novo**, na suíte: para cada condição, instala de verdade, planta o defeito,
+  executa **a string que o registro declara** e confere que o achado some — e, nas duas condições
+  órfãs, que ele **permanece**. Mais um guarda estrutural que reprova quem acrescentar verificação
+  sem declarar remediação, e o **guarda do guarda**, que prova que o runner executa a string
+  declarada e não um comando fixo.
+
+### Corrigido
+- **O campo `file` do achado de fonte compartilhada indisponível** apontava para `_shared`, que não é
+  caminho. Passou a apontar para o `.mgr-core/manifest.json`, que é o artefato de que a mensagem
+  fala. Esta correção havia sido **declarada** na release anterior e não estava aplicada.
+
+### Modificado
+- A contagem de verificações saiu das afirmações em prosa que a traziam desatualizada. O número vive
+  no registro; documento que enumera traz uma linha por entrada.
+
 - **O `mgr doctor` deixou de ser cego para a árvore `_shared/`.** Ela não é acessório: é para onde
   apontam os tokens `{{MGR_LAWS}}`, `{{MGR_CHARTER}}` e `{{MGR_ARCH_RULES}}` que o install resolve,
   e duas das quatro fontes são instaladas **sempre** (ADR-0011 e ADR-0022). Uma skill podia estar
@@ -118,9 +150,9 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 
   **O que ele NÃO faz, e vem antes do que ele faz:**
 
-  - **não atesta integridade.** Nenhum achado significa *"nenhuma das nove verificações apareceu"*,
+  - **não atesta integridade.** Nenhum achado significa *"nenhuma das verificações da lista apareceu"*,
     nunca *"está íntegro"*. A lista é **finita e fechada**, e o que está fora dela ele não vê;
-  - **não tem `--fix`, e isso é decisão medida.** Cinco das seis correções eram rodar o `mgr update`,
+  - **não tem `--fix`, e isso é decisão medida.** A maioria das correções era rodar o `mgr update`,
     que **já existe e já pede confirmação**. Um `--fix` que o chamasse passaria o `-y` por você — e
     instalar sem confirmação humana é exatamente o que o método proíbe. Ele **nomeia** a remediação;
     a ação continua sua;
@@ -135,7 +167,7 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   - **não alcança projeto que nunca instalou o método** — sem `.mgr-core/manifest.json` não há com o
     que comparar, e ele sai dizendo isso, sem erro.
 
-  **E o que ele faz:** nove verificações sobre a sua instalação — skill órfã, skill declarada e
+  **E o que ele faz:** uma lista fechada de verificações sobre a sua instalação — skill órfã, skill declarada e
   ausente, agente declarado sem arquivo, arquitetura escolhida sem a skill dela, corpo divergente da
   fonte, token `{{MGR_*}}` não resolvido, manifesto atrás do pacote, hook quebrado e divergência
   contra o lockfile. Cada achado traz **arquivo, esperado, encontrado** e a remediação quando existe.

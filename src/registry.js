@@ -241,6 +241,32 @@ export function writeAgentPolicy(coreDir, intent, { model, effort } = {}) {
   return policy;
 }
 
+// A ORIGEM do projeto: nascido do metodo (`greenfield`) ou legado (`brownfield`). Vive no CONFIG e
+// nao no manifesto porque `writeManifest` monta um objeto NOVO a cada chamada, a partir de uma lista
+// fixa de campos (`src/installer.js:190-207`): campo fora daquela lista desaparece em silencio na
+// execucao seguinte. Aqui, como todo escritor deste arquivo, e read-modify-write.
+//
+// Ausencia da chave e ORIGEM DESCONHECIDA, e NAO existe um terceiro valor gravavel: um "unknown"
+// escrito convidaria a grava-lo como default, e default silencioso e exatamente o que a fatia proibe.
+export const ORIGINS = ["greenfield", "brownfield"];
+
+export function writeOrigin(coreDir, valor) {
+  if (!ORIGINS.includes(valor)) {
+    throw new Error(`unknown project origin: ${JSON.stringify(valor)} (expected ${ORIGINS.join(" | ")})`);
+  }
+  const config = readConfig(coreDir);
+  // Tres casos distintos, e nenhum deles e `null` com significado de negocio: a chave nunca existiu,
+  // ela tinha valor valido, ou tinha lixo que alguem escreveu a mao.
+  const antes = config.origin === undefined
+    ? { estado: "ausente" }
+    : ORIGINS.includes(config.origin)
+      ? { estado: "gravado", valor: config.origin }
+      : { estado: "invalido", valor: config.origin };
+  // Valida ANTES de gravar, e devolve o que passou a valer — mesma disciplina do `writeAgentPolicy`.
+  writeConfig(coreDir, { ...config, origin: valor });
+  return { antes, depois: valor };
+}
+
 // De onde veio cada valor da política: o que o autor escreveu, ou o default do catálogo.
 //
 // Existe porque a saída do `mgr agents` tem de dizer a ORIGEM, não só o valor — sem isso o autor

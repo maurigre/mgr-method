@@ -1617,10 +1617,10 @@ test("sem referência resolvida, o ponteiro das leis cai no caminho da fonte, nu
   assert.equal(resolveLaws("sem token aqui", "x"), "sem token aqui");
 });
 
-test("as 46 leis têm ID único e papel declarado", () => {
+test("as 47 leis têm ID único e papel declarado", () => {
   const lei = readFileSync(path.join(bundle.sharedDir(), "laws", "execution-laws.md"), "utf8");
   const cabecalhos = [...lei.matchAll(/^### (L\d+\.\d+) — .+?`\[([A-Za-z, ]+)\]`$/gm)];
-  assert.equal(cabecalhos.length, 46, "46 leis: L0.1 a L6.5 mais a L2.6, a do residuo");
+  assert.equal(cabecalhos.length, 47, "47 leis: L0.1 a L6.6, mais a L2.6, a do residuo");
   const ids = cabecalhos.map((m) => m[1]);
   assert.equal(new Set(ids).size, ids.length, "nenhum ID repetido");
   const papeisValidos = new Set(["All", "Planner", "Executor", "Verifier", "Diagnostician"]);

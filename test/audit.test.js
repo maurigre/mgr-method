@@ -136,11 +136,11 @@ test("lista vazia significa nenhuma das quatro, nunca `é seguro`", () => {
 });
 
 const CLASSES_EM_DISCO = {
-  "code-analyzer": [EMBEDDED_SHELL],
+  "code-analyzer": [EMBEDDED_SHELL, SELF_MODIFICATION],
   "configure-agents": [EMBEDDED_SHELL, SELF_MODIFICATION],
   "spec-create": [EMBEDDED_SHELL],
   "spec-execute": [EMBEDDED_SHELL],
-  "spec-init": [EMBEDDED_SHELL],
+  "spec-init": [EMBEDDED_SHELL, SELF_MODIFICATION],
 };
 
 test("as classes das 13 skills em disco são as medidas, e cada uma é verdadeiro positivo", () => {
@@ -159,11 +159,20 @@ test("as oito sem classe nenhuma são as que não mandam rodar nada", () => {
     "e esta é a outra: 13 sinais de rede numa varredura por palavra, todos vocabulário de Ports & Adapters");
 });
 
-test("a configure-agents é a única com auto-modificação, e o achado nomeia a linha", () => {
-  const achados = inferCapabilities(textoDe("configure-agents")).filter((a) => a.capability === SELF_MODIFICATION);
+test("as três com auto-modificação nomeiam a linha, e duas delas escrevem mesmo no config", () => {
+  for (const nome of ["configure-agents", "spec-init"]) {
+    const achados = inferCapabilities(textoDe(nome)).filter((a) => a.capability === SELF_MODIFICATION);
+    assert.ok(achados.length > 0, nome);
+    assert.ok(achados.some(({ excerpt }) => /mgr\s+(?:agents|origin)\s+set|\.mgr-core\/config/.test(excerpt)),
+      `${nome} manda a CLI gravar no config do MGR: achado correto, e o trecho tem de provar isso a quem lê`);
+  }
+});
+
+test("a code-analyzer entra na classe por LER o config, e o trecho deixa isso visível", () => {
+  const achados = inferCapabilities(textoDe("code-analyzer")).filter((a) => a.capability === SELF_MODIFICATION);
   assert.ok(achados.length > 0);
-  assert.ok(achados.some(({ excerpt }) => /mgr\s+agents\s+set|\.mgr-core\/config/.test(excerpt)),
-    "ela escreve no config do MGR: achado correto, e o trecho tem de provar isso a quem lê");
+  assert.ok(achados.every(({ excerpt }) => /\.mgr-core\/config/.test(excerpt)),
+    "ela LÊ a origem e não escreve nada; o ADR-0021 casa alvo NOMEADO sem inferir intenção, porque inferir foi medido e produzia falso positivo e falso negativo — quem lê o trecho vê que é leitura, e a auditoria nunca atestou segurança");
 });
 
 const CORPO_LIMPO = "Read the spec and report what it says.";
@@ -233,7 +242,7 @@ test("auditSkill lê do pacote e discrimina pelo outcome", () => {
   const lida = auditSkill("code-analyzer");
   assert.equal(lida.outcome, AUDITED);
   assert.equal(lida.name, "code-analyzer");
-  assert.deepEqual(lida.inferred, [EMBEDDED_SHELL]);
+  assert.deepEqual(lida.inferred, [EMBEDDED_SHELL, SELF_MODIFICATION]);
   assert.ok(lida.findings.length > 0);
 
   const ausente = auditSkill("nao-existe");

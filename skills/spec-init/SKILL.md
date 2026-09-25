@@ -35,6 +35,26 @@ go.mod, *.csproj, requirements.txt...) or source code?
 - **No → GREENFIELD mode** (interview). Confirm with the user: "Empty project detected —
   shall we initialize from scratch?"
 
+### Step 0.1 — Record the origin (both modes)
+
+The mode you just detected **is the project's origin**, and it decides how much every future finding
+weighs (**L6.6**). It is a fact about the project, so it is confirmed and recorded, never assumed.
+
+1. **State the origin you detected and confirm it with the user** — in BOTH modes. Greenfield is
+   already confirmed above; brownfield is detected from build manifests or source at the root, and
+   that detection is stated here and confirmed too. Detection can be wrong (an empty repository that
+   is really a rewrite of an old one; a scaffold that is not legacy), and a wrong origin silently
+   changes the weight of every reproval in that project.
+2. **Once confirmed, record it:** run `mgr origin set greenfield` or `mgr origin set brownfield`.
+   The command writes the key `origin` in `.mgr-core/config.json`, preserving every other key, and
+   prints what the value was before and what it became.
+3. **Fallback — the `mgr` CLI is NOT installed:** write the key by hand into
+   `.mgr-core/config.json`, **preserving every other key in the file**. The method MUST keep working
+   with the skills alone, so this is a supported path, not a failure. Say in the log which of the two
+   you used.
+4. Record it **now**, not at the end: the brownfield analysis is long and resumable, and an
+   interrupted run must still leave the origin recorded.
+
 ## Initial interaction (mandatory, both modes)
 
 1. **Output format:** Claude (SKILL/context) · GitHub Copilot
@@ -189,6 +209,9 @@ NEVER embed architecture rules here — delegate:
    `JQ-`/`JS-`), with citable IDs. Applied by `spec-execute` while coding and by the
    `code-analyzer` in review.
 5. Record the choice in an ADR (via `adr-create`, invoked mode).
+6. Add a short **pointer section** stating that the WEIGHT of an anchored finding follows the project's
+   origin, and that the norm itself is **L6.6** of the execution laws. Point to the law; never copy
+   its text — a rule that lives in two places diverges on the first change.
 
 If the architecture skill is an `[TO DEFINE]` stub, warn the user and write a minimal
 guide with the rules THEY dictate (never invent rules — Behavior Rule 1).

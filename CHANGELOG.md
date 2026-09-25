@@ -4,6 +4,30 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 
 ## [Não lançado]
 ### Adicionado
+- **A origem do projeto passou a ser um fato gravado, e o peso de um achado passa a depender dela.**
+  O método tratava todo projeto como se ele tivesse nascido do método: um repositório com dez anos de
+  código recebia a mesma review, com o mesmo peso, que um projeto iniciado ontem. O `spec-init` já
+  distinguia greenfield de brownfield e **não gravava** em lugar nenhum — a origem existia só como
+  prosa numa linha de cabeçalho do SDD, e nada a lia.
+
+  **O que entra:** `mgr origin set <greenfield|brownfield>` grava a chave `origin` em
+  `.mgr-core/config.json`, preservando as demais; o `spec-init` passa a **confirmar a origem nos dois
+  modos** e a mandar gravá-la; e a lei **`L6.6`** declara, por nível, o que o consumidor faz — em
+  projeto nascido do método um achado ancorado é reprovação, em projeto legado um achado sobre código
+  **pré-existente** é informação com a decisão devolvida ao usuário, e sem origem gravada **não se
+  calibra e se declara que não se sabe**. Código que o método escreve é código novo, e **código novo
+  reprova em qualquer origem**.
+
+  **Por que no config e não no manifesto**, que era a letra do pedido: `writeManifest` monta um objeto
+  novo a cada chamada, a partir de uma lista fixa de campos — campo fora daquela lista desaparece em
+  silêncio na execução seguinte, e isso já foi medido duas vezes neste projeto. O `install` e o
+  `update` não tocam no config, então a origem sobrevive **por construção**.
+
+  **O que isto NÃO faz, e fica dito:** não existe reprovação mecânica no eixo de review — não há
+  comando de review na CLI, o revisor devolve texto e nenhum comando ganhou código de saída novo. E
+  não há congelamento de linha de base: onde não houver mecanismo para isso, **não há gate**, e a
+  ausência é declarada em vez de prometida.
+
 - **`mgr doctor` deixou de anunciar remediação que não alcança o alvo.** O comando não corrige nada:
   ele **nomeia** o comando e quem age é a pessoa. Então o nome do comando é o produto — e um achado
   que nomeia um comando que não resolve não é diagnóstico incompleto, é diagnóstico **errado**.

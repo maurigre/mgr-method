@@ -45,6 +45,7 @@ npx mgr-method install --user-language pt-BR .   # skills conversam e geram arte
 npx mgr-method install --all-skills .            # instala todas as skills (sem seleção)
 npx mgr-method install --dry-run
 npx mgr-method status | update | uninstall
+npx mgr-method origin set brownfield   # registra a origem do projeto; calibra a severidade da review
 ```
 
 ### Layout instalado
@@ -96,7 +97,7 @@ code-analyzer ─ review final de 2 eixos: Standards (guia DO projeto) + Spec (c
 | **Um modelo por intenção** | O `mgr agents` responde qual modelo e qual esforço cada etapa do fluxo usa, e de onde veio cada valor. Redação, execução e revisão são declaradas uma vez no `.mgr-core/config.json`; a instalação grava em cada agente e a invocação troca o modelo sem reinstalar. Mudar o esforço exige `mgr update`, e o comando avisa (ADR-0017). |
 | **Proveniência verificável** | O `mgr spec validate` também confere a etiqueta de proveniência que você escreveu: a forma dela, e se o ponteiro `[code:<caminho>:<linha>]` resolve em disco a partir da raiz do repositório. Ele nunca **cobra** etiqueta — a regra que cobraria foi rejeitada por medição, e nada do que já existe é reprovado (ADR-0016). |
 | **Ação, não estado** | `mgr spec next` responde o que fazer agora: a task, o artefato exato dela, a skill auxiliar e o que ela espera. A task pode declarar `status: done`, e a resposta sempre diz quanto estado o plano declara — sem nenhum, ela diz que não sabe o que você já fez (ADR-0014). |
-| **Leis de execução** | **Fonte única** em `shared/laws/execution-laws.md`: 46 leis (L0–L6) que valem para todas as skills, cada uma declarando **a quem se aplica por papel** (`Planner`, `Executor`, `Verifier`, `Diagnostician`, `All`). As skills apontam para ela; nenhuma repete lei. As centrais entram no contexto **antes da primeira mensagem**, pelo hook de sessão (ADR-0011). |
+| **Leis de execução** | **Fonte única** em `shared/laws/execution-laws.md`: 47 leis (L0–L6) que valem para todas as skills, cada uma declarando **a quem se aplica por papel** (`Planner`, `Executor`, `Verifier`, `Diagnostician`, `All`). As skills apontam para ela; nenhuma repete lei. As centrais entram no contexto **antes da primeira mensagem**, pelo hook de sessão (ADR-0011). |
 | `spec-init` | Inicializa a SDD: analisa projeto existente (chunking em fases) **ou** entrevista guiada em projeto vazio (greenfield). Gera `docs/sdd/`, a `CONSTITUTION.md` do projeto e o guia de review. |
 | `spec-create` | Evolui o projeto por feature: brief → PRD → spec → plano (P0/P1/P2 + DAG), com checkpoints bloqueantes; após a aprovação do plano, delega a implementação ao `spec-execute` e fecha com o completion. |
 | `spec-execute` | Executa o plano aprovado task a task (DAG), aplicando as premissas de desenvolvimento (segurança, performance, recursos, clareza — "vocabulário, não checklist") e o controle ativo de contexto (tiers S–F, arquivamento a 75%, hand-off, anti-compactação). Retomada direta de execução interrompida. |

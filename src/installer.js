@@ -138,7 +138,19 @@ export function migrateOld(scope, repo) {
   return { removed, version: man.version };
 }
 
-export function execute(plan) {
+// Remover ANTES de declarar, e na mesma operacao. Se o processo morrer entre os dois passos,
+// removendo antes o estado que sobra e `missing-skill` — declarada e ausente —, que TEM remediacao;
+// gravando o manifesto antes, o estado seria `orphan-skill`, que NAO tem. E o defeito que esta
+// fatia existe para nao produzir, e por isso a ordem e parte do contrato, nao detalhe.
+//
+// `remove` e injetavel para o caso negativo que prova a ordem: com um `remove` que lanca, o
+// manifesto anterior nao pode ter sido reescrito.
+export function execute(plan, { abandoned = [], remove = rmSync } = {}) {
+  const removed = [];
+  for (const saindo of abandoned) {
+    remove(saindo.path, { recursive: true, force: true });
+    removed.push(saindo.path);
+  }
   const migrated = migrateOld(plan.scope, plan.repo);
   const { policies } = plan.agents || readAgents(coreDir(plan.scope, plan.repo));
   // Mesma fonte que o `installAgents` usa. Sem isto, o roteamento da skill de review olharia para
@@ -197,7 +209,7 @@ export function execute(plan) {
   return {
     targets: plan.targets.map((t) => ({ engine: t.engine, dir: t.dir })),
     skills: plan.skills, migrated, core, projectId: plan.projectId,
-    agents, gate, gateWarnings, agentChanges,
+    agents, gate, gateWarnings, agentChanges, removed,
   };
 }
 
@@ -208,6 +220,79 @@ export function installs(scope, repo) {
 
 export function detectPrior(scope, repo) {
   return readManifest(coreDir(scope, repo));
+}
+
+// O conjunto ABANDONADO: o que o manifesto anterior declarava e este plano deixa de declarar.
+//
+// Os candidatos saem de DOIS CONJUNTOS QUE O METODO ESCREVEU — `prior.skills` e `prior.skillsDirs`,
+// campos que so o `execute` grava. Nao ha `readdirSync`, glob nem varredura aqui, e o `exists`
+// injetado so SUBTRAI. Arquivo que o metodo nunca declarou nao tem por onde entrar: e o inverso do
+// `orphanSkills` do doctor, que parte do disco e por isso nao pode ter remediacao.
+//
+// A intersecao de diretorios importa: um diretorio que o manifesto anterior nunca declarou pode ter
+// arquivo de outra origem, e agir nele seria apagar o que o metodo nao instalou.
+export function abandonedSkills({ prior, plan, exists = existsSync }) {
+  if (!prior || !Array.isArray(prior.skills)) return [];
+  // Modelo antigo NAO reconcilia: o que ele declara sao LANCADORES, e o `migrateOld` ja os descarta
+  // dentro do proprio `execute`. Mante-los declarados os RESSUSCITARIA como skill de verdade —
+  // medido em 2026-09-25: `arch-onion` voltava a disco com conteudo novo, deixando duas skills de
+  // arquitetura instaladas, que e o estado que o PRD chama de defeito.
+  if (prior.model === "runtime-launcher") return [];
+  const declaradas = new Set(plan.skills || []);
+  const saindo = prior.skills.filter((name) => !declaradas.has(name));
+  if (!saindo.length) return [];
+  // O manifesto grava `skillsDirs` RELATIVO no escopo project; o plano carrega o dir ABSOLUTO.
+  // Sem absolutizar, a intersecao seria sempre vazia e a lista sairia vazia em silencio.
+  const anteriores = new Set((prior.skillsDirs || []).map((dir) => absDir(dir, plan.scope, plan.repo)));
+  const fora = [];
+  for (const target of plan.targets || []) {
+    if (!anteriores.has(target.dir)) continue;
+    // O alvo do `--skills-dir` tem engine "custom", e `replaced` so e chaveado por motor REAL: sem
+    // a uniao, `plan.replaced["custom"]` seria sempre undefined e a skill cedida a plugin entraria
+    // na lista — medido em 2026-09-25, e com `-y` o rmSync cairia no diretorio do plugin.
+    const cedidas = target.engine === "custom"
+      ? Object.assign({}, ...Object.values(plan.replaced || {}))
+      : (plan.replaced || {})[target.engine] || {};
+    for (const name of saindo) {
+      if (cedidas[name]) continue;
+      const alvo = path.join(target.dir, name);
+      if (!exists(alvo)) continue;
+      fora.push({ name, dir: target.dir, path: alvo, class: catalog.skillClass(name) });
+    }
+  }
+  return fora;
+}
+
+// O que fica em disco continua DECLARADO. Sem isto, recusar a remocao (ou nao ter terminal para
+// perguntar) deixaria a skill em disco e fora do manifesto — uma orfa NOVA, que nao tem remediacao,
+// e a mensagem que manda usar `-y` seria falsa, porque na execucao seguinte o nome ja nao estaria em
+// `prior.skills` para virar candidato. Medido de ponta a ponta em 2026-09-25 antes desta correcao.
+//
+// Devolve um plano NOVO: o de entrada nao e mutado, e o `execute` nao muda de assinatura.
+// Nome que ESTA versao do pacote ja nao distribui nao pode ser mantido declarado: o `installEngine`
+// o reconstruiria e o `buildSkill` lanca, transformando a RECUSA em erro de instalacao. Medido em
+// 2026-09-25: exit 1 num caminho em que a spec promete 0, e com escrita parcial antes do throw.
+//
+// Ele tambem nao pode ser declarado sem ser reconstruido: o `update` passa `names: man.skills` pelo
+// mesmo caminho e quebraria igual. Entao sai do conjunto — e a borda ANUNCIA, nunca em silencio.
+export function splitKept(kept = [], available = bundle.skillNames()) {
+  return {
+    mantidas: kept.filter((saindo) => available.includes(saindo.name)),
+    semFonte: kept.filter((saindo) => !available.includes(saindo.name)),
+  };
+}
+
+export function keepDeclared(plan, kept = []) {
+  if (!kept.length) return { ...plan, targets: plan.targets.map((target) => ({ ...target })) };
+  const une = (nomes, novos) => [...nomes, ...novos.filter((nome) => !nomes.includes(nome))];
+  return {
+    ...plan,
+    skills: une(plan.skills, kept.map((mantida) => mantida.name)),
+    targets: plan.targets.map((target) => ({
+      ...target,
+      skills: une(target.skills || plan.skills, kept.filter((mantida) => mantida.dir === target.dir).map((mantida) => mantida.name)),
+    })),
+  };
 }
 
 export function uninstall(scope, repo) {

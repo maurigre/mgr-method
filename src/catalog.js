@@ -34,6 +34,21 @@ export const LANGUAGE = {
 // Skills opcionais (o instalador pergunta).
 export const OPTIONAL = ["evidence-capture"];
 
+// Classe de uma skill, para a saida dizer POR QUE ela deixou o conjunto declarado. A quarta
+// existe para nao devolver sentinela: skill fora dos tres mapas tem classe propria, nao `null`.
+export const CLASS_ARCHITECTURE = "architecture";
+export const CLASS_LANGUAGE = "language";
+export const CLASS_OPTIONAL = "optional";
+export const CLASS_UNCLASSIFIED = "unclassified";
+
+export function skillClass(name) {
+  if (Object.values(ARCHITECTURES).includes(name)) return CLASS_ARCHITECTURE;
+  // `LANGUAGE` e mapa de ARRAYS: sem o `flat()`, a comparacao seria contra o array inteiro.
+  if (Object.values(LANGUAGE).flat().includes(name)) return CLASS_LANGUAGE;
+  if (OPTIONAL.includes(name)) return CLASS_OPTIONAL;
+  return CLASS_UNCLASSIFIED;
+}
+
 // Árvore compartilhada dentro do diretório de skills do motor. Fonte única para não haver segunda
 // cópia do literal em cinco pontos do código.
 export const SHARED_DIR = "_shared";

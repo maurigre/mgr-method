@@ -25,7 +25,7 @@ import { blocking, summarize } from "../src/findings.js";
 import { buildRuntime, gateSummary, inheritingModel } from "../src/builder.js";
 import { validateAll } from "../src/validator.js";
 import { printBanner } from "../src/banner.js";
-import { collectInstallAnswers, detectUserLanguage, CANCELLED } from "../src/prompts.js";
+import { collectInstallAnswers, consentToRemove, detectUserLanguage, removalMode, removalOutcome, CANCELLED, OUTCOME_KEPT_BY_CHOICE, OUTCOME_KEPT_NO_CONSENT, OUTCOME_REMOVED, REMOVE } from "../src/prompts.js";
 import { getMessages } from "../src/messages.js";
 import {
   add as addPlugin, remove as removePlugin, restore as restorePlugins,
@@ -167,6 +167,11 @@ async function cmdInstall(flags, positional) {
   const replaced = replacedByEngine(readLockfile(repo));
   const plan = installer.planInstall(engines, scope, repo, { skillsDir, language, architecture, userLanguage, optional, all: flags.allSkills, projectId, replaced });
   const motoresComHook = hookEngines(plan, flags);
+  // O que esta instalacao deixa de DECLARAR aparece no plano antes de qualquer escrita, inclusive
+  // no --dry-run. O calculo vive no nucleo; aqui fica so a cola (CONSTITUTION secao 2.2), e o modo
+  // e resolvido UMA vez: nenhum teste de terminal novo entra no fluxo.
+  const abandonadas = installer.abandonedSkills({ prior, plan });
+  const modoDeRemocao = removalMode({ isTTY, yes: flags.yes });
   p.note(
     [
       M.planProject(plan.projectId, plan.scope),
@@ -176,6 +181,9 @@ async function cmdInstall(flags, positional) {
       `${M.planConfig(installer.coreDir(plan.scope, plan.repo))}  ${pc.dim(M.planConfigHint)}`,
       ...plan.targets.map((t) => M.planSkillsDir(t.dir)),
       M.planSkills(plan.skills.length, plan.skills.join(", ")),
+      ...(abandonadas.length
+        ? [M.planAbandoned(abandonadas.map((saindo) => M.removalReason(saindo.name, saindo.class)))]
+        : []),
       // O hook mora em arquivo do usuário; ele vê no plano o que será escrito antes de
       // confirmar, e pode abortar. Consentimento visível sem pergunta nova (ADR-0009).
       ...(motoresComHook.length
@@ -192,6 +200,16 @@ async function cmdInstall(flags, positional) {
   );
 
   if (flags.dryRun) { p.outro(pc.dim(M.dryRun)); return 0; }
+
+  // O consentimento vem DEPOIS do retorno do dry-run e ANTES do confirm de instalacao: assim o que
+  // sai e parte do plano que a pessoa confirma, e o --dry-run segue sem perguntar e sem escrever.
+  const decisao = await consentToRemove(CLACK, abandonadas, { mode: modoDeRemocao, msg: M });
+  if (decisao === CANCELLED) bail();
+  const aRemover = decisao === REMOVE ? abandonadas : [];
+  // O que fica em disco continua DECLARADO. Sem isto, recusar (ou nao ter terminal para perguntar)
+  // criaria uma orfa NOVA, que nao tem remediacao, e a mensagem que cita o `-y` seria falsa: na
+  // execucao seguinte o nome ja nao estaria no manifesto para virar candidato.
+  const aManter = decisao === REMOVE ? [] : abandonadas;
   if (isTTY && !flags.yes) {
     const ok = await p.confirm({ message: M.confirmInstall });
     if (p.isCancel(ok) || !ok) bail();
@@ -199,9 +217,22 @@ async function cmdInstall(flags, positional) {
 
   const s = p.spinner();
   s.start(M.installing);
-  const res = installer.execute(plan);
+  // Nome que esta versao ja nao distribui sai do conjunto mantido: reconstrui-lo lancaria e a RECUSA
+  // viraria erro de instalacao. Ele e ANUNCIADO abaixo, nunca descartado em silencio.
+  const { mantidas, semFonte } = installer.splitKept(aManter);
+  const res = installer.execute(installer.keepDeclared(plan, mantidas), { abandoned: aRemover });
   s.stop(M.installedAt(res.targets.map((t) => t.dir).join(" · ")));
   if (res.migrated) p.log.info(M.migrationInfo(res.migrated.removed.length));
+  // Os quatro caminhos saem 0: recusar a remocao nunca transforma a instalacao em erro. Escrita em
+  // diretorio do usuario e anunciada, e o que NAO saiu tambem e — em silencio, viraria orfa.
+  // A lista do "continua declarado" e a das MANTIDAS, nunca a das abandonadas: dizer que uma skill
+  // que esta versao ja nao distribui "segue declarada" seria falso, e foi o que a medicao mostrou.
+  const desfecho = removalOutcome({ removed: res.removed, abandoned: mantidas, mode: modoDeRemocao });
+  const nomes = mantidas.map((saindo) => saindo.name);
+  if (desfecho === OUTCOME_REMOVED) p.log.success(M.removedSkills(res.removed.map((alvo) => path.relative(plan.repo, alvo))));
+  else if (desfecho === OUTCOME_KEPT_NO_CONSENT) p.log.warn(M.keptNoConsent(nomes));
+  else if (desfecho === OUTCOME_KEPT_BY_CHOICE) p.log.info(M.keptByChoice(nomes));
+  if (semFonte.length) p.log.warn(M.keptNoSource(semFonte.map((saindo) => saindo.name)));
   // Degradação declarada, uma vez por capacidade ausente — nunca em silêncio (ADR-0010).
   // Escrita em diretório do usuário é anunciada, como a do hook — LOG-1 do guia.
   for (const file of res.agents || []) {

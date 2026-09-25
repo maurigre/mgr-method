@@ -131,3 +131,45 @@ export async function collectInstallAnswers(ask, current = {}, { repo = ".", all
 
   return out;
 }
+
+// Consentimento para remover o que o plano deixa de declarar. O `ask` e INJETADO, como em
+// `collectInstallAnswers`: a borda passa o do @clack, o teste passa um stub e roda sem TTY.
+//
+// Os tres modos sao uma UNIAO DISCRIMINADA e nao um booleano: sem terminal e sem `-y` nao ha como
+// perguntar, e ausencia de pergunta possivel nunca pode virar "sim". A borda resolve o modo UMA vez
+// e passa adiante — nenhum teste de terminal novo entra no fluxo.
+export const REMOVAL_ASK = "ask";
+export const REMOVAL_ASSUMED = "assumed";
+export const REMOVAL_NO_CONSENT = "no-consent";
+
+export const REMOVE = "remove";
+export const KEEP = "keep";
+
+export function removalMode({ isTTY = false, yes = false } = {}) {
+  if (yes) return REMOVAL_ASSUMED;
+  return isTTY ? REMOVAL_ASK : REMOVAL_NO_CONSENT;
+}
+
+// Qual das quatro saidas o comando deve imprimir. E funcao PURA, e por isso existe: na borda, a
+// escolha da mensagem so era alcancavel COM terminal, e nenhum teste tem terminal — a linha do
+// "ficou por escolha" passava sem guarda nenhuma (achado E-4 do gate isolado de 2026-09-25).
+export const OUTCOME_REMOVED = "removed";
+export const OUTCOME_KEPT_BY_CHOICE = "kept-by-choice";
+export const OUTCOME_KEPT_NO_CONSENT = "kept-no-consent";
+export const OUTCOME_NOTHING = "nothing";
+
+export function removalOutcome({ removed = [], abandoned = [], mode = REMOVAL_NO_CONSENT } = {}) {
+  if (removed.length) return OUTCOME_REMOVED;
+  if (!abandoned.length) return OUTCOME_NOTHING;
+  return mode === REMOVAL_NO_CONSENT ? OUTCOME_KEPT_NO_CONSENT : OUTCOME_KEPT_BY_CHOICE;
+}
+
+export async function consentToRemove(ask, abandoned = [], { mode = REMOVAL_NO_CONSENT, msg = getMessages("en") } = {}) {
+  if (!abandoned.length) return KEEP;
+  if (mode === REMOVAL_ASSUMED) return REMOVE;
+  if (mode !== REMOVAL_ASK) return KEEP;
+  // `initialValue: false`: o default e a opcao que nao desfaz nada.
+  const ok = await ask.confirm({ message: msg.confirmRemoval(abandoned.length), initialValue: false });
+  if (ask.isCancel(ok)) return CANCELLED;
+  return ok ? REMOVE : KEEP;
+}

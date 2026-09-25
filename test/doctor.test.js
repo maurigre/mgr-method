@@ -34,7 +34,7 @@ test("skill declarada em disco NAO e achado", () => {
 test("orfa NAO tem correcao automatica", () => {
   const [achado] = orphanSkills({ declared: [], onDisk: ["junit-clean"], skillsDir: DIR });
   assert.equal(achado.fix, NO_FIX,
-    "na 0.6.0-beta.1 o remove apagou a skill do proprio metodo; ninguem sabe de onde uma orfa veio");
+    "na 0.6.0-beta.1 o remove apagou a skill do proprio metodo; no momento do diagnostico a origem de uma orfa e desconhecida");
 });
 
 test("skill declarada e ausente e achado, e tem correcao", () => {

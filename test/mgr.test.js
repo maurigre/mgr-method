@@ -3246,3 +3246,17 @@ test("mgr doctor: a borda nao tem logica de verificacao", () => {
     assert.ok(!borda.includes(vazamento), `\`${vazamento}\` na borda seria a logica que a secao 2.1 manda ficar no nucleo`);
   }
 });
+
+test("catalog.skillClass: cada skill do conjunto declarado tem a sua classe", () => {
+  assert.equal(catalog.skillClass("arch-hexagonal"), catalog.CLASS_ARCHITECTURE);
+  assert.equal(catalog.skillClass("junit-clean"), catalog.CLASS_LANGUAGE);
+  assert.equal(catalog.skillClass("evidence-capture"), catalog.CLASS_OPTIONAL);
+  assert.equal(catalog.skillClass("spec-create"), catalog.CLASS_UNCLASSIFIED);
+});
+
+test("catalog.skillClass: LANGUAGE e mapa de arrays, e a consulta achata antes de comparar", () => {
+  const todas = Object.values(catalog.LANGUAGE).flat();
+  assert.ok(todas.length > 0);
+  for (const nome of todas) assert.equal(catalog.skillClass(nome), catalog.CLASS_LANGUAGE);
+  assert.equal(catalog.skillClass("java"), catalog.CLASS_UNCLASSIFIED);
+});

@@ -57,7 +57,11 @@ const achado = ({ check, severity, file, expected, found, fix }) => ({
  *
  * SEM correcao automatica, e a razao e um defeito ja publicado: na 0.6.0-beta.1 o `mgr remove` apagou
  * a skill do proprio metodo, e a correcao registrada foi "nunca apagar pasta que nao instalou".
- * Ninguem sabe de onde uma orfa veio — pode ser plugin, resto de instalacao ou arquivo posto a mao.
+ * NO MOMENTO DO DIAGNOSTICO a origem de uma orfa e desconhecida: o manifesto guarda o conjunto
+ * declarado, nunca o historico, entao plugin, resto de instalacao e arquivo posto a mao chegam aqui
+ * iguais. A classe cuja origem o metodo CONHECIA — skill que ele mesmo instalou e deixou de declarar
+ * — passou a ser tratada na origem, pelo `install`, com consentimento e antes de o manifesto ser
+ * reescrito; por isso ela ja nao chega ate aqui.
  */
 export function orphanSkills({ declared, onDisk, skillsDir }) {
   return onDisk
@@ -301,7 +305,7 @@ export const CHECKS = [
         condicao: "em-disco",
         fix: NO_FIX,
         prova: SEM_REMEDIACAO,
-        razao: "ninguém sabe de onde uma órfã veio; pode ser plugin, resto de instalação ou arquivo posto à mão",
+        razao: "no momento do diagnóstico ninguém sabe de onde uma órfã veio — o manifesto guarda o conjunto declarado, nunca o histórico; a classe de origem conhecida passou a ser tratada no `install`",
       },
     ],
   },

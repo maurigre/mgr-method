@@ -62,6 +62,12 @@ launchers) are **migrated automatically** on `install`/`update`. Use `--skills-d
 force a specific directory. `uninstall` removes only what MGR created; `docs/`, `specs/`
 and code stay intact.
 
+An `install` that stops declaring a skill the previous manifest declared **reconciles**: the plan
+names what is leaving the declared set before anything is written, removal happens only with your
+confirmation (or `-y`), and whatever you keep **stays declared**, so refusing never orphans a skill.
+Note that `mgr install -y` with **no flags** recomputes the set from the FLAGS, not from the previous
+manifest — only `update` inherits it.
+
 ## The flow
 
 ```

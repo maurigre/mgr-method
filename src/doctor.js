@@ -24,12 +24,29 @@ export const WARNING = "warning";
 // insumo. Chamar isso de aviso faria o relatorio reclamar de projeto que so nao tem plugin.
 export const UNAVAILABLE = "unavailable";
 
-// A remediacao de cinco das seis verificacoes e a MESMA: rodar `mgr update`. Medido por experimento
+// A remediacao da MAIORIA das verificacoes e a mesma: rodar `mgr update`. Medido por experimento
 // em 2026-09-18 — defeito plantado, update rodado, estado conferido. NAO ha `--fix`: o achado apenas
 // NOMEIA o comando, e quem o roda e a pessoa (DT-5).
 export const FIX_UPDATE = "mgr update";
 export const NO_FIX = null;
 export const FIX_RESTORE = "mgr install";
+
+// Uma remediacao tem TRES estados e o terceiro NAO e o primeiro — verificada e funciona; verificada
+// e nao funciona; **nao verificada**. Confundir "nao medido" com "verificado" e o defeito que esta
+// fatia ataca. O quarto valor, `SEM_REMEDIACAO`, e categoria diferente: nunca houve comando candidato,
+// por decisao registrada. "Nao medido" so vira medido por medicao — nunca por prazo, analogia ou
+// silencio.
+export const PROVA_FUNCIONA = "prova-funciona";
+export const PROVA_NAO_FUNCIONA = "prova-nao-funciona";
+export const PROVA_NAO_MEDIDA = "prova-nao-medida";
+export const SEM_REMEDIACAO = "sem-remediacao";
+
+// Condicoes em que um achado nasce. Cada uma CONDICIONA se ha remediacao: `mgr update` alcanca
+// o que o manifesto DECLARA, e so isso. Usar uniao discriminada em vez de flag booleana da
+// precisao que o perfil de qualidade do guia 09-review-rules.md exige.
+export const SKILL_DECLARADA = "skill-declarada";
+export const SKILL_ORFA = "skill-orfa";
+export const FONTE_COMPARTILHADA = "fonte-compartilhada";
 
 const achado = ({ check, severity, file, expected, found, fix }) => ({
   check, severity, file, expected, found, fix,
@@ -152,6 +169,18 @@ const corpoDe = (texto) => {
   return fim === -1 ? texto : texto.slice(fim + 5);
 };
 
+// A condicao decide se HA remediacao, e a regra vive num lugar so: escrita nas duas verificacoes,
+// ela teria de mudar nos dois ao mesmo tempo — a duplicacao que a `QUAL-6` reprova, e o mesmo
+// formato de risco que esta fatia existe para eliminar.
+function remediacaoDaCondicao(condicao) {
+  const validas = [SKILL_DECLARADA, SKILL_ORFA, FONTE_COMPARTILHADA];
+  if (!condicao || !validas.includes(condicao)) {
+    throw new Error(`condicao invalida: "${condicao}"; valores validos sao ${validas.join(", ")}`);
+  }
+  // Skill orfa nao tem remediacao: o `mgr update` so re-sincroniza o que o manifesto declara.
+  return condicao === SKILL_ORFA ? NO_FIX : FIX_UPDATE;
+}
+
 /**
  * Linhas do corpo que divergem entre a fonte e o instalado.
  *
@@ -164,7 +193,10 @@ const corpoDe = (texto) => {
  * config depois de instalar — e isso e "instalacao velha", que tem verificacao propria. Dois alarmes
  * para o mesmo fato e o que a `RN-3` proibe.
  */
-export function divergentBody({ name, source, installed, file }) {
+export function divergentBody({ name, source, installed, file, condicao }) {
+  // Valida ANTES do retorno antecipado: condicao invalida tem de lancar mesmo quando nao ha
+  // divergencia, senao o ponto de chamada novo so descobre o erro no dia em que houver defeito.
+  const fix = remediacaoDaCondicao(condicao);
   const daFonte = corpoDe(source).split("\n");
   const doInstalado = corpoDe(installed).split("\n");
   // A PRIMEIRA linha divergente, e nao a contagem: um bloco inserido desloca o indice e faz toda
@@ -179,9 +211,7 @@ export function divergentBody({ name, source, installed, file }) {
     file,
     expected: `o corpo de ${name} como o pacote o traz`,
     found: `difere a partir da linha ${ondeComeca} do corpo`,
-    // A P0.3 MEDIU que o `update` restaura o corpo. `NO_FIX` diria que nao ha o que fazer, e ha —
-    // a `CA-8` cobra o comando exato, nao a ausencia de rotina propria de escrita.
-    fix: FIX_UPDATE,
+    fix,
   })];
 }
 
@@ -191,6 +221,20 @@ export function divergentBody({ name, source, installed, file }) {
  * O install resolve todos; sobrar um significa instalacao parcial, e o `mgr update` corrige —
  * medido por experimento.
  */
+export function unresolvedTokens({ installed, file, condicao }) {
+  const fix = remediacaoDaCondicao(condicao);
+  const sobraram = [...new Set(installed.match(new RegExp(TOKEN.source, "g")) || [])];
+  if (!sobraram.length) return [];
+  return [achado({
+    check: "unresolved-token",
+    severity: DEFECT,
+    file,
+    expected: "todo token resolvido pelo install",
+    found: sobraram.join(" "),
+    fix,
+  })];
+}
+
 /**
  * A comparacao de corpo so DISTINGUE instalacao velha de arquivo adulterado quando as versoes batem.
  *
@@ -244,32 +288,165 @@ export function sharedCheckAvailability({ manifestVersion, packageVersion, file 
  * Token e corpo em `_shared/` não são entradas novas, porque são alcance maior da mesma
  * verificação `divergent-body` e `unresolved-token` — mesmo id, mesma mensagem, mesma remediação.
  * Um documento que enumere as verificações tem de ter uma linha por entrada daqui.
+ *
+ * Alem da contagem, agora a **remediacao** tambem e declarada aqui, por condicao, e um instrumento
+ * compara esta declaracao com o que o comando de fato faz.
  */
 export const CHECKS = [
-  { id: "orphan-skill", cobre: "skill em disco que o manifesto não declara" },
-  { id: "missing-skill", cobre: "skill que o manifesto declara e que não está em disco" },
-  { id: "missing-agent", cobre: "agente que o manifesto declara e cujo arquivo não existe" },
-  { id: "architecture-skill", cobre: "arquitetura declarada sem a skill correspondente" },
-  { id: "divergent-body", cobre: "corpo de arquivo que diverge entre a fonte e o instalado" },
-  { id: "unresolved-token", cobre: "token não resolvido no instalado" },
-  { id: "stale-install", cobre: "manifesto atrás do pacote" },
-  { id: "broken-hook", cobre: "hook que aponta para binário que não existe" },
-  { id: "lockfile-drift", cobre: "plugin travado e não instalado" },
-  { id: "missing-shared", cobre: "fonte compartilhada cobrada quando o conjunto a exige" },
+  {
+    id: "orphan-skill",
+    cobre: "skill em disco que o manifesto não declara",
+    remediacoes: [
+      {
+        condicao: "em-disco",
+        fix: NO_FIX,
+        prova: SEM_REMEDIACAO,
+        razao: "ninguém sabe de onde uma órfã veio; pode ser plugin, resto de instalação ou arquivo posto à mão",
+      },
+    ],
+  },
+  {
+    id: "missing-skill",
+    cobre: "skill que o manifesto declara e que não está em disco",
+    remediacoes: [
+      {
+        condicao: "declarada-ausente",
+        fix: FIX_UPDATE,
+        prova: PROVA_FUNCIONA,
+      },
+    ],
+  },
+  {
+    id: "missing-agent",
+    cobre: "agente que o manifesto declara e cujo arquivo não existe",
+    remediacoes: [
+      {
+        condicao: "declarado-ausente",
+        fix: FIX_UPDATE,
+        prova: PROVA_FUNCIONA,
+      },
+    ],
+  },
+  {
+    id: "architecture-skill",
+    cobre: "arquitetura declarada sem a skill correspondente",
+    remediacoes: [
+      {
+        condicao: "skill-ausente",
+        fix: FIX_UPDATE,
+        prova: PROVA_FUNCIONA,
+      },
+    ],
+  },
+  {
+    id: "divergent-body",
+    cobre: "corpo de arquivo que diverge entre a fonte e o instalado",
+    remediacoes: [
+      {
+        condicao: "skill-declarada",
+        fix: FIX_UPDATE,
+        prova: PROVA_FUNCIONA,
+      },
+      {
+        condicao: "skill-orfa",
+        fix: NO_FIX,
+        prova: PROVA_NAO_FUNCIONA,
+        candidato: FIX_UPDATE,
+        razao: "mgr update só re-sincroniza as skills declaradas no manifesto, então não alcança órfã; medido em 2026-09-24, rodando o comando e conferindo que o achado permanece",
+      },
+      {
+        condicao: "fonte-compartilhada",
+        fix: FIX_UPDATE,
+        prova: PROVA_FUNCIONA,
+      },
+      {
+        condicao: "manifesto-atrasado",
+        fix: FIX_UPDATE,
+        prova: PROVA_FUNCIONA,
+      },
+    ],
+  },
+  {
+    id: "unresolved-token",
+    cobre: "token não resolvido no instalado",
+    remediacoes: [
+      {
+        condicao: "skill-declarada",
+        fix: FIX_UPDATE,
+        prova: PROVA_FUNCIONA,
+      },
+      {
+        condicao: "skill-orfa",
+        fix: NO_FIX,
+        prova: PROVA_NAO_FUNCIONA,
+        candidato: FIX_UPDATE,
+        razao: "mgr update só re-sincroniza as skills declaradas no manifesto, então não alcança órfã; medido em 2026-09-24, rodando o comando e conferindo que o achado permanece",
+      },
+      {
+        condicao: "fonte-compartilhada",
+        fix: FIX_UPDATE,
+        prova: PROVA_FUNCIONA,
+      },
+    ],
+  },
+  {
+    id: "stale-install",
+    cobre: "manifesto atrás do pacote",
+    remediacoes: [
+      {
+        condicao: "manifesto-atrasado",
+        fix: FIX_UPDATE,
+        prova: PROVA_FUNCIONA,
+      },
+    ],
+  },
+  {
+    id: "broken-hook",
+    cobre: "hook que aponta para binário que não existe",
+    remediacoes: [
+      {
+        condicao: "binario-ausente",
+        fix: NO_FIX,
+        prova: SEM_REMEDIACAO,
+        razao: "reescrever o arquivo de settings mexe em configuração de quem usa, e ela pode ter conteúdo que o método não pôs",
+      },
+    ],
+  },
+  {
+    id: "lockfile-drift",
+    cobre: "plugin travado e não instalado",
+    remediacoes: [
+      {
+        condicao: "sem-lockfile",
+        fix: NO_FIX,
+        prova: SEM_REMEDIACAO,
+        razao: "não há lockfile: o projeto não tem skill plugável e não há o que comparar",
+      },
+      {
+        condicao: "travado-ausente",
+        fix: FIX_RESTORE,
+        prova: PROVA_NAO_MEDIDA,
+        razao: "a medição exige plugin real instalado e depois removido do disco; o fixture tentado (lockfile apontando para plugin inexistente) era inválido, não a remediação",
+      },
+    ],
+  },
+  {
+    id: "missing-shared",
+    cobre: "fonte compartilhada cobrada quando o conjunto a exige",
+    remediacoes: [
+      {
+        condicao: "fonte-ausente",
+        fix: FIX_UPDATE,
+        prova: PROVA_FUNCIONA,
+      },
+      {
+        condicao: "manifesto-atrasado",
+        fix: FIX_UPDATE,
+        prova: PROVA_FUNCIONA,
+      },
+    ],
+  },
 ];
-
-export function unresolvedTokens({ installed, file }) {
-  const sobraram = [...new Set(installed.match(new RegExp(TOKEN.source, "g")) || [])];
-  if (!sobraram.length) return [];
-  return [achado({
-    check: "unresolved-token",
-    severity: DEFECT,
-    file,
-    expected: "todo token resolvido pelo install",
-    found: sobraram.join(" "),
-    fix: FIX_UPDATE,
-  })];
-}
 
 /**
  * Manifesto atras do pacote.
@@ -498,7 +675,7 @@ export function diagnose(repo, { packageVersion } = {}) {
   const compartilhadoIndisponivel = sharedCheckAvailability({
     manifestVersion: manifesto.version,
     packageVersion: versaoDoPacote,
-    file: catalog.SHARED_DIR,
+    file: ".mgr-core/manifest.json",
   });
   achados.push(...compartilhadoIndisponivel);
 
@@ -512,13 +689,17 @@ export function diagnose(repo, { packageVersion } = {}) {
       const daFonte = path.join(bundle.skillsDir(), nome, "SKILL.md");
       const conteudo = readFileSync(instalado, "utf8");
       const relativo = path.relative(repo, instalado);
-      achados.push(...unresolvedTokens({ installed: conteudo, file: relativo }));
+      // Derivacao do discriminador e literal: mesma variavel que o `mgr update` consome em `src/installer.js`
+      // para decidir o que re-sincronizar. Nao e palpite — e campo do manifesto.
+      const condicaoDaSkill = declaradas.includes(nome) ? SKILL_DECLARADA : SKILL_ORFA;
+      achados.push(...unresolvedTokens({ installed: conteudo, file: relativo, condicao: condicaoDaSkill }));
       if (!corpoIndisponivel.length && existsSync(daFonte)) {
         achados.push(...divergentBody({
           name: nome,
           source: corpoEsperado(engine, nome, readFileSync(daFonte, "utf8")),
           installed: conteudo,
           file: relativo,
+          condicao: condicaoDaSkill,
         }));
       }
     }
@@ -529,7 +710,7 @@ export function diagnose(repo, { packageVersion } = {}) {
     for (const arquivo of arquivosMdEmShared(dirDoMotor)) {
       const conteudo = readFileSync(arquivo, "utf8");
       const relativo = path.relative(repo, arquivo);
-      achados.push(...unresolvedTokens({ installed: conteudo, file: relativo }));
+      achados.push(...unresolvedTokens({ installed: conteudo, file: relativo, condicao: FONTE_COMPARTILHADA }));
     }
 
     // Existencia e corpo, esses sim sob o escudo: com o manifesto atras do pacote, a ausencia de uma
@@ -558,6 +739,7 @@ export function diagnose(repo, { packageVersion } = {}) {
             source: readFileSync(daFonte, "utf8"),
             installed: conteudo,
             file: relativo,
+            condicao: FONTE_COMPARTILHADA,
           }));
         }
       }

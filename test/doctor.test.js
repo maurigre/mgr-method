@@ -1,8 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, existsSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, writeFileSync, cpSync } from "node:fs";
 import {
   DEFECT, FIX_RESTORE, FIX_UPDATE, NO_FIX, UNAVAILABLE, WARNING,
+  SKILL_DECLARADA, SKILL_ORFA, FONTE_COMPARTILHADA,
+  PROVA_FUNCIONA, PROVA_NAO_FUNCIONA, PROVA_NAO_MEDIDA, SEM_REMEDIACAO,
   architectureSkill, bodyCheckAvailability, brokenHooks, divergentBody, lockfileDrift, missingAgents, missingShared, missingSkills,
   orphanSkills, sharedCheckAvailability, staleInstall, unresolvedTokens,
   AUDITED, NO_INSTALL, diagnose, hasDefect, CHECKS,
@@ -160,14 +162,14 @@ test("todo achado carrega arquivo, esperado e encontrado", () => {
 test("a linha que carrega token na fonte NAO conta como divergencia", () => {
   const fonte = "---\nname: x\n---\nOutput language: {{MGR_USER_LANGUAGE}}\nigual";
   const instalado = "---\nname: x\ncontext: fork\n---\nOutput language: pt-BR\nigual";
-  assert.deepEqual(divergentBody({ name: "x", source: fonte, installed: instalado, file: "f" }), [],
+  assert.deepEqual(divergentBody({ name: "x", source: fonte, installed: instalado, file: "f", condicao: SKILL_DECLARADA }), [],
     "o install resolve o token por construcao; compara-la acusaria 100% das instalacoes, inclusive as recem-feitas");
 });
 
 test("linha SEM token que difere e achado", () => {
   const fonte = "---\nname: x\n---\nlinha original";
   const instalado = "---\nname: x\n---\nlinha trocada";
-  const [achado] = divergentBody({ name: "x", source: fonte, installed: instalado, file: "f" });
+  const [achado] = divergentBody({ name: "x", source: fonte, installed: instalado, file: "f", condicao: SKILL_DECLARADA });
   assert.equal(achado.check, "divergent-body");
   assert.match(achado.found, /a partir da linha 1/, "a primeira linha do corpo e a linha 1, nao a 2");
 });
@@ -181,6 +183,7 @@ test("instalacao recem-feita NAO tem corpo divergente em skill nenhuma", () => {
       source: readFileSync(`skills/${nome}/SKILL.md`, "utf8"),
       installed: readFileSync(`${repo}/.claude/skills/${nome}/SKILL.md`, "utf8"),
       file: nome,
+      condicao: SKILL_DECLARADA,
     }).length > 0);
     assert.deepEqual(divergem, [],
       "o metodo antigo acusava 7 de 7 aqui, so porque o install resolve token; pular a linha com token e o que corrigiu isso");
@@ -193,13 +196,13 @@ test("instalacao recem-feita NAO tem corpo divergente em skill nenhuma", () => {
 test("a divergencia reporta a PRIMEIRA linha, nao a contagem", () => {
   const fonte = "---\nn: x\n---\nigual\nSECAO NOVA\nresto";
   const instalado = "---\nn: x\n---\nigual\nresto";
-  const [achado] = divergentBody({ name: "x", source: fonte, installed: instalado, file: "f" });
+  const [achado] = divergentBody({ name: "x", source: fonte, installed: instalado, file: "f", condicao: SKILL_DECLARADA });
   assert.match(achado.found, /a partir da linha 2/,
     "um bloco inserido desloca o indice: contar daria numero inflado, medido em 116 para uma secao a mais");
 });
 
 test("divergencia de corpo NOMEIA o comando que a resolve", () => {
-  const [achado] = divergentBody({ name: "x", source: "a\nb", installed: "a\nc", file: "f" });
+  const [achado] = divergentBody({ name: "x", source: "a\nb", installed: "a\nc", file: "f", condicao: SKILL_DECLARADA });
   assert.equal(achado.fix, FIX_UPDATE,
     "a P0.3 mediu que o update restaura o corpo; a CA-8 cobra o comando exato, e dizer que nao ha correcao seria falso");
 });
@@ -237,13 +240,13 @@ test("o achado de indisponibilidade de fonte compartilhada e um mesmo havendo va
 });
 
 test("token que sobrou no instalado e achado, e nomeia qual", () => {
-  const [achado] = unresolvedTokens({ installed: "x {{MGR_LAWS}} y {{MGR_LAWS}}", file: "f" });
+  const [achado] = unresolvedTokens({ installed: "x {{MGR_LAWS}} y {{MGR_LAWS}}", file: "f", condicao: SKILL_DECLARADA });
   assert.equal(achado.found, "{{MGR_LAWS}}", "repetido nao vira dois achados, e quem le precisa saber qual token sobrou");
   assert.equal(achado.fix, FIX_UPDATE);
 });
 
 test("instalado sem token NAO e achado", () => {
-  assert.deepEqual(unresolvedTokens({ installed: "nada aqui", file: "f" }), [],
+  assert.deepEqual(unresolvedTokens({ installed: "nada aqui", file: "f", condicao: SKILL_DECLARADA }), [],
     "e o estado deste repositorio e o da instalacao recem-feita: zero tokens sobrando");
 });
 
@@ -516,6 +519,10 @@ test("com manifesto atras do pacote missing-shared e indisponivel", () => {
     assert.equal(compartilhado.length, 1, "um unico achado, nao um por motor ou fonte");
     assert.equal(compartilhado[0].severity, UNAVAILABLE,
       "manifesto atras e o estado ESPERADO; separar indisponivel de defeito e o que a RN-3 pede");
+    assert.equal(compartilhado[0].file, ".mgr-core/manifest.json",
+      "o achado tem de apontar o artefato de que a mensagem fala; apontava `_shared`, que nao e "
+      + "caminho, e a correcao foi DECLARADA numa fatia anterior sem ser aplicada — sem esta "
+      + "assercao, reverter o valor deixa a suite verde de novo");
   } finally {
     descartar(repo);
   }
@@ -536,6 +543,7 @@ test("a frase do divergent-body serve para skill e para fonte compartilhada", ()
   const daSkill = divergentBody({
     name: "spec-create", source: "---\nx: 1\n---\num\n", installed: "---\nx: 1\n---\ndois\n",
     file: ".claude/skills/spec-create/SKILL.md",
+    condicao: SKILL_DECLARADA,
   })[0];
   assert.equal(daSkill.expected, "o corpo de spec-create como o pacote o traz",
     "a frase perdeu a palavra skill de proposito: ela tambem descreve fonte compartilhada, que nao e skill");
@@ -543,9 +551,94 @@ test("a frase do divergent-body serve para skill e para fonte compartilhada", ()
   const daFonte = divergentBody({
     name: "_shared/laws/execution-laws.md", source: "um\n", installed: "dois\n",
     file: ".claude/skills/_shared/laws/execution-laws.md",
+    condicao: FONTE_COMPARTILHADA,
   })[0];
   assert.ok(!daFonte.expected.includes("skill"),
     "chamar de skill um arquivo de _shared/ seria mentira na cara de quem le o relatorio");
+});
+
+test("corpo divergente com skill orfa nao tem remediacao", () => {
+  const [achado] = divergentBody({
+    name: "orfa", source: "a\nb", installed: "a\nc", file: "f",
+    condicao: SKILL_ORFA,
+  });
+  assert.equal(achado.fix, NO_FIX, "mgr update nao alcanca o que nao esta no manifesto");
+});
+
+test("corpo divergente com skill declarada tem remediacao", () => {
+  const [achado] = divergentBody({
+    name: "declarada", source: "a\nb", installed: "a\nc", file: "f",
+    condicao: SKILL_DECLARADA,
+  });
+  assert.equal(achado.fix, FIX_UPDATE, "mgr update alcanca skill declarada");
+});
+
+test("corpo divergente com fonte compartilhada tem remediacao", () => {
+  const [achado] = divergentBody({
+    name: "_shared/laws/execution-laws.md", source: "a\nb", installed: "a\nc", file: "f",
+    condicao: FONTE_COMPARTILHADA,
+  });
+  assert.equal(achado.fix, FIX_UPDATE, "mgr update alcanca fonte compartilhada");
+});
+
+test("token sobrando com skill orfa nao tem remediacao", () => {
+  const [achado] = unresolvedTokens({
+    installed: "x {{MGR_FIXTURE}}", file: "f",
+    condicao: SKILL_ORFA,
+  });
+  assert.equal(achado.fix, NO_FIX, "mgr update nao alcanca o que nao esta no manifesto");
+});
+
+test("token sobrando com skill declarada tem remediacao", () => {
+  const [achado] = unresolvedTokens({
+    installed: "x {{MGR_FIXTURE}}", file: "f",
+    condicao: SKILL_DECLARADA,
+  });
+  assert.equal(achado.fix, FIX_UPDATE, "mgr update alcanca skill declarada");
+});
+
+test("condicao ausente lanca em divergentBody", () => {
+  assert.throws(
+    () => divergentBody({
+      name: "x", source: "a\nb", installed: "a\nc", file: "f",
+      condicao: undefined,
+    }),
+    /condicao invalida/,
+    "deve lancar erro especifico mencionando os tres valores validos"
+  );
+});
+
+test("condicao desconhecida lanca em divergentBody", () => {
+  assert.throws(
+    () => divergentBody({
+      name: "x", source: "a\nb", installed: "a\nc", file: "f",
+      condicao: "nao-existe",
+    }),
+    /condicao invalida/,
+    "deve lancar erro especifico mencionando os tres valores validos"
+  );
+});
+
+test("condicao ausente lanca em unresolvedTokens", () => {
+  assert.throws(
+    () => unresolvedTokens({
+      installed: "x {{MGR_FIXTURE}}", file: "f",
+      condicao: undefined,
+    }),
+    /condicao invalida/,
+    "deve lancar erro especifico mencionando os tres valores validos"
+  );
+});
+
+test("condicao desconhecida lanca em unresolvedTokens", () => {
+  assert.throws(
+    () => unresolvedTokens({
+      installed: "x {{MGR_FIXTURE}}", file: "f",
+      condicao: "nao-existe",
+    }),
+    /condicao invalida/,
+    "deve lancar erro especifico mencionando os tres valores validos"
+  );
 });
 
 test("charter apagada do primeiro motor e achado como missing-shared", () => {
@@ -665,4 +758,137 @@ test("manifesto sem motor reconhecido cai para os skillsDirs em vez de não conf
   } finally {
     descartar(repo);
   }
+});
+
+test("skill órfã com corpo divergente não tem remediação no diagnose", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const skills = path.join(repo, ".claude", "skills");
+    const declaradas = JSON.parse(readFileSync(path.join(repo, ".mgr-core", "manifest.json"), "utf8")).skills;
+    cpSync(path.join(skills, declaradas[0]), path.join(skills, ORFA), { recursive: true });
+    const alvo = path.join(skills, ORFA, "SKILL.md");
+    writeFileSync(alvo, `${readFileSync(alvo, "utf8")}\nlinha que nao existe na fonte\n`);
+
+    const corpo = diagnose(repo).findings
+      .filter(({ check, file }) => check === "divergent-body" && file.includes(ORFA));
+    assert.equal(corpo.length, 1,
+      "a instalacao e limpa e o manifesto esta na versao do pacote, entao a comparacao de corpo roda "
+      + "e o achado sai por skill; com manifesto atrasado ela sairia indisponivel e este caso nao "
+      + "afirmaria nada");
+    assert.equal(corpo[0].fix, null,
+      "o mgr update so re-sincroniza o que o manifesto declara, entao nomear o comando aqui mandaria "
+      + "a pessoa gastar uma acao que nao resolve");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("skill declarada com corpo divergente mantém a remediação no diagnose", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const declaradas = JSON.parse(readFileSync(path.join(repo, ".mgr-core", "manifest.json"), "utf8")).skills;
+    const alvo = path.join(repo, ".claude", "skills", declaradas[0], "SKILL.md");
+    writeFileSync(alvo, `${readFileSync(alvo, "utf8")}\nlinha que nao existe na fonte\n`);
+
+    const corpo = diagnose(repo).findings
+      .filter(({ check, file }) => check === "divergent-body" && file.includes(declaradas[0]));
+    assert.equal(corpo.length, 1, "o mesmo estado da orfa, mudando so a declaracao no manifesto");
+    assert.equal(corpo[0].fix, FIX_UPDATE,
+      "e o negativo do caso anterior: a fatia so muda o caso orfao, e aqui o comando foi medido e "
+      + "resolve");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("CHECKS tem exatamente dez entradas com id único", () => {
+  assert.equal(CHECKS.length, 10, "registro tem dez entradas de verificacoes");
+  const ids = CHECKS.map(({ id }) => id);
+  const idsUnicos = new Set(ids);
+  assert.equal(idsUnicos.size, 10, "cada id do registro deve ser único");
+});
+
+test("toda entrada de CHECKS tem remediacoes com pelo menos um item", () => {
+  for (const entrada of CHECKS) {
+    assert.ok(entrada.remediacoes && Array.isArray(entrada.remediacoes) && entrada.remediacoes.length > 0,
+      `${entrada.id}: deve ter array remediacoes com pelo menos um item`);
+  }
+});
+
+test("soma de todas as condicoes em remediacoes e exatamente dezessete", () => {
+  const totalCondicoes = CHECKS.reduce((soma, entrada) => soma + entrada.remediacoes.length, 0);
+  assert.equal(totalCondicoes, 17,
+    "a tabela D-2 do plano declara dezessete condicoes no total");
+});
+
+test("todo item de remediacao tem condicao, fix e prova obrigatorios", () => {
+  for (const entrada of CHECKS) {
+    for (const item of entrada.remediacoes) {
+      assert.ok(item.condicao, `${entrada.id}: item sem condicao`);
+      assert.ok(item.fix !== undefined, `${entrada.id}: item sem fix`);
+      assert.ok(item.prova, `${entrada.id}: item sem prova`);
+    }
+  }
+});
+
+test("toda remediacao tem prova em um dos quatro valores possíveis", () => {
+  const validos = [PROVA_FUNCIONA, PROVA_NAO_FUNCIONA, PROVA_NAO_MEDIDA, SEM_REMEDIACAO];
+  for (const entrada of CHECKS) {
+    for (const item of entrada.remediacoes) {
+      assert.ok(validos.includes(item.prova),
+        `${entrada.id}/${item.condicao}: prova "${item.prova}" não é um dos quatro valores`);
+    }
+  }
+});
+
+test("remediacao com PROVA_NAO_MEDIDA ou PROVA_NAO_FUNCIONA tem razao não vazia", () => {
+  for (const entrada of CHECKS) {
+    for (const item of entrada.remediacoes) {
+      if (item.prova === PROVA_NAO_FUNCIONA || item.prova === PROVA_NAO_MEDIDA) {
+        assert.ok(item.razao && item.razao.length > 0,
+          `${entrada.id}/${item.condicao}: prova=${item.prova} exige razao não vazia`);
+      }
+    }
+  }
+});
+
+test("remediacao com PROVA_NAO_FUNCIONA tem candidato definido", () => {
+  for (const entrada of CHECKS) {
+    for (const item of entrada.remediacoes) {
+      if (item.prova === PROVA_NAO_FUNCIONA) {
+        assert.ok(item.candidato !== undefined,
+          `${entrada.id}/${item.condicao}: PROVA_NAO_FUNCIONA exige candidato`);
+      }
+    }
+  }
+});
+
+test("coerência: fix é nulo quando prova é SEM_REMEDIACAO ou PROVA_NAO_FUNCIONA", () => {
+  for (const entrada of CHECKS) {
+    for (const item of entrada.remediacoes) {
+      if (item.prova === SEM_REMEDIACAO || item.prova === PROVA_NAO_FUNCIONA) {
+        assert.equal(item.fix, null,
+          `${entrada.id}/${item.condicao}: prova=${item.prova} exige fix nulo`);
+      }
+    }
+  }
+});
+
+test("coerência: fix não é nulo quando prova é PROVA_FUNCIONA", () => {
+  for (const entrada of CHECKS) {
+    for (const item of entrada.remediacoes) {
+      if (item.prova === PROVA_FUNCIONA) {
+        assert.ok(item.fix !== null && typeof item.fix === "string" && item.fix.length > 0,
+          `${entrada.id}/${item.condicao}: PROVA_FUNCIONA exige fix não nulo`);
+      }
+    }
+  }
+});
+
+test("órfã sem divergência e sem token não produz achado algum", () => {
+  const corpo = "---\nx: 1\n---\nigual\n";
+  assert.deepEqual(divergentBody({ name: "x", source: corpo, installed: corpo, file: "f", condicao: SKILL_ORFA }), [],
+    "a condição não fabrica achado: ela só decide a remediação de um achado que já existia");
+  assert.deepEqual(unresolvedTokens({ installed: "nada aqui", file: "f", condicao: SKILL_ORFA }), [],
+    "o mesmo para token: sem token sobrando não há achado, seja a skill órfã ou declarada");
 });

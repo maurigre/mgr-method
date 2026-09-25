@@ -1251,7 +1251,7 @@ function cmdBuild(flags) {
 // instalação e não falha de gate.
 // `mgr doctor` — diz se a instalacao esta INTEGRA, e nao so o que esta instalada (U2).
 //
-// **Nao escreve nada, em nenhum modo.** Nao ha `--fix`: cinco das seis correcoes eram rodar o
+// **Nao escreve nada, em nenhum modo.** Nao ha `--fix`: a maioria das correcoes era rodar o
 // `mgr update`, e chama-lo passaria `-y` pela pessoa. O comando nomeia a remediacao; a acao e dela.
 function cmdDoctor(repo, flags) {
   const resultado = doctor.diagnose(repo);

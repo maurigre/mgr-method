@@ -42,6 +42,21 @@ written (whatever their language); the report itself follows the output language
    project for consistency; at the end, record the review result. Unavailable → warn and
    proceed with the on-disk guide only.
 
+## Reading the project origin
+
+The project's origin decides how much an anchored finding weighs — **L6.6** of the execution laws.
+Read it, never infer it:
+
+1. Read `.mgr-core/config.json` and look for the key `origin`.
+2. `greenfield` or `brownfield` → apply the calibration in **L6.6**.
+3. Key absent, file absent, JSON unreadable, or a value outside the vocabulary → the origin is
+   **unknown**. Say so out loud, say which calibration you therefore did NOT apply, and carry on
+   with the rest of the review.
+4. **Never infer the origin.** Not from file age, not from `git log`, not from the prose line in
+   `CONSTITUTION.md`. The detector lives in `spec-init`; a second detector would diverge from it.
+
+State in the report header which origin you read and where you read it from — or that it is unknown.
+
 ## Loading the spec (Spec axis — before analyzing)
 
 Locate the **originating spec** of what is being reviewed, in this order:
@@ -131,6 +146,7 @@ spec as the source:
   For each violation:
   **Violation:** [concise description]
   **Violated Rule:** [guide section and rule, with textual citation]
+  **Weight:** <Reproval | Information | Not calibrated> — rule <ID cited above>, origin <greenfield | brownfield | unknown>
   **Justification:** [why it is a serious failure, based on the guide]
   **Suggested Fix:** [how to fix, citing the guide's example/principle]
   **File:** path:line
@@ -143,6 +159,12 @@ spec as the source:
   **Suggested Fix:** [what is missing to fulfill the spec]
   **File:** path:line
   (No locatable spec → write only: "No originating spec available — Spec axis abstained.")
+
+The weight names the rule AND the origin that decided it. Code this work wrote is new code, and new
+code is a Reproval in any origin (L6.6). With an unknown origin the weight is **Not calibrated** —
+L6.6 says not to calibrate, so the field must not force a choice. The **Spec axis carries no weight field**: its object is the
+spec this work is executing, which is new by definition — a legacy project does not stop being held
+to the spec it just approved.
 
 - **A conformant axis → state it explicitly**, citing the key rules (Standards) or the
   fulfilled requirements (Spec).

@@ -395,3 +395,33 @@ Verify what the available artifacts allow, and **say which checks were skipped a
 
 **A conformant axis → state it explicitly**, citing the key rules (Standards) or the fulfilled
 requirements (Spec). Silence is not approval.
+
+### L6.6 — Severity follows the project origin `[Executor, Verifier]`
+
+The project's origin is a **recorded fact**, read from `.mgr-core/config.json` (key `origin`), never
+inferred at review time. Three states, and each one says what the consumer does:
+
+- **`greenfield` — born from the method.** An anchored finding is a **Reproval**: the flow fixes it
+  before closing the task.
+- **`brownfield` — legacy.** An anchored finding **on pre-existing code** is **information**, and the
+  decision goes back to the user — fix it, or record it as accepted. Legacy code is never edited
+  without a "yes".
+- **absent, unreadable or outside the vocabulary — unknown.** **Do not calibrate.** Say the origin is
+  unknown, and say which calibration was therefore not applied (L1.4, L6.4).
+
+**Code the method writes is new code, and new code reproves in any origin.** The origin of the
+**project** sets the default; the origin of the **code** overrides it when the code is new. Where the
+new and the pre-existing cannot be told apart, the project's origin decides and the report says the
+separation was not possible.
+
+Descends from `CP-5` of the charter.
+
+> **Anti-regression alert.** This law calibrates how much an **anchored** finding weighs. It never
+> authorizes an unanchored one — **L1.1 governs** — and it never creates a rule at run time: **L1.3**
+> still sends a real problem without a written rule to a non-blocking suggestion. It changes the
+> **weight** of a finding, never the set of rules checked: every rule is verified in every origin.
+
+> **Status of the baseline.** Where no baseline mechanism is available, **there is no gate**: the
+> guard falls back to the level of a citable rule, and that absence is stated in writing. Freezing a
+> baseline is confirmed only for Java (`FreezingArchRule`); claiming coverage elsewhere would be the
+> guarantee **L1.9** forbids.

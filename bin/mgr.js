@@ -16,7 +16,7 @@ import * as docValidator from "../src/doc-validator.js";
 import * as planNext from "../src/plan-next.js";
 import * as specStatus from "../src/spec-status.js";
 import { repoRoot, slugs } from "../src/artifacts.js";
-import { CONFIGURED, readAgents, writeAgentPolicy } from "../src/registry.js";
+import { CONFIGURED, ORIGINS, readAgents, writeAgentPolicy, writeOrigin } from "../src/registry.js";
 import * as tokens from "../src/tokens.js";
 import * as audit from "../src/audit.js";
 import * as doctor from "../src/doctor.js";
@@ -49,7 +49,7 @@ const PLUGIN_COMMANDS = ["add", "remove", "registry"];
 // resolveria o repo como `<cwd>/validate`, o manifesto não seria encontrado e o `userLanguage` do
 // projeto seria descartado — quebrando, só para o comando novo, a precedência
 // flag > manifesto > locale que os demais respeitam.
-const SUBCOMMAND_COMMANDS = ["spec", "agents", "tokens", "precompact"];
+const SUBCOMMAND_COMMANDS = ["spec", "agents", "tokens", "precompact", "origin"];
 const isTTY = process.stdin.isTTY && process.stdout.isTTY;
 
 // Glue: junta os dados que o nucleo precisa. A decisao de como combinar e do detector.
@@ -1033,6 +1033,46 @@ const modificados = (repo) => {
   }
 };
 
+// `mgr origin set` — grava a ORIGEM do projeto e diz o que passou a valer.
+//
+// Sem `--scope`: a origem e fato do PROJETO, e um metodo instalado globalmente que revisa o projeto
+// X precisa ler a origem de X. Sem leitor (`mgr origin` sozinho): capacidade sem demanda medida nao
+// entra, e o estado ja e visivel na saida deste comando, no arquivo, e no cabecalho do relatorio de
+// review.
+function cmdOriginSet(_f, positional) {
+  const repo = repoRoot(process.cwd());
+  const core = installer.coreDir("project", repo);
+
+  const valor = positional[0];
+  if (!valor) {
+    console.error(M.errorPrefix(M.originSetNeedsValue(ORIGINS.join(" | "))));
+    return 1;
+  }
+  if (!ORIGINS.includes(valor)) {
+    console.error(M.errorPrefix(M.originUnknown(valor, ORIGINS.join(" | "))));
+    return 1;
+  }
+
+  // Instalacao ausente NAO e erro: e o caso do metodo instalado em escopo global, e o `writeConfig`
+  // ja cria o diretorio. Mas o usuario ouve, para nao sair achando que configurou o lugar errado.
+  if (!installer.detectPrior("project", repo)) console.log(M.originNoInstall(core));
+
+  // LOG-1: informacao ANTES e logo depois de alterar estado em disco. Sem a de antes, um config
+  // somente-leitura devolve so o erro cru e ninguem sabe qual arquivo o comando tentou escrever.
+  console.log(M.originWriting(core));
+  const { antes, depois } = writeOrigin(core, valor);
+  console.log(M.originWritten(antes.estado === "ausente" ? "—" : antes.valor, depois));
+  return 0;
+}
+
+function cmdOrigin(flags, positional) {
+  if (positional[0] === "set") return cmdOriginSet(flags, positional.slice(1));
+  // A unica forma valida e `origin set <valor>`; a mensagem mostra a forma certa em vez de so
+  // recusar, porque quem digita `mgr origin brownfield` esqueceu o `set` e nao errou o valor.
+  console.error(M.errorPrefix(M.originSetNeedsValue(ORIGINS.join(" | "))));
+  return 1;
+}
+
 // `mgr agents set` — escreve a política de UMA intenção e diz o que passou a valer (ADR-0017).
 //
 // A decisão de MERGE e a validação são do núcleo (`writeAgentPolicy`); aqui só se resolve para
@@ -1401,6 +1441,7 @@ async function main() {
       case "doctor": return cmdDoctor(repo, flags);
       case "spec": return cmdSpec(flags, positional);
       case "agents": return cmdAgents(flags, positional);
+      case "origin": return cmdOrigin(flags, positional);
       case "tokens": return cmdTokens(flags, positional);
       case "list": return await cmdList(flags, positional);
       case "version": case "--version": case "-v":

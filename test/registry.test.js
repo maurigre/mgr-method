@@ -4,8 +4,8 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  addRegistry, CONFIGURED, configPath, DEFAULT, fetchIndex, RESERVED_AGENT_KEYS, listRegistries, readAgents, readConfig, readDetectionMode,
-  readLawsPreamble, removeRegistry, writeAgentPolicy, resolve, validateIndex, writeConfig,
+  addRegistry, CONFIGURED, configPath, DEFAULT, fetchIndex, ORIGINS, RESERVED_AGENT_KEYS, listRegistries, readAgents, readConfig, readDetectionMode,
+  readLawsPreamble, removeRegistry, writeAgentPolicy, writeOrigin, resolve, validateIndex, writeConfig,
 } from "../src/registry.js";
 import { AGENTS, INTENTS, REVIEW_GATE } from "../src/catalog.js";
 import { fileURLToPath } from "node:url";
@@ -590,4 +590,59 @@ test("identificador de modelo desconhecido é ACEITO — a lista é da conta", (
   writeConfig(core, { registries: [] });
   const policy = writeAgentPolicy(core, "drafting", { model: { "claude-code": "modelo-que-so-existe-na-minha-conta" } });
   assert.equal(policy.model["claude-code"], "modelo-que-so-existe-na-minha-conta");
+});
+
+test("writeOrigin grava a origem e devolve ausente quando a chave nunca existiu", () => {
+  const core = diretorioTemporario();
+  const resultado = writeOrigin(core, "brownfield");
+  assert.deepEqual(resultado, { antes: { estado: "ausente" }, depois: "brownfield" });
+  assert.equal(readConfig(core).origin, "brownfield");
+});
+
+test("writeOrigin devolve o valor anterior quando ja havia um valido", () => {
+  const core = diretorioTemporario();
+  writeOrigin(core, "greenfield");
+  const resultado = writeOrigin(core, "brownfield");
+  assert.deepEqual(resultado.antes, { estado: "gravado", valor: "greenfield" });
+  assert.equal(resultado.depois, "brownfield");
+});
+
+test("writeOrigin distingue lixo em disco de ausencia, sem devolver sentinela", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], origin: "xpto" });
+  const resultado = writeOrigin(core, "greenfield");
+  assert.deepEqual(resultado.antes, { estado: "invalido", valor: "xpto" },
+    "ausencia e lixo sao estados diferentes, e `null` para os dois apagaria a diferenca");
+});
+
+test("writeOrigin preserva todas as outras chaves do config", () => {
+  const core = diretorioTemporario();
+  const antes = {
+    registries: [{ name: "mgr", url: INDEX_URL, trusted: true }],
+    agents: { drafting: { effort: "high" } },
+    reviewGate: { enabled: true },
+    detectionMode: "suggest",
+    lawsPreamble: "always",
+  };
+  writeConfig(core, antes);
+  writeOrigin(core, "brownfield");
+  const depois = readConfig(core);
+  for (const chave of Object.keys(antes)) {
+    assert.deepEqual(depois[chave], antes[chave], chave);
+  }
+  assert.equal(depois.origin, "brownfield");
+});
+
+test("negativo: valor fora do vocabulario lanca e NAO toca no arquivo", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], detectionMode: "off" });
+  const antes = readFileSync(configPath(core), "utf8");
+  assert.throws(() => writeOrigin(core, "legacy"), /unknown project origin/);
+  assert.equal(readFileSync(configPath(core), "utf8"), antes,
+    "validar depois de gravar deixaria o arquivo mudado mesmo com o comando falhando");
+});
+
+test("negativo: ORIGINS tem exatamente os dois valores gravaveis", () => {
+  assert.deepEqual(ORIGINS, ["greenfield", "brownfield"],
+    "um terceiro valor gravavel convidaria a grava-lo como default, e default silencioso e o que a fatia proibe");
 });

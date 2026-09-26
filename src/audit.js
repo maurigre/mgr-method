@@ -39,7 +39,7 @@ const FERRAMENTA_DE_REDE = /\b(curl|wget|nc|netcat|scp|ssh)\b/i;
 const CARGA_LOCAL = /(--data(?:-binary|-raw)?|[-]d)\s+@|\bcat\s+[^|]+\|\s*(?:curl|wget|nc)\b/i;
 
 // Alvos nomeados, não inferidos.
-const AUTO_MODIFICACAO = /(\.mgr-core\/config|\bmgr\s+agents\s+set\b|\bmgr\s+(?:install|update|add|remove)\b|\bmgr-skills\.lock\b)/i;
+const AUTO_MODIFICACAO = /(\.mgr-core\/config|\bmgr\s+(?:agents|origin)\s+set\b|\bmgr\s+(?:install|update|add|remove)\b|\bmgr-skills\.lock\b)/i;
 
 // Locução fechada, não proximidade entre palavras: o ADR-0021 registra a medição de que varrer prosa
 // produz falso positivo e falso negativo.

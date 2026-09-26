@@ -41,6 +41,7 @@ npx mgr-method install --user-language pt-BR .   # skills talk and generate arti
 npx mgr-method install --all-skills .            # installs every skill (no selection)
 npx mgr-method install --dry-run
 npx mgr-method status | update | uninstall
+npx mgr-method origin set brownfield   # records the project origin; it calibrates review severity
 ```
 
 ### Installed layout
@@ -91,7 +92,7 @@ code-analyzer ─ final 2-axis review: Standards (THE project's guide) + Spec (d
 | **A model per intent** | `mgr agents` answers which model and effort each step of the flow uses, and where each value came from. Drafting, execution and review are declared once in `.mgr-core/config.json`; the install writes them into each agent and the invocation can override the model without reinstalling. Changing `effort` needs `mgr update`, and the command says so (ADR-0017). |
 | **Verifiable provenance** | `mgr spec validate` also checks the provenance tag you wrote: its form, and whether a `[code:<path>:<line>]` pointer resolves on disk from the repository root. It never **requires** a tag — the rule that would demand one was rejected on measurement, and nothing that already exists is reproved (ADR-0016). |
 | **Next action, not state** | `mgr spec next` answers what to do now: the task, its exact artifact, the helper skill and what it waits on. A task can declare `status: done`, and the answer always says how much state the plan declares — with none, it says it does not know what you have already done (ADR-0014). |
-| **Execution laws** | **Single source** in `shared/laws/execution-laws.md`: 46 laws (L0–L6) binding on every skill, each declaring **who it binds, by role** (`Planner`, `Executor`, `Verifier`, `Diagnostician`, `All`). Skills point to it; none repeats a law. The central ones enter the context **before the first message**, via the session hook (ADR-0011). |
+| **Execution laws** | **Single source** in `shared/laws/execution-laws.md`: 47 laws (L0–L6) binding on every skill, each declaring **who it binds, by role** (`Planner`, `Executor`, `Verifier`, `Diagnostician`, `All`). Skills point to it; none repeats a law. The central ones enter the context **before the first message**, via the session hook (ADR-0011). |
 | `spec-init` | Initializes the SDD: analyzes an existing project (phased chunking) **or** runs a guided interview on an empty project (greenfield). Generates `docs/sdd/`, the project's `CONSTITUTION.md` and the review guide. |
 | `spec-create` | Evolves the project per feature: brief → PRD → spec → plan (P0/P1/P2 + DAG), with blocking checkpoints; after plan approval, delegates the implementation to `spec-execute` and closes with the completion. |
 | `spec-execute` | Executes the approved plan task by task (DAG), applying the development premises (security, performance, resources, clarity — "vocabulary, not a checklist") and active context control (S–F tiers, archiving at 75%, hand-off, anti-compaction). Direct resumption of an interrupted execution. |

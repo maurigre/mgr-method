@@ -269,6 +269,11 @@ const en = {
   precompactLogStampBefore: "writing the refusal stamp",
   precompactLogStampAfter: "refusal stamp written",
   agentsSetNothing: "nothing to write: pass `--model`, `--effort`, or both",
+  originWriting: (dir) => `Writing the project origin to ${dir}/config.json`,
+  originSetNeedsValue: (validos) => `mgr origin set needs a value (${validos})`,
+  originUnknown: (valor, validos) => `unknown project origin: ${valor} (expected ${validos})`,
+  originWritten: (antes, depois) => `project origin: ${antes} -> ${depois}`,
+  originNoInstall: (dir) => `no MGR installation found at ${dir}; writing the origin anyway (this is the global-scope case).`,
   agentsSetEngineNotInstalled: (engine, installed) =>
     `engine \`${engine}\` is not installed in this project`
     + (installed ? ` (installed: ${installed})` : ""),
@@ -324,6 +329,8 @@ Usage: mgr <command> [options]
                    value came from ([<intent>], --json)
   agents set       writes one intent's policy (<intent>, --model, --effort,
                    --engine); it does not run mgr update
+  origin set       records whether the project was born from the method or is
+                   legacy (<greenfield|brownfield>); it does not run mgr update
   precompact       writes the hand-off before the engine compacts the context
                    (--hook <engine>); called by the hook, not by hand
   tokens           how much the flow consumed: pass the conversation
@@ -603,6 +610,11 @@ const ptBR = {
   precompactLogStampBefore: "gravando o carimbo da recusa",
   precompactLogStampAfter: "carimbo da recusa gravado",
   agentsSetNothing: "nada a escrever: passe `--model`, `--effort`, ou os dois",
+  originWriting: (dir) => `Gravando a origem do projeto em ${dir}/config.json`,
+  originSetNeedsValue: (validos) => `mgr origin set precisa de um valor (${validos})`,
+  originUnknown: (valor, validos) => `origem de projeto desconhecida: ${valor} (esperado ${validos})`,
+  originWritten: (antes, depois) => `origem do projeto: ${antes} -> ${depois}`,
+  originNoInstall: (dir) => `nenhuma instalação MGR encontrada em ${dir}; gravando a origem mesmo assim (é o caso do escopo global).`,
   agentsSetEngineNotInstalled: (engine, instalados) =>
     `motor \`${engine}\` não está instalado neste projeto`
     + (instalados ? ` (instalados: ${instalados})` : ""),
@@ -656,6 +668,8 @@ Uso: mgr <comando> [opções]
                    cada valor ([<intenção>], --json)
   agents set       escreve a política de uma intenção (<intenção>, --model,
                    --effort, --engine); não roda o mgr update
+  origin set       registra se o projeto nasceu do método ou é legado
+                   (<greenfield|brownfield>); não roda o mgr update
   precompact       grava o hand-off antes de o motor compactar o contexto
                    (--hook <motor>); chamado pelo hook, não à mão
   tokens           quanto o fluxo consumiu: passe o transcript da conversa e,

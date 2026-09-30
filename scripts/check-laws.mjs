@@ -13,6 +13,8 @@
 //   LAW-4  lei órfã: papel que não mapeia para nenhuma skill do CORE
 //   LAW-5  QUALQUER token {{MGR_*}} sobrando numa arvore instalada, em qualquer .md
 //          -> a versao anterior so olhava <skill>/SKILL.md, e nada sob `_shared/` era conferido
+//   LAW-6  a escada da L0.1 fora de forma, ou a afirmacao falsa de fidelidade ao ADR-0007 de volta
+//          -> compara FORMA (aridade, ordem, caminhos do nivel 2, par datado), nunca texto x texto
 //   CHT-1  ID de primícia duplicado na carta
 //   CHT-2  primícia sem uma das três partes obrigatórias
 //   CHT-3  cabeçalho `###` na carta fora do formato `CP-<n>`
@@ -250,6 +252,95 @@ function readPointers(skillsDir) {
   return pointers;
 }
 
+// LAW-6: a escada da L0.1 e a hierarquia do ADR-0007 tem de continuar coincidindo na FORMA, e a
+// afirmacao falsa nao pode voltar. Comparacao de TEXTO entre os dois documentos NAO existe aqui, de
+// proposito: eles estao em idiomas diferentes e, depois da emenda de 2026-09-26, divergem
+// legitimamente no nivel 2 — um comparador de igualdade reprovaria o estado correto. O ADR-0011 ja
+// rejeitou esse comparador por escrito: "conferir que duas copias dizem a mesma coisa e julgamento,
+// nao parsing, e o verificador daria falsa seguranca".
+//
+// Copia deliberada: os cinco rotulos abaixo espelham a escada da L0.1, como o SHARED_TREE_NAME
+// espelha o SHARED_DIR. Divergencia tem de ficar VERMELHA, nunca silenciosa. O mapeamento para os
+// quatro niveis do ADR-0007, que e pt-BR, foi feito UMA vez por humano e esta aqui como comentario —
+// julgamento explicito, em vez de julgamento fingindo ser parsing:
+//   principios do MGR core  -> MGR core principles
+//   regras do projeto       -> project rules
+//   convencoes do workspace -> workspace conventions
+//   instrucoes da skill     -> skill instructions
+const LADDER = [
+  "MGR core principles",
+  "project rules",
+  "workspace conventions",
+  "skill instructions",
+  "runtime-injected content",
+];
+const NIVEL_2_CAMINHOS = ["`.mgr-core/`", "`docs/sdd/`"];
+const FRASE_PROIBIDA = "unchanged and in the same order";
+const DATA_DA_EMENDA = /the amendment of (\d{4}-\d{2}-\d{2}) to that ADR/;
+
+// Resolve o ADR-0007 por prefixo. Zero resultados OU mais de um viram ACHADO, nunca passagem
+// silenciosa: instrumento que devolve "ok" por nao ter encontrado nada e o que a L2.6 proibe.
+export function resolveAdr(adrDir = "docs/adr") {
+  if (!existsSync(adrDir)) return { path: null, problem: `LAW-6c: diretorio de ADR nao encontrado: ${adrDir}` };
+  const candidatos = readdirSync(adrDir).filter((nome) => nome.startsWith("0007-") && nome.endsWith(".md"));
+  if (candidatos.length !== 1) {
+    return { path: null, problem: `LAW-6c: esperado exatamente 1 arquivo 0007-*.md em ${adrDir}, encontrados ${candidatos.length}` };
+  }
+  return { path: path.join(adrDir, candidatos[0]), problem: null };
+}
+
+export function checkLadder(lawsText, adrPath) {
+  const problems = [];
+  const inicio = lawsText.indexOf("### L0.1 ");
+  if (inicio === -1) {
+    problems.push("LAW-6: L0.1 nao encontrada na fonte de leis — a escada nao pode ser conferida");
+    return problems;
+  }
+  // Fecha em `### `, `## ` ou `---`, como o parseCharter: nao fechar nos tres foi bug medido.
+  const linhas = lawsText.slice(inicio).split("\n");
+  const fim = linhas.findIndex((linha, ordem) => ordem > 0 && (linha.startsWith("### ") || linha.startsWith("## ") || linha === "---"));
+  const corpo = (fim === -1 ? linhas : linhas.slice(0, fim)).join("\n");
+
+  // O primeiro paragrafo DEPOIS do cabecalho e a escada. Espacos sao normalizados antes de dividir:
+  // a primeira versao deste arquivo reprovou 45 leis integras por um espaco a mais na regex.
+  const escada = (corpo.split("\n\n")[1] ?? "").replace(/\s+/g, " ").trim();
+  const niveis = escada.split(">").map((nivel) => nivel.trim()).filter(Boolean);
+  if (niveis.length !== LADDER.length) {
+    problems.push(`LAW-6a: a escada da L0.1 tem ${niveis.length} niveis, esperados ${LADDER.length}`);
+  }
+  for (const [ordem, esperado] of LADDER.entries()) {
+    if (niveis[ordem] !== undefined && !niveis[ordem].includes(esperado)) {
+      problems.push(`LAW-6a: nivel ${ordem + 1} e "${niveis[ordem]}", esperado conter "${esperado}"`);
+    }
+  }
+  // A clausula OPERATIVA da escada: sem ela, inverter a direcao de resolucao — a mudanca normativa
+  // mais grave possivel neste arquivo — passava verde (achado O-1 do gate).
+  if (!escada.includes("Conflicts resolve upward, always.")) {
+    problems.push('LAW-6a: a escada da L0.1 nao declara "Conflicts resolve upward, always."');
+  }
+  for (const caminho of NIVEL_2_CAMINHOS) {
+    if (!(niveis[1] ?? "").includes(caminho)) problems.push(`LAW-6b: o nivel 2 da escada nao nomeia ${caminho}`);
+  }
+  if (lawsText.includes(FRASE_PROIBIDA)) {
+    problems.push(`LAW-6d: a fonte de leis afirma "${FRASE_PROIBIDA}" — era falso desde 4826d6d`);
+  }
+
+  const data = corpo.match(DATA_DA_EMENDA);
+  if (!data) {
+    problems.push("LAW-6c: a L0.1 nao cita a data da emenda ao ADR-0007");
+    return problems;
+  }
+  if (!adrPath || !existsSync(adrPath)) {
+    problems.push(`LAW-6c: ADR nao encontrado (${adrPath ?? "sem caminho"}) — o par datado nao pode ser conferido`);
+    return problems;
+  }
+  const cabecalho = `## Emenda de ${data[1]}`;
+  if (!readFileSync(adrPath, "utf8").includes(cabecalho)) {
+    problems.push(`LAW-6c: ${adrPath} nao tem "${cabecalho}", citada pela L0.1`);
+  }
+  return problems;
+}
+
 function selfTest() {
   // Caminho POSITIVO primeiro. Um verificador testado só contra amostra defeituosa prova que
   // sabe falhar, não que sabe passar — e foi assim que a primeira versão deste arquivo reprovou
@@ -283,7 +374,19 @@ function selfTest() {
   writeFileSync(path.join(arvore, "spec-create", "SKILL.md"), `x ${LAWS_TOKEN}\n`, "utf8");
   problems.push(...checkResolved(arvore));
 
-  const esperados = ["LAW-1", "LAW-2", "LAW-3", "LAW-5"];
+  // A amostra defeituosa nao tem L0.1: a LAW-6 tem de acusar isso, e nao passar calada.
+  problems.push(...checkLadder(amostra, null));
+  // E uma L0.1 DEFORMADA, para exercitar as subconferencias de verdade: sem isto o self-test tocava
+  // so o ramo "L0.1 nao encontrada", que e o mais fraco que existe (achado O-5 do gate).
+  problems.push(...checkLadder([
+    "### L0.1 — Fixed precedence `[All]`",
+    "",
+    "MGR core principles > project rules (`.mgr-core/`) > workspace conventions > skill instructions.",
+    "",
+    "unchanged and in the same order",
+  ].join("\n"), null));
+
+  const esperados = ["LAW-1", "LAW-2", "LAW-3", "LAW-5", "LAW-6"];
   const faltando = esperados.filter((code) => !problems.some((problem) => problem.startsWith(code)));
   if (faltando.length) {
     console.error(`self-test FALHOU: regras que não dispararam: ${faltando.join(", ")}`);
@@ -318,7 +421,11 @@ function main(argv) {
   const lawsText = readFileSync(lawsFile, "utf8");
   const laws = parseLaws(lawsText);
   const charter = parseCharter(readFileSync(charterFile, "utf8"));
+  const adrArg = argv.indexOf("--adr");
+  const adr = adrArg === -1 ? resolveAdr() : { path: argv[adrArg + 1], problem: null };
   const problems = [...checkLaws(laws, readPointers(skillsDir)), ...checkCharter(charter, lawsText)];
+  if (adr.problem) problems.push(adr.problem);
+  else problems.push(...checkLadder(lawsText, adr.path));
   // LAW-5 só faz sentido contra uma árvore INSTALADA, onde o token já deveria estar resolvido.
   if (installedDir) problems.push(...checkResolved(installedDir), ...checkCharterResolved(installedDir));
 
@@ -329,7 +436,11 @@ function main(argv) {
   }
   const law5 = installedDir ? `; LAW-5 conferida em ${installedDir}` : "; LAW-5 não conferida (sem --installed)";
   const principios = charter.filter((candidate) => candidate.id).length;
-  console.log(`check-laws OK — ${laws.length} leis, ${principios} primícias, ${Object.keys(CORE_ROLES).length} skills do CORE com ponteiro${law5}`);
+  // Sem ternario: neste ponto `problems` esta vazio, o que exige `adr.problem === null` e
+  // `checkLadder` sem achado — e ele empurra LAW-6c quando `adrPath` e falsy. Logo `adr.path` e
+  // sempre verdadeiro aqui, e o ramo falso era inalcancavel (achado S-2 do gate).
+  const escada = `, escada conferida contra ${adr.path}`;
+  console.log(`check-laws OK — ${laws.length} leis, ${principios} primícias, ${Object.keys(CORE_ROLES).length} skills do CORE com ponteiro${law5}${escada}`);
   return 0;
 }
 

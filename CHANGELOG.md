@@ -52,6 +52,53 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   declarada e não um comando fixo.
 
 ### Corrigido
+- **A `L0.1` afirmava reproduzir a hierarquia do ADR-0007 "sem alteração", e não reproduzia.** O
+  ADR-0007 nomeia um caminho no nível 2 das regras do projeto (`.mgr-core/`); a `L0.1` nomeava dois
+  (`.mgr-core/` e `docs/sdd/`) e, três linhas abaixo, declarava reproduzir o ADR *"unchanged and in the
+  same order"*. **O parêntese e a frase de fidelidade entraram no mesmo commit**, `4826d6d`, de
+  2026-08-31 — a divergência nasceu junto com a fonte única das leis e viveu 26 dias sem ninguém ver.
+
+  **A consequência não era de redação.** Como a `L0.1` manda resolver conflito para cima e as leis não
+  eram um nível da escada, um guia de review **gerado pelo próprio método** era lido como vencendo as
+  leis do método — e o efeito caía exatamente nos projetos legados, que são os que a `L6.6` existe para
+  proteger: o guia diz *"Regras Obrigatórias (reprovam)"*, a `L6.6` diz que em projeto legado achado
+  sobre código pré-existente é informação, e o guia ganhava.
+
+  **O que muda.** A `L0.1` passa a declarar duas coisas que não estavam escritas em lugar nenhum: **sobre
+  o que a escada decide** — qual instrução vence quando duas respondem **a mesma pergunta**, e que
+  documentos que respondem perguntas **diferentes** não estão em conflito — e **onde as leis ficam**: não
+  são um nível da escada, e na pergunta do que reprova já são subordinadas ao guia pela `L1.1`. O nível 2
+  ganha nome (config do usuário **e** SDD gerado pelo método) por **emenda ao ADR-0007**, que ratifica o
+  alcance e corrige o fato. A linha da escada fica **byte a byte idêntica**, porque o ADR-0022 a cita
+  verbatim.
+
+  **A guarda que impede a volta:** `LAW-6` no `npm run check:laws`, que confere a **forma** — aridade e
+  ordem dos cinco níveis, os dois caminhos do nível 2, a frase falsa proibida, e o **par datado** entre a
+  `L0.1` e a emenda. Comparação de texto entre os dois documentos **não existe de propósito**: eles estão
+  em idiomas diferentes e divergem legitimamente no nível 2, e o ADR-0011 já rejeitou esse comparador por
+  escrito. 12 mutações medidas, todas vermelhas.
+
+  **O gate isolado derrubou a tese, e a fatia foi ampliada.** A primeira versão afirmava que guia e
+  leis respondem perguntas **diferentes**, logo não conflitam. Medido: o guia e a `CONSTITUTION §3.1`
+  diziam que a reprovação vem **SÓ** do guia, enquanto a `L1.1` diz **guia OU linha da spec** — mesma
+  pergunta, respostas diferentes, e a escada lida para cima **abolia o eixo Spec**, que é metade do
+  revisor. Duas coisas mudaram por isso: a `L0.1` deixou de afirmar que não há conflito e passou a dar
+  **regra de decisão com relato obrigatório**; e o **guia e a constituição deste repositório foram
+  reconciliados** para nomear os dois eixos. Essa segunda parte **reverteu uma promessa** desta própria
+  fatia (a de não tocar `docs/sdd/`), por decisão do autor, e está registrada na seção 12 da spec — a
+  `RN-11` segue intacta, porque nenhum documento de **usuário** é tocado e nenhum comando passa a
+  escrever ali.
+
+  **Também por achado do gate:** a `LAW-6` passou a guardar `"Conflicts resolve upward, always."` —
+  antes, **inverter a direção de resolução da hierarquia** passava verde em todos os guardas, inclusive
+  nos que esta fatia acabara de escrever.
+
+  **Limites declarados:** a `L6.3` continua sem superfície de saída no relatório e isso é **fatia
+  própria**; as sete skills que não carregam `{{MGR_LAWS}}` (as quatro `arch-*`, `configure-agents`,
+  `evidence-capture`, `junit-clean`) não alcançam a `L0.1` corrigida; a correção **chega por
+  `mgr update`**, e **quem não roda comando algum não é afetado** — a `L0.1` antiga continua em vigor na
+  árvore dele; e a `LAW-6` **não é distribuída**, porque `scripts/` está fora do pacote.
+
 - **O campo `file` do achado de fonte compartilhada indisponível** apontava para `_shared`, que não é
   caminho. Passou a apontar para o `.mgr-core/manifest.json`, que é o artefato de que a mensagem
   fala. Esta correção havia sido **declarada** na release anterior e não estava aplicada.

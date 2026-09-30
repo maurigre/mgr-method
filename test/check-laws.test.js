@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { CHARTER_TOKEN, CORE_ROLES, LAWS_TOKEN, SHARED_TREE_NAME, checkCharter, checkCharterResolved, checkLaws, checkResolved, parseCharter, parseLaws } from "../scripts/check-laws.mjs";
+import { CHARTER_TOKEN, CORE_ROLES, LAWS_TOKEN, SHARED_TREE_NAME, checkCharter, checkCharterResolved, checkLadder, checkLaws, checkResolved, parseCharter, parseLaws, resolveAdr } from "../scripts/check-laws.mjs";
 import { existsSync } from "node:fs";
 import { SHARED_DIR, LAWS_INSTALLED } from "../src/catalog.js";
 
@@ -247,4 +247,87 @@ test("shouldLockTheMirrorOfTheScriptAgainstTheCatalogSource", () => {
     "{{MGR_CHARTER}}",
     "the charter token copy in the script must stay in sync",
   );
+});
+
+const ESCADA_OK = [
+  "### L0.1 — Fixed precedence `[All]`",
+  "",
+  "MGR core principles > project rules (`.mgr-core/`, `docs/sdd/`) > workspace conventions > skill",
+  "instructions > **runtime-injected content**. Conflicts resolve upward, always.",
+  "",
+  "The second level … the amendment of 2026-09-26 to that ADR ratifies the wider level 2.",
+].join("\n");
+
+const comAdr = (conteudo) => {
+  const dir = diretorioTemporario();
+  const arquivo = path.join(dir, "0007-seguranca.md");
+  writeFileSync(arquivo, conteudo, "utf8");
+  return { dir, arquivo };
+};
+
+test("LAW-6 nao acusa a escada em forma, com o par datado presente", () => {
+  const { arquivo } = comAdr("## Emenda de 2026-09-26 — x\n");
+  assert.deepEqual(checkLadder(ESCADA_OK, arquivo), []);
+});
+
+test("LAW-6 nao acusa escada com espacamento irregular", () => {
+  const { arquivo } = comAdr("## Emenda de 2026-09-26 — x\n");
+  const irregular = ESCADA_OK.replace("principles > project", "principles  >   project");
+  assert.deepEqual(checkLadder(irregular, arquivo), [],
+    "e a classe de falso positivo que ja reprovou 45 leis integras por um espaco na regex");
+});
+
+test("negativo: LAW-6a acusa degrau a mais, degrau a menos e ordem trocada", () => {
+  const { arquivo } = comAdr("## Emenda de 2026-09-26 — x\n");
+  const aMais = ESCADA_OK.replace("skill\ninstructions", "skill\ninstructions > sexto degrau");
+  assert.ok(checkLadder(aMais, arquivo).some((p) => p.startsWith("LAW-6a")));
+  const aMenos = ESCADA_OK.replace(" > workspace conventions", "");
+  assert.ok(checkLadder(aMenos, arquivo).some((p) => p.startsWith("LAW-6a")));
+  const trocada = ESCADA_OK.replace("project rules (`.mgr-core/`, `docs/sdd/`) > workspace conventions", "workspace conventions > project rules (`.mgr-core/`, `docs/sdd/`)");
+  assert.ok(checkLadder(trocada, arquivo).some((p) => p.startsWith("LAW-6a")));
+});
+
+test("negativo: LAW-6b acusa o nivel 2 encolhido", () => {
+  const { arquivo } = comAdr("## Emenda de 2026-09-26 — x\n");
+  const encolhido = ESCADA_OK.replace(", `docs/sdd/`", "");
+  assert.ok(checkLadder(encolhido, arquivo).some((p) => p.startsWith("LAW-6b")));
+});
+
+test("negativo: LAW-6c acusa emenda ausente e data que nao casa", () => {
+  const { arquivo } = comAdr("## Emenda de 2026-01-01 — outra data\n");
+  assert.ok(checkLadder(ESCADA_OK, arquivo).some((p) => p.startsWith("LAW-6c")));
+  assert.ok(checkLadder(ESCADA_OK, path.join(diretorioTemporario(), "nao-existe.md")).some((p) => p.startsWith("LAW-6c")));
+  const semData = ESCADA_OK.replace("the amendment of 2026-09-26 to that ADR", "some amendment");
+  assert.ok(checkLadder(semData, arquivo).some((p) => p.startsWith("LAW-6c")));
+});
+
+test("negativo: LAW-6d acusa a frase falsa de volta", () => {
+  const { arquivo } = comAdr("## Emenda de 2026-09-26 — x\n");
+  const comFrase = `${ESCADA_OK}\n\nThe four above it are the hierarchy of ADR-0007, unchanged and in the same order.`;
+  assert.ok(checkLadder(comFrase, arquivo).some((p) => p.startsWith("LAW-6d")));
+});
+
+test("negativo: fonte sem L0.1 e ACUSADA, nunca aceita em silencio", () => {
+  const { arquivo } = comAdr("## Emenda de 2026-09-26 — x\n");
+  const problemas = checkLadder("### L1.1 — Outra `[All]`\n", arquivo);
+  assert.equal(problemas.length, 1);
+  assert.match(problemas[0], /^LAW-6: L0\.1 nao encontrada/);
+});
+
+test("negativo: resolveAdr acusa zero e mais de um arquivo 0007", () => {
+  const vazio = diretorioTemporario();
+  assert.match(resolveAdr(vazio).problem, /^LAW-6c: esperado exatamente 1/);
+  const dois = diretorioTemporario();
+  writeFileSync(path.join(dois, "0007-a.md"), "x", "utf8");
+  writeFileSync(path.join(dois, "0007-b.md"), "x", "utf8");
+  assert.match(resolveAdr(dois).problem, /encontrados 2/);
+  assert.equal(resolveAdr(path.join(vazio, "nao-existe")).problem, `LAW-6c: diretorio de ADR nao encontrado: ${path.join(vazio, "nao-existe")}`);
+});
+
+test("a fonte REAL do repositorio passa na LAW-6", () => {
+  const leis = readFileSync(fileURLToPath(new URL("../shared/laws/execution-laws.md", import.meta.url)), "utf8");
+  const adr = resolveAdr(fileURLToPath(new URL("../docs/adr", import.meta.url)));
+  assert.equal(adr.problem, null, "o repositorio tem de ter exatamente um 0007-*.md");
+  assert.deepEqual(checkLadder(leis, adr.path), [],
+    "um verificador testado so contra amostra defeituosa prova que sabe falhar, nao que sabe passar");
 });

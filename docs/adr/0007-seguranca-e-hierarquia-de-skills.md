@@ -90,3 +90,54 @@ derivado e normalização para o formato MGR).
 - **Risco:** skill tentar inverter a hierarquia de autoridade em runtime — **Mitigação:**
   instrução de subordinação injetada na montagem de contexto (F1/F3) e rejeição na
   publicação/audit (F2).
+
+## Emenda de 2026-09-26 — o nível 2 inclui `docs/sdd/`, e a `L0.1` não era citação fiel
+
+Achado pelo gate de review isolado do PR #32 ("Lacuna B"), ancorado na `DOC-2` e confirmado por
+medição antes de ser aceito.
+
+1. **O nível 2 desta hierarquia inclui `docs/sdd/`, e não só `.mgr-core/` — RATIFICADO.** A Camada 3
+   nomeia `.mgr-core/`. Medido em 2026-09-26: `docs/sdd/CONSTITUTION.md` existe, e é ali que moram a
+   **constituição do projeto** e o **guia de review** — os dois documentos que dizem o que o projeto
+   exige. Nomear só `.mgr-core/` deixava a constituição do próprio projeto FORA do nível que existe
+   para proteger o projeto de instrução de terceiro, que é o oposto da intenção desta Camada 3. O
+   nível 2 lê-se, daqui em diante, como "as regras do projeto, onde elas estiverem escritas":
+   `.mgr-core/`, que é config sob controle do usuário, e `docs/sdd/`, que o método gera dentro do
+   projeto. A ordem dos quatro níveis e o conteúdo dos outros três não mudam.
+
+2. **A `L0.1` afirmava reproduzir esta hierarquia "unchanged and in the same order" — era FALSO desde
+   o dia em que foi escrito.** O parêntese e a frase de fidelidade entraram no MESMO commit,
+   `4826d6d`, de 2026-08-31, a fatia da fonte única das leis: a divergência nasceu com o arquivo. A
+   frase sai; em lugar dela, a `L0.1` declara o que o nível 2 contém e aponta para esta emenda.
+
+**O que esta emenda NÃO faz:**
+
+- **não cria degrau novo** e **não move nível nenhum.** A decisão 1 do ADR-0011 — *"Nenhum nível
+  existente muda de posição e nenhuma regra do ADR-0007 é relaxada — só se acrescenta abaixo"* —
+  continua verdadeira, e nada é relaxado: o nível 2 abriga MAIS documentos do projeto acima da
+  instrução de skill, nunca menos.
+- **não põe as leis de execução na escada.** Elas não são um nível: vinculam toda skill do MGR e, na
+  primeira pergunta — o que reprova —, já são subordinadas ao guia do projeto pela `L1.1`.
+- **não torna `CP-<n>` citável** (decisão 3 do ADR-0022) e não toca a `L1.1` nem a `L1.3`.
+- **não escreve nada em `docs/sdd/`.** Nenhum guia de projeto é reescrito e não há migração: o nível 2
+  ganha nome, não conteúdo novo.
+
+**Guarda:** `LAW-6` em `scripts/check-laws.mjs` — confere, estruturalmente, que a escada da `L0.1` tem
+cinco níveis na ordem declarada, que ela declara `"Conflicts resolve upward, always."`, que o nível 2
+nomeia os dois caminhos, que **a afirmação falsa que o item 2 acima corrige não volta** (a
+subconferência `LAW-6d`, que era a omissão apontada pelo gate isolado), e que a `L0.1` cita a data
+desta emenda com uma seção correspondente neste arquivo. **proved by:** as 12 mutações da seção 6.3 da spec, rodadas em 2026-09-26 — **todas vermelhas, todas
+revertidas verdes**. As sete que a `LAW-6` guarda foram medidas pelo comando que o CI roda
+(`npm run check:laws`), com o achado citado; as quatro de texto, pela guarda estrutural de cláusulas; e a
+12ª pela `LAW-2` mais a contagem de 47 leis. A mutação que apaga esta seção do ADR sai **exit 1** com
+`LAW-6c` — é ela que prende esta emenda à `L0.1` pela data.
+
+**Por que emenda e não ADR novo:** nenhuma decisão muda de direção. As quatro camadas seguem as mesmas,
+na mesma ordem, com o mesmo propósito; corrige-se uma afirmação de **fato** que era falsa, e ratifica-se
+o alcance de um nível que já estava em vigor e distribuído desde 2026-08-31. Além disso, um ADR novo
+criaria um SEGUNDO documento com autoridade sobre a mesma escada — e ter duas foi exatamente o que
+produziu este defeito.
+
+**A lição:** reunir uma regra numa fonte única é o ato em que ela mais facilmente deixa de ser fiel à
+origem — quem copia melhora o texto e continua chamando de cópia. Citação e decisão são coisas
+diferentes, e o parêntese a mais era uma decisão.

@@ -29,6 +29,46 @@ coding (not only at the end) and cited by the `code-analyzer` in reviews. Opt-in
    at install time). Generated file names and rule IDs (INV-/DES-/TST-/LOG-/MUT-/NAM-/QUAL-/
    JQ-/JS-) stay in English regardless of that language.
 
+### Security (SEC-*) — OWASP ASVS 5.0.0, CWE 4.20, OWASP Top 10:2025 (sources read 2026-10-01)
+
+> The requirement numbers are the **ASVS 5.0.0** ones (released May 2025), which renumbered the
+> chapters: `V1` is Encoding and Sanitization, not Architecture. The Top 10 reference is the
+> **2025** edition, where Injection is `A05`. Quoting a 4.0 chapter or a 2021 position points at
+> the wrong text. The Top 10 is used here to name the class; the requirement always comes from
+> the ASVS, and the CWE names the weakness.
+
+1. (SEC-1) Validate external input by POSITIVE validation — an allow list of values, patterns
+   and ranges, or a comparison against an expected structure and logical limits — and enforce it
+   at a trusted service layer (ASVS 5.0.0, V2.2.1 and V2.2.2). The source names two admissible
+   forms and no third: an allow list, or a comparison against an expected structure and logical
+   limits. The fail-fast duty itself is `QUAL-2`; this rule adds the FORM of the check and WHERE
+   it runs.
+2. (SEC-2) Compose file paths from internally generated or trusted data, never from an external
+   name; where an external filename or file metadata must be used, apply strict validation and
+   sanitization BEFORE composing the path. Server-side processing of an archive ignores the path
+   information carried in the input (ASVS 5.0.0, V5.3.2 and V5.3.3; CWE 4.20 CWE-22, path traversal — zip
+   slip is the same class).
+3. (SEC-3) Select data with parameterized queries, an ORM or an entity framework; never compose
+   a query (SQL, HQL, NoSQL, Cypher) by concatenating external data. Concatenation is a finding
+   unless the code shows the protection that replaces parameterization — V1.2.4 admits
+   "otherwise protected" (ASVS 5.0.0, V1.2.4; CWE 4.20 CWE-89; A05:2025 Injection).
+4. (SEC-4) Call the operating system with parameterized calls — separated arguments, not a
+   command line assembled as text — or with contextual command line OUTPUT encoding, which is
+   the second form the source admits, in its own words (ASVS 5.0.0, V1.2.5; CWE 4.20 CWE-78).
+5. (SEC-5) No credential, key material, API key, token or token seed written as a literal in
+   source or in a versioned file: it comes from external configuration (CWE 4.20 CWE-798, use of
+   hard-coded credentials; what counts as a secret is the enumeration in ASVS 5.0.0, V13.3.1).
+   The ASVS also requires a secrets management solution such as a key vault (V13.3.1) — that is
+   a project architecture premise, verified outside the artifact, and this rule does NOT charge
+   it in review.
+6. (SEC-6) Log sensitive data according to the data's protection level: some data, such as
+   credentials or payment details, may not be logged at all, while other data, such as session
+   tokens, may be logged only hashed or masked, in full or partially (ASVS 5.0.0, V16.2.5;
+   CWE 4.20 CWE-532; A09:2025). A blanket "never log sensitive data" is stricter than the source.
+7. (SEC-7) Return a generic message to the consumer when an unexpected or security-sensitive
+   error occurs: no stack trace, query, secret key or token in what the consumer receives
+   (ASVS 5.0.0, V16.5.1).
+
 ## Language profile (record only the project's one) — they reprove
 
 ### Java — VALIDATED (*Effective Java*, Joshua Bloch + Google Checkstyle)

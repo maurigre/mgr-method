@@ -205,9 +205,12 @@ NEVER embed architecture rules here — delegate:
    hand.
 4. Append to the guide the **Code quality** section from the source
    `_shared/quality/quality-rules.md` (co-located with the skills): the **Universal rules**
-   (`QUAL-`) and the project's **language profile** (canon idioms + lint — e.g. Java:
-   `JQ-`/`JS-`), with citable IDs. Applied by `spec-execute` while coding and by the
-   `code-analyzer` in review.
+   (`QUAL-` **and** `SEC-` — the whole section, every numbered item under it) and the
+   project's **language profile** (canon idioms + lint — e.g. Java: `JQ-`/`JS-`), with
+   citable IDs. The prefixes are named here as a reading aid, never as a filter: a family
+   added to Universal rules reaches the guide because the **section** is copied, and
+   enumerating by prefix is how `SEC-` would have been left out. Applied by `spec-execute`
+   while coding and by the `code-analyzer` in review.
 5. Record the choice in an ADR (via `adr-create`, invoked mode).
 6. Add a short **pointer section** stating that the WEIGHT of an anchored finding follows the project's
    origin, and that the norm itself is **L6.6** of the execution laws. Point to the law; never copy

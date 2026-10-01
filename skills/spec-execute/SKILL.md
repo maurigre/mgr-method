@@ -143,6 +143,22 @@ already states; here it has teeth.
 - Edit **fragments** instead of rewriting whole files; objective answers.
 - Do not repeat context already on disk; **one** log block per task, structured (no long
   prose).
+- **Record what each commission cost.** The harness returns the token count and the number of tool
+  calls when a commissioned agent finishes; that number reaches the orchestrator and nowhere else, so
+  it dies in the conversation unless it is written down. Append it to `05-execution.md` under a
+  `## Custo de comissão` heading, one row per commission, integers with no thousands separator:
+
+  ```markdown
+  | task | agente | modelo | esforço | tokens | chamadas |
+  |---|---|---|---|---|---|
+  | P0.1 | mgr-task | haiku | low | 30717 | 12 |
+  ```
+
+  A task marked `done` with no row is a gap, not a zero. When a task was done in the orchestrator
+  rather than commissioned, the harness returns no number for it: write an em dash (`—`) in **both**
+  `tokens` and `chamadas` — that is the declaration of absence, and the row still counts as present.
+  A `0` there would claim it was free. This records a number you already received; it adds no
+  requirement about what a task does.
 
 ## Active context control (throughout the execution)
 

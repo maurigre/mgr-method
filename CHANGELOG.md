@@ -4,6 +4,67 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 
 ## [Não lançado]
 ### Adicionado
+- **A família `SEC-*`: o revisor passou a ter texto citável para a exigência de segurança que o método
+  já fazia ao executor.** O `spec-execute` declara a premissa **Security** com cinco deveres nomeados —
+  validação na borda, query parametrizada, dado sensível mascarado em log, segredo fora do código, menor
+  privilégio. Medido em 2026-09-30: o guia de review tinha **zero** regra citável para qualquer um deles,
+  e como a `L1.1` proíbe reprovar sem excerto textual, **a premissa era inexequível por construção** — é
+  literalmente o que o `CP-4` chama de *"advice with the tone of an order"*.
+
+  **Sete regras, cada uma com a fonte NA PRÓPRIA REGRA**, e as fontes foram **lidas**, não recordadas:
+  **OWASP ASVS 5.0.0** (maio de 2025), **CWE 4.20** e **OWASP Top 10:2025**. A leitura corrigiu dois
+  erros que a memória teria cometido: o Top 10 está na edição **2025**, onde Injection é **`A05`** e não
+  `A03`; e o ASVS 5.0.0 **renumerou os 17 capítulos** — `V1` é *Encoding and Sanitization*, não
+  Arquitetura. Citar um capítulo da 4.0 aponta para o texto errado.
+
+  `SEC-1` validação positiva por allow list ou estrutura esperada, em camada confiável · `SEC-2` caminho
+  de arquivo composto de dado interno ou validado, nunca de nome externo · `SEC-3` consulta
+  parametrizada, nunca concatenada · `SEC-4` chamada ao sistema com argumentos separados · `SEC-5`
+  nenhum segredo literal no fonte · `SEC-6` log de dado sensível **conforme o nível de proteção do
+  dado** · `SEC-7` mensagem genérica ao consumidor em erro inesperado.
+
+  **O `SEC-6` mostra por que ler a fonte importa:** o requisito `16.2.5` **não** proíbe logar todo dado
+  sensível — ele condiciona ao nível de proteção, e diz que token de sessão pode ser logado *"hashed or
+  masked, in full or partially"*. Uma regra dizendo *"nunca logue dado sensível"* seria **mais estrita
+  que a fonte**, e inventar rigor é tão errado quanto inventar frouxidão.
+
+  **Duas classes NÃO viraram regra, com a razão escrita.** *Dependência com vulnerabilidade conhecida*
+  é **gate**, não reprovação de review: o `15.1.1` e o `15.2.1` do ASVS falam de **prazo documentado** e
+  de **inventário (SBOM)**, logo a verificação depende de banco externo e de relógio — nada disso está no
+  diff, e o gate já existe no CI (`npm audit --audit-level=high`). *Menor privilégio* **não entra**: o
+  ASVS o situa em decisão de autorização sobre consumidores e em acesso a ativos de segredo, que são
+  propriedades de configuração e execução, não do texto do diff.
+
+- **O manifesto passou a validar a forma do nome que ele entrega a uma remoção recursiva.** Medida uma
+  assimetria dentro da própria casa: o `src/lockfile.js` valida a forma do nome **na leitura**, com um
+  comentário que declara o risco — *"um lockfile adulterado com `dir` malicioso alcançaria rmSync/write
+  fora da pasta do motor"* — e o `src/manifest.js` recebia **a mesma classe de entrada sem validação
+  nenhuma**, com o nome dali chegando a `path.join` e a `rmSync(p, { recursive: true, force: true })` em
+  `src/installer.js`. **Mesmo risco, mesma casa, meia defesa.**
+
+  O `readManifest` passa a recusar, **antes de devolver**, e o regex vira **fonte única exportada** do
+  lockfile — dois regexes para a mesma forma divergiriam em silêncio. Ausência de manifesto e ausência
+  do campo `skills` continuam estados legítimos. **O `mgr doctor` continua produzindo relatório para
+  nome inválido**: ele não passa por essa leitura, e o diagnóstico não pode morrer quando a instalação
+  recusa. **Limite medido e declarado:** com `skills` em forma **não-array** o `diagnose` morre em
+  `src/doctor.js:81` (`declared.filter`), defeito **pré-existente** de outra superfície — a correção
+  do manifesto não o introduz nem o conserta.
+
+  **Alcance medido antes de decidir:** das 9 chamadas de `readManifest` em 5 arquivos, lançar é **o
+  objetivo** no `migrateOld` (é a que leva o nome ao `rmSync`), desejável no `uninstall` e no `update`,
+  neutro em quatro consultas, e o único ponto sensível — o hook de precompact — **já estava protegido**
+  por decisão anterior e documentada.
+
+  **Censo de regras: 122 → 129**, travado no mesmo diff pela conferência `RUL-4`, porque regra não entra
+  nem sai em silêncio.
+
+  **Quatro limites declarados:** o campo `trusted`, gravado na configuração de registry e **nunca lido**
+  pelo download, é defeito real de outra superfície e fica como fatia própria · o `skillsDirs` **não é
+  fechável por validação de forma** — `mgr install --skills-dir /tmp/x` grava um caminho relativo
+  legítimo, e uma regra de contenção reprovaria manifesto que o próprio método escreve · guia já gerado
+  não recebe a família nova sem regenerar · e a máquina confere **forma**, nunca onde a evidência de uma
+  cláusula mora.
+
 - **O método exigia do executor quatro coisas que o revisor não tinha como cobrar, e agora existe o
   critério que decide quando uma regra reprova.** Medido em 2026-09-30, premissa por premissa: o
   `spec-execute` exige **Segurança**, **Performance**, **Uso de recursos** e **SOLID/padrões**, e a

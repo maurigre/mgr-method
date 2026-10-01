@@ -12,7 +12,10 @@ export const lockfilePath = (repo) => path.join(repo, LOCKFILE_NAME);
 // Forma válida da pasta instalada: kebab da skill + sufixo "--<registry>" opcional (Q1).
 // O checksum protege os ARQUIVOS da skill, não este campo — um lockfile adulterado com
 // "dir" malicioso alcançaria rmSync/write fora da pasta do motor; daí validar na leitura.
-const INSTALL_DIR_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*(?:--[a-z0-9]+(?:-[a-z0-9]+)*)?$/;
+// EXPORTADO porque o `readManifest` valida a MESMA forma: o nome em `manifest.skills` é
+// concatenado ao diretório de skills do motor e removido, logo é um diretório instalado. Dois
+// regexes para a mesma forma divergiriam em silêncio (CONSTITUTION §3.5, defeito D2).
+export const INSTALL_DIR_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*(?:--[a-z0-9]+(?:-[a-z0-9]+)*)?$/;
 
 // `replaces` guarda o nome CURTO da skill do metodo substituida (ADR-0008): skill do
 // metodo nao tem scope nem sufixo de registry. Campo opcional — ausencia significa

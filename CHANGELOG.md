@@ -4,6 +4,49 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 
 ## [Não lançado]
 ### Adicionado
+- **O método exigia do executor quatro coisas que o revisor não tinha como cobrar, e agora existe o
+  critério que decide quando uma regra reprova.** Medido em 2026-09-30, premissa por premissa: o
+  `spec-execute` exige **Segurança**, **Performance**, **Uso de recursos** e **SOLID/padrões**, e a
+  busca no guia de review deste repositório devolve **zero** regra citável para qualquer uma das
+  quatro. Como a `L1.1` proíbe reprovar sem citação textual, as quatro exigências eram
+  **inexequíveis por construção** — e é literalmente o que o `CP-4` chama de "advice with the tone of
+  an order". Escrever as famílias de regras sem o critério antes repetiria o defeito ao contrário: o
+  método passaria a reprovar com número inventado, que ele proíbe em três lugares.
+
+  **O que entra:** a seção **Rule force** em `shared/arch/cross-cutting-rules.md`, que restringe quem
+  **escreve** uma regra e **não é montada no guia de projeto** — critério sobre regras não é regra
+  sobre código, e não é citável numa review. A unidade classificada é a **cláusula**, não o
+  identificador (a `QUAL-6` carrega quatro cláusulas de naturezas diferentes). São **duas** forças, e
+  a que reprova tem **duas formas** — dever com identificador, e configuração proibida sem
+  identificador sob seção de anti-pattern. Um **gate** não é alcançado pelo critério e **pode** exigir
+  número e limiar: candidato que só funciona com medição é candidato a gate.
+
+  **A correção do eixo, e ela veio de contraexemplo em disco.** A primeira redação dizia que uma
+  regra só é obrigatória quando a violação é visível "sem medição". As `DES-5` e `DES-6` exigem
+  *"100% cohesive: every method uses every attribute"* — carregam número e são citáveis. O eixo certo
+  é **onde a evidência mora**: dentro do artefato em review (diff, código, testes, spec) reprova;
+  fora dele (instrumento que precisa rodar, profiler, benchmark, medição de produção) não reprova e
+  vira Good Practice que diz o que falta. Com esse eixo, **nenhuma das 122 regras das seis fontes
+  muda de força** — a `QUAL-3`, a `QUAL-4`, as cláusulas de grau da `QUAL-6` e a `TST-4` seguem
+  reprovando, e não houve ADR de remoção.
+
+  **Duas afirmações falsas corrigidas.** O cabeçalho das Good Practices e a skill `arch-hexagonal`
+  diziam que o `spec-init` "oferece e confirma com o time" cada boa prática; medido em 2026-09-30,
+  **esse passo não existe** na skill. As duas superfícies foram corrigidas juntas, e a frase antiga
+  fica citada dentro da oração que a declara falsa, como registro.
+
+  **A guarda:** as conferências `RUL-1` a `RUL-5` no `check:laws`, que travam o conjunto **ordenado**
+  de cabeçalhos das fontes, a frase de força de cada seção, a presença de identificador conforme a
+  força, o **censo de 122 identificadores** nas seis fontes (contagem, lacuna, duplicata, prefixo
+  desconhecido e extração vazia) e a proibição de a seção de autoria ser montada no guia. A fatia que
+  acrescentar uma família **tem** de atualizar a linha-base no mesmo diff: regra não entra nem sai em
+  silêncio.
+
+  **Quatro limites declarados.** Instalação **sem skill de arquitetura** não recebe o critério, porque
+  ele mora na fonte transversal; o **passo de entrevista** que oferece Good Practices não existe e é
+  fatia própria; **guia já gerado não é reconciliado** por esta fatia; e a máquina confere **forma**,
+  nunca o eixo — decidir onde a evidência mora segue sendo leitura humana.
+
 - **A origem do projeto passou a ser um fato gravado, e o peso de um achado passa a depender dela.**
   O método tratava todo projeto como se ele tivesse nascido do método: um repositório com dez anos de
   código recebia a mesma review, com o mesmo peso, que um projeto iniciado ontem. O `spec-init` já

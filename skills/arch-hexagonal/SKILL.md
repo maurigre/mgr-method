@@ -77,7 +77,8 @@ Beyond the cross-cutting anti-patterns, these reprove in this architecture:
 ## Convention and enforcement — Java (VALIDATED)
 
 Name/package convention and ArchUnit ruleset validated for Hexagonal in Java (it is an
-opt-in **Good Practice**: `spec-init` offers it and confirms with the team). Other
+opt-in **Good Practice**: it does not reprove, and it applies only where the project recorded the
+adoption — in the plan or in an ADR). Other
 languages **adapt** — translate the `INV` into the profile's arch-lint tool (see
 "Enforcement governance" in the cross-cutting Good Practices):
 `[ADAPTED — validate with the team]`.

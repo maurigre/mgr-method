@@ -38,7 +38,7 @@ jobs:
         run: npm audit --audit-level=high
 
       - run: node bin/mgr.js validate
-      - name: Verifica as fontes unicas de leis e de primicias (ADR-0011, ADR-0022)
+      - name: Verifica as fontes unicas de leis, de primicias e de regras (ADR-0011, ADR-0022)
         run: npm run check:laws
 
       # O mesmo script que o .githooks/pre-commit roda. Ele esta nos DOIS lugares de proposito:

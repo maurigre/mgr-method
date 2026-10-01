@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { CHARTER_TOKEN, CORE_ROLES, LAWS_TOKEN, SHARED_TREE_NAME, checkCharter, checkCharterResolved, checkLadder, checkLaws, checkResolved, parseCharter, parseLaws, resolveAdr } from "../scripts/check-laws.mjs";
+import { CHARTER_TOKEN, CORE_ROLES, LAWS_TOKEN, SHARED_TREE_NAME, checkCharter, checkCharterResolved, checkLadder, checkLaws, checkResolved, parseCharter, parseLaws, resolveAdr, parseSections, checkRuleForce, checkIdCensus, extractDefinedIds, checkSkillRuleForceReferences, RULE_SOURCES, ID_BASELINE } from "../scripts/check-laws.mjs";
 import { existsSync } from "node:fs";
 import { SHARED_DIR, LAWS_INSTALLED } from "../src/catalog.js";
 
@@ -330,4 +330,165 @@ test("a fonte REAL do repositorio passa na LAW-6", () => {
   assert.equal(adr.problem, null, "o repositorio tem de ter exatamente um 0007-*.md");
   assert.deepEqual(checkLadder(leis, adr.path), [],
     "um verificador testado so contra amostra defeituosa prova que sabe falhar, nao que sabe passar");
+});
+
+test("shouldPassAllRulesOnRealSixSourcesWithZeroFindings", () => {
+  const raiz = fileURLToPath(new URL("..", import.meta.url));
+  const problems = [];
+
+  const archRulesPath = path.join(raiz, "shared", "arch", "cross-cutting-rules.md");
+  assert.ok(existsSync(archRulesPath), "source file must exist");
+  const archRulesText = readFileSync(archRulesPath, "utf8");
+  problems.push(...checkRuleForce(parseSections(archRulesText), RULE_SOURCES["shared/arch/cross-cutting-rules.md"]));
+  problems.push(...checkIdCensus(archRulesText, ID_BASELINE["shared/arch/cross-cutting-rules.md"], archRulesPath));
+
+  const qualityRulesPath = path.join(raiz, "shared", "quality", "quality-rules.md");
+  assert.ok(existsSync(qualityRulesPath), "source file must exist");
+  const qualityRulesText = readFileSync(qualityRulesPath, "utf8");
+  problems.push(...checkRuleForce(parseSections(qualityRulesText), RULE_SOURCES["shared/quality/quality-rules.md"]));
+  problems.push(...checkIdCensus(qualityRulesText, ID_BASELINE["shared/quality/quality-rules.md"], qualityRulesPath));
+
+  for (const [file, baseline] of Object.entries(ID_BASELINE)) {
+    if (file.startsWith("skills/arch-")) {
+      const skillPath = path.join(raiz, file);
+      assert.ok(existsSync(skillPath), `skill file must exist: ${skillPath}`);
+      problems.push(...checkIdCensus(readFileSync(skillPath, "utf8"), baseline, skillPath));
+    }
+  }
+
+  problems.push(...checkSkillRuleForceReferences(path.join(raiz, "skills")));
+
+  assert.deepEqual(problems, [], "real six sources must pass all RUL-1..RUL-5");
+});
+
+test("shouldParseHeadersWithIrregularSpacing", () => {
+  const text = [
+    "##   Rule force",
+    "body line",
+    "##    Mandatory rules",
+    "item line",
+  ].join("\n");
+
+  const sections = parseSections(text);
+  assert.equal(sections.length, 2);
+  assert.equal(sections[0].title, "##   Rule force");
+  assert.equal(sections[1].title, "##    Mandatory rules");
+});
+
+test("shouldCountCitationAsOneNotTwo", () => {
+  const text = "1. (TEST-1) First item\n2. (TEST-2) Cites (TEST-1) in the middle\n   and (TEST-1) again\n";
+  assert.deepEqual(extractDefinedIds(text), ["TEST-1", "TEST-2"], "citation in body should not create duplicate extraction");
+});
+
+test("shouldReproveItemWithoutIdUnderReproving", () => {
+  const text = "## Mandatory rules (they reprove in review)\n\n1. No ID here\n2. (TEST-1) Has ID\n";
+  const sections = parseSections(text);
+  const problems = checkRuleForce(sections, [{ title: "## Mandatory rules (they reprove in review)", force: "reprove" }]);
+  assert.ok(problems.some((p) => p.startsWith("RUL-3")), "item without ID under reprove section should fail");
+});
+
+test("shouldReproveItemWithIdUnderNonReproving", () => {
+  const text = "## Good Practices (they do not reprove — opt-in)\n\n1. (TEST-1) Has ID\n";
+  const sections = parseSections(text);
+  const problems = checkRuleForce(sections, [{ title: "## Good Practices (they do not reprove — opt-in)", force: "no-reprove" }]);
+  assert.ok(problems.some((p) => p.startsWith("RUL-3")), "item with ID under no-reprove section should fail");
+});
+
+test("shouldReproveExtraSection", () => {
+  const text = "## Section 1\n\n## Section 2\n\n## Section 3\n";
+  const sections = parseSections(text);
+  const problems = checkRuleForce(sections, [
+    { title: "## Section 1", force: "reprove" },
+    { title: "## Section 2", force: "reprove" },
+  ]);
+  assert.ok(problems.some((p) => p.startsWith("RUL-1")), "extra section should fail");
+});
+
+test("shouldReproveMissingSection", () => {
+  const text = "## Section 1\n";
+  const sections = parseSections(text);
+  const problems = checkRuleForce(sections, [
+    { title: "## Section 1", force: "reprove" },
+    { title: "## Section 2", force: "reprove" },
+  ]);
+  assert.ok(problems.some((p) => p.startsWith("RUL-1")), "missing section should fail");
+});
+
+test("shouldReproveWrongOrder", () => {
+  const text = "## Section 2\n\n## Section 1\n";
+  const sections = parseSections(text);
+  const problems = checkRuleForce(sections, [
+    { title: "## Section 1", force: "reprove" },
+    { title: "## Section 2", force: "reprove" },
+  ]);
+  assert.ok(problems.some((p) => p.startsWith("RUL-1")), "wrong section order should fail");
+});
+
+test("shouldReproveDuplicateSection", () => {
+  const text = "## Same\n\n## Same\n";
+  const sections = parseSections(text);
+  const problems = checkRuleForce(sections, [
+    { title: "## Same", force: "reprove" },
+    { title: "## Same", force: "reprove" },
+  ]);
+  assert.ok(problems.length > 0 && problems.some((p) => p.startsWith("RUL-1")), "duplicate section should fail");
+});
+
+test("shouldReproveMissingTheyReprovePhrase", () => {
+  const text = "## Mandatory rules (no phrase)\n";
+  const sections = parseSections(text);
+  const problems = checkRuleForce(sections, [{ title: "## Mandatory rules (they reprove in review)", force: "reprove" }]);
+  assert.ok(problems.some((p) => p.startsWith("RUL-2")), "missing 'they reprove' should fail");
+});
+
+test("shouldReproveMissingDoNotReprovePhrase", () => {
+  const text = "## Good Practices (no phrase)\n";
+  const sections = parseSections(text);
+  const problems = checkRuleForce(sections, [{ title: "## Good Practices (they do not reprove)", force: "no-reprove" }]);
+  assert.ok(problems.some((p) => p.startsWith("RUL-2")), "missing 'do not reprove' should fail");
+});
+
+test("shouldReproveUnknownPrefix", () => {
+  const text = "1. (UNKNOWN-1) Item\n";
+  const problems = checkIdCensus(text, { total: 1, prefixes: { KNOWN: 1 } }, "test-file");
+  assert.ok(problems.some((p) => p.startsWith("RUL-4") && p.includes("prefixo desconhecido")), "unknown prefix should fail");
+});
+
+test("shouldReproveSourceWithoutAnyNumberedItem", () => {
+  const problems = checkIdCensus("Just prose, no numbered items\n", { total: 1, prefixes: { TEST: 1 } }, "test-file");
+  assert.ok(problems.some((p) => p.startsWith("RUL-4") && p.includes("extração vazia")), "source without any numbered item is a finding");
+});
+
+test("shouldNotReproveEmptyExtractionWhenTheBaselineIsZero", () => {
+  const problems = checkIdCensus("Just prose\n", { total: 0, prefixes: {} }, "test-file");
+  assert.deepEqual(problems, [], "an empty extraction against a zero baseline is not a finding");
+});
+
+test("shouldReproveAbsentSource", () => {
+  const problems = checkSkillRuleForceReferences(path.join(mkdtempSync(path.join(os.tmpdir(), "mgr-rul5-")), "vazio"));
+  assert.equal(problems.length, 4, "the four declared arch skills must each be reported as absent");
+  for (const problem of problems) {
+    assert.match(problem, /^RUL-5 arch-(clean|hexagonal|onion|layered): SKILL\.md não encontrado/);
+  }
+});
+
+test("shouldReproveDuplicatedId", () => {
+  const problems = checkIdCensus("1. (TEST-1) First\n2. (TEST-1) Same id again\n", { total: 2, prefixes: { TEST: 2 } }, "test-file");
+  assert.ok(problems.some((p) => p.startsWith("RUL-4") && p.includes('ID duplicado "TEST-1"')), "a repeated id is a finding");
+});
+
+test("shouldReproveBaselineWhoseTotalDisagreesWithItsPrefixes", () => {
+  const problems = checkIdCensus("1. (TEST-1) First\n", { total: 9, prefixes: { TEST: 1 } }, "test-file");
+  assert.ok(problems.some((p) => p.startsWith("RUL-4") && p.includes("linha-base incoerente")), "a baseline whose total disagrees with its prefixes is a finding");
+});
+
+test("shouldReproveDeclaredNoReproveSectionWithoutTheForcePhrase", () => {
+  const problems = checkRuleForce(parseSections("## Good Practices (opt-in)\n"), [{ title: "## Good Practices (opt-in)", force: "no-reprove" }]);
+  assert.ok(problems.some((p) => p.startsWith("RUL-2") && p.includes("declared section")), "a declaration with force no-reprove must carry the phrase");
+});
+
+test("shouldReproveItemWithIdUnderASectionWithoutForce", () => {
+  const text = "## Checklist (AI guard-rails)\n\n1. (TEST-1) Has ID\n";
+  const problems = checkRuleForce(parseSections(text), [{ title: "## Checklist (AI guard-rails)", force: "none" }]);
+  assert.ok(problems.some((p) => p.startsWith("RUL-3")), "a section with no force must not carry an identifier");
 });

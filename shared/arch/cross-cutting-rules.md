@@ -17,6 +17,85 @@ in its Principles, the concrete names of its rings/layers.
 > profiles are adaptations to validate with the team. Canonical source for the
 > `code-analyzer` textual citations.
 
+## Rule force (authoring criterion — not assembled into the project guide)
+
+This section constrains whoever **writes** a rule in this source and in the architecture sources it
+is assembled with — the `arch-*` skills, where the `INV-*` invariants are defined and which the same
+census locks. It is **not** copied into a
+project's `docs/sdd/09-review-rules.md`, and it is **not** citable in a review: `L1.1` admits only
+the guide rule or the spec line, and a criterion about rules is not a rule about code. It descends
+from `CP-4` (a demand reaches both sides or it is not a demand) and `CP-6` (only a consolidated,
+confirmed standard becomes a rule).
+
+**The unit classified is the CLAUSE, not the identifier.** One numbered rule may carry clauses of
+different force: `QUAL-6` carries four — "no dead code", "no duplication", "no ambiguous boolean
+parameter", "no excess of parameters" — and they are not the same kind of claim. `L1.1` already
+requires the violated **excerpt** to be quoted and never the identifier, so the clause always was
+the real unit of a reproval. Classify clause by clause. Where a candidate mixes forces, the clauses
+that reprove stay in the mandatory rule and the others are written as Good Practices.
+
+**The test is WHERE THE EVIDENCE LIVES, not whether the clause carries a number.**
+
+- Evidence **inside the artifact under review** — the diff, the code around it, the tests, the
+  spec, and any code the reviewer can read to settle it, a caller elsewhere in the repository
+  included — the clause **may** reprove. It is decided by reading, and the reviewer quotes what they
+  read. Carrying a number does not disqualify it: `DES-5` and `DES-6` demand "100% cohesive: every
+  method uses every attribute", and that number is **counted in the code**.
+- Evidence **outside the artifact** — an instrument that has to be run, an execution, a production
+  measurement, a profiler, a benchmark, a load test — the clause **does not reprove**. It is
+  written as a Good Practice, and its text says what is missing for it to reprove: which instrument
+  would produce the evidence, and against which threshold.
+
+Reaching the verdict by reading code and tests is **inside**. `TST-4` ("Use MC/DC as the
+decision-coverage criterion") requires enumerating the conditions of a decision and checking that
+each one varies independently, and that is done by reading. That a tool can also compute it does
+not move the evidence outside.
+
+**Two forces, and the force that reproves has two forms. There is no third level.**
+
+1. **It reproves.** Either as a **duty with an identifier** — a numbered item under a section whose
+   header says it reproves, written as `(PREFIX-n)`, which is the form the guide preserves — or as a
+   **forbidden configuration without an identifier**, under an anti-pattern section whose header
+   also says it reproves, cited by section name plus the quoted text. Both are citable under
+   `L1.1`, which demands the excerpt and not the identifier.
+2. **It does not reprove.** Good Practices: opt-in, no identifier, and the text says what is
+   missing for it to reprove.
+
+What tells a reader which force applies is **the title of the section the clause sits in**. Never
+move a clause between sections without moving the force with it.
+
+**A gate is not reached by this criterion, and a gate MAY demand a number and a threshold.** A gate
+measures instead of judging: the project configures it, it runs in the command and in CI, and it
+breaks the build. `--test-coverage-lines=95`, `npm audit --audit-level=high`, a JaCoCo threshold and
+a PITest threshold are legitimate, and nothing here restricts them. This criterion refuses exactly
+one thing: a number inside a **citable rule**, charged in review with no instrument to produce it.
+A candidate that only works with a measurement is **a candidate for a gate**, and routing it there
+is the answer — not a weaker mandatory rule. The two destinations are one answer and not a choice:
+the Good Practice **records** the clause and says which instrument is missing, and the gate is where
+that instrument, once it exists, **enforces** it.
+
+**An ambiguous candidate is never decided by plausibility.** If it is not clear where the evidence
+lives, write `[TO DEFINE]` plus the question and ask (`L1.5`, `L1.6`). "It reads like a rule" and
+"it sounds reasonable" decide nothing here.
+
+**The `## Checklist` section is outside this classification, deliberately.** It creates no norm: it
+addresses whoever **generates** code and restates rules that already exist, by their identifiers
+(`DES-2`, `DES-4/5/6`, `DES-7`, `DES-10`, `TST-1`, `TST-2`, `TST-5`, `NAM-1`, `NAM-2`). A reproval
+cites the rule, never the checklist.
+
+**No rule already written here changed force when this section was added** (2026-09-30). Applying
+the test above: `QUAL-3` ("a real need"), `QUAL-4` ("small"), the degree clauses of `QUAL-6` and
+`TST-4` all have their evidence inside the artifact, so they keep reproving. Reclassifying a rule in
+force is a degradation under `CP-2` and requires an ADR.
+
+**Provenance.** `[author]`, decision D3 of the G1 kickoff, 2026-09-30, amended the same day by the
+measurement that produced this text: the first wording said a rule is mandatory only when the
+violation is visible "without measurement", and `DES-5`/`DES-6` are a counterexample on disk — they
+carry "100%" and are citable. The sources are internal, named and dated: `CP-4`, `CP-6`, `L1.1`,
+`L1.3`, ADR-0021 (inferring produced a false positive **and** a false negative) and the sweep of the
+48 rules of this repository's guide on 2026-09-30. There is no external canon on when an internal
+norm should reprove; inventing one would break `CP-6`.
+
 ## Mandatory rules (they reprove in review)
 
 ### Design for Object-Oriented code
@@ -177,7 +256,18 @@ and fill each slot with the language's idiom:
 6. (GEN-6) Immutability and valid state via the idiomatic construct (record/data class/struct/
    value object).
 
-## Good Practices (do not reprove — opt-in; spec-init offers and confirms with the team)
+## Good Practices (they do not reprove — opt-in, adopted per project)
+
+> **How a project adopts one, and what does NOT exist.** These reach a project through the
+> assembled guide, under a section whose title declares that they do not reprove — in the guide of
+> this repository it reads `## Boas Práticas (não reprovam — opt-in)`. **The title is what keeps
+> them out of a reproval**, so never move a clause between sections without moving the force with
+> it. Adoption is recorded where the project records decisions: the plan or an ADR (item 1 below
+> already shows the shape, `archunit: true`). **There is no interview step that offers these one by
+> one and asks the team to confirm.** Until 2026-09-30 this header claimed `spec-init` "offers and
+> confirms with the team"; measured that day, no such step exists in that skill — the only mention
+> there is the assembly instruction. Building the step is a slice of its own. Claiming it while it
+> does not exist is what `DOC-2` reproves.
 
 1. **Automated enforcement of the dependency direction** — each profile's arch-lint tools
    (ArchUnit, go-arch-lint/depguard, import-linter, NetArchTest, dependency-cruiser).

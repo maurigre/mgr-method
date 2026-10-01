@@ -9,6 +9,10 @@ coding (not only at the end) and cited by the `code-analyzer` in reviews. Opt-in
 > NOT catch, e.g. `Optional` as a parameter) and **style/lint** (formatting/naming — Checkstyle,
 > ruff, eslint…).
 
+> Force of a clause (which section a candidate rule enters): the section **Rule force** of the
+> cross-cutting rules source — `../arch/cross-cutting-rules.md`, installed alongside an
+> architecture skill. Written once, there; never restated here.
+
 ## Universal rules (language-agnostic) — they reprove
 
 1. (QUAL-1) Do not return null as a sentinel in business logic; use an explicit or empty type
@@ -25,7 +29,7 @@ coding (not only at the end) and cited by the `code-analyzer` in reviews. Opt-in
    at install time). Generated file names and rule IDs (INV-/DES-/TST-/LOG-/MUT-/NAM-/QUAL-/
    JQ-/JS-) stay in English regardless of that language.
 
-## Language profile (record only the project's one)
+## Language profile (record only the project's one) — they reprove
 
 ### Java — VALIDATED (*Effective Java*, Joshua Bloch + Google Checkstyle)
 

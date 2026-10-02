@@ -120,6 +120,56 @@ norm should reprove; inventing one would break `CP-6`.
     `obj`). Exceptions: short loop indices (`i`, `j`) and single-expression lambda
     parameters. (author's extension)
 
+### Design discipline (PAT-*, MNT-*) — this method's laws, CWE 4.20 / CISQ (read 2026-10-02)
+
+A threshold below is reproduced **as its source states it**: CISQ presents it as a recommended
+default that varies by product, never as an absolute limit. **Where a rule defers a number to
+the project, the place that declares it is the project's own guide** —
+`docs/sdd/09-review-rules.md`, in the section this family is assembled into; absent a number
+there, the source's default applies.
+
+1. (PAT-1) A pattern, a resilience layer or an abstraction that the change introduces cites
+   its evidence of need — a spec requirement, a measured bottleneck or a real failure — in the
+   spec, the plan or the execution log. "Might be useful someday" is not evidence (`L4.7` of
+   the execution laws, and the sovereign discipline of `spec-execute`: "Patterns, resilience
+   layers and abstractions come in ONLY with evidence of need"). **This is not `DES-10`.**
+   `DES-10` reproves the shape — an indirection whose purpose nobody can state. `PAT-1`
+   reproves the missing evidence for structure that **has** a clear purpose and never had a
+   demonstrated need: a retry layer has an obvious purpose, and on a path with no network call
+   the need was never shown. **What is cited is an artifact, never the reviewer's opinion
+   about necessity** — a reviewer who merely suspects it raises a non-blocking suggestion
+   (`L1.3`).
+2. (MNT-1) A parent class does not reference a child class, its methods or its members; the
+   source words it as "The code has a parent class that contains references to a child class,
+   its methods, or its members" (CWE 4.20 CWE-1062, ChildOf Insufficient Encapsulation). MITRE
+   marks that CWE as prohibited for mapping a real vulnerability, "primarily a quality issue
+   with no direct security implications" — which is exactly the use here, because CISQ curates
+   it as a quality measure.
+3. (MNT-2) Modules do not have circular dependencies: "one module has references that cycle
+   back to itself", and the source gives "cycles between packages" as the example (CWE 4.20
+   CWE-1047, ChildOf Excessive Code Complexity). Automated enforcement is a Good Practice
+   (arch-lint); this rule reproves the cycle a reader can follow inside the change.
+4. (MNT-3) A class does not exceed the inheritance depth the project declares, or, where the
+   project declared none, the default the source recommends. The source conditions that
+   number: "While the interpretation of 'large number of parent classes' may vary for each
+   product or developer, CISQ recommends a default maximum of 7 parent classes" (CWE 4.20
+   CWE-1074). The depth is **counted by reading the hierarchy**, which is why this reproves at
+   all. **At or below the applicable number it does not reprove** — a reviewer who still finds
+   the hierarchy too deep raises a non-blocking suggestion (`L1.3`), because "deep enough to
+   bother me" is not in the source. For Java the language profile already carries `JQ-3`
+   (Effective Java, Item 18, favour composition over inheritance); this rule is the
+   language-agnostic form of the same concern, not a second opinion on it.
+
+**What this family does NOT cover, and the reason is recorded rather than hidden.** The
+open-closed principle, Liskov substitution and interface segregation have **no rule here**.
+The primary source is Robert C. Martin's own paper, and in the slice that wrote this family it
+**could not be read** — the host answered 429, the archive was unreachable. A sentence quoted
+from a secondary blog is not a read source, and this method does not cite what it has not
+read. A reviewer who finds a violation of those three raises a non-blocking suggestion
+(`L1.3`), never a reproval. The other two letters are already covered: single responsibility
+by `DES-4`/`DES-5`/`DES-6` and `QUAL-4`, dependency inversion by the `INV-*` of the
+architecture skills.
+
 ### Test standards
 
 1. (TST-1) Prioritize the real versions of objects.

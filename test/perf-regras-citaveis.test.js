@@ -1,22 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import {
   parseSections,
   extractDefinedIds,
   checkIdCensus,
   ID_BASELINE,
 } from "../scripts/check-laws.mjs";
-
-const fontePresente = (caminho) => {
-  const existe = existsSync(caminho);
-  if (!existe) {
-    console.error(
-      `[declarado] ${caminho} ausente (specs/ e gitignored): este caso NAO foi conferido nesta execucao`,
-    );
-  }
-  return existe;
-};
+import { fontePresente } from "./helpers/fonte-presente.js";
 
 test("shouldCountThirtyOneIdsWithPerfContiguousFromOneToFive", () => {
   const conteudo = readFileSync(
@@ -108,7 +99,7 @@ test("shouldKeepTheTwoGoodPracticesWithoutAnyRuleIdentifier", () => {
   );
 
   const ids = extractDefinedIds(conteudo);
-  assert.equal(ids.length, 75);
+  assert.equal(ids.length, ID_BASELINE["shared/arch/cross-cutting-rules.md"].total);
 
   const inicio = conteudo.indexOf("5. **Query that cannot use an index**");
   const fimReferencia = conteudo.indexOf("## Cross-cutting anti-patterns");

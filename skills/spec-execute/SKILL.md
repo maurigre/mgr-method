@@ -104,6 +104,23 @@ Say in the log which of the three paths you used. **The agent cannot see this co
 decision taken out loud and never written to disk does not reach it. This is the same rule L2.1
 already states; here it has teeth.
 
+**When the plan does NOT declare the exact artifact, the task is not closed work** — the premise
+above fails, and the agent is being asked to decide rather than to build. Either sharpen the plan
+until it declares the artifact, or do the task here and say so in the log. **In doubt, commission**:
+commissioning too little costs reasoning, commissioning too much costs tokens, and reasoning is the
+one thing this method will not trade away.
+
+**Write down which of the two it was, in the plan, before you commission.** The commission is
+`forma` when the plan gives that task's exact artifact — the exact text, signature or line — and
+`decisao` when a choice is left open, and the cost record carries that column next to the tokens. Declaring it at planning
+time is what makes it evidence: the same call made afterwards, by whoever wants the answer, is not
+a measurement of anything. **What the two cost is not established here** — these records exist so
+that it can be, and this file claims no factor until they say one.
+
+**The validation gate is outside this criterion.** Sending the review to `code-analyzer` is
+delegation for **correctness** (`L6.2`), never for cost: the window that wrote an artifact is the
+worst auditor of it. Cost never decides whether the gate runs.
+
 ## Execution (real-time log in `05-execution.md`)
 
 - Respect the DAG: a task only starts with its `depends_on` completed; order P0 → P1 → P2.
@@ -149,9 +166,10 @@ already states; here it has teeth.
   `## Custo de comissão` heading, one row per commission, integers with no thousands separator:
 
   ```markdown
-  | task | agente | modelo | esforço | tokens | chamadas |
-  |---|---|---|---|---|---|
-  | P0.1 | mgr-task | haiku | low | 30717 | 12 |
+  | task | agente | modelo | esforço | tokens | chamadas | determinado | linhas |
+  |---|---|---|---|---|---|---|---|
+  | P0.1 | mgr-task | haiku | low | 39242 | 22 | forma | 28 |
+  | P1.1 | orquestrador | opus | — | — | — | decisao | 11 |
   ```
 
   A task marked `done` with no row is a gap, not a zero. When a task was done in the orchestrator
@@ -159,6 +177,17 @@ already states; here it has teeth.
   `tokens` and `chamadas` — that is the declaration of absence, and the row still counts as present.
   A `0` there would claim it was free. This records a number you already received; it adds no
   requirement about what a task does.
+
+  `determinado` is `forma` when the plan gave that task's exact artifact and `decisao` when a
+  choice was left open. **It is closed vocabulary, and it is decided in the plan, before the task
+  runs** — it takes no em dash, because every task has one of the two answers, and deciding
+  afterwards, once the cost is known, measures the classifier instead of the task. **A value
+  outside the two is reported, never accepted**, and so is a row that still carries the old
+  six-column shape.
+
+  `linhas` is the size the task delivered, written when it closes — any integer, or an em dash
+  when there is none. It is the competing variable, and without it the first column explains
+  nothing.
 
 ## Active context control (throughout the execution)
 

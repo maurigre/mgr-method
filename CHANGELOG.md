@@ -4,6 +4,56 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 
 ## [Não lançado]
 ### Adicionado
+- **O critério de quando comissionar passou a dizer o que fazer quando a premissa dele é falsa, e o
+  registro de custo passou a gravar a variável que permitirá pôr número nele.** O `spec-execute` já
+  afirmava que *"the plan already declares its exact artifact"* é o que torna uma task trabalho fechado
+  — e **não dizia nada sobre o caso em que o plano NÃO declara**. Agora diz: ou o plano fica mais
+  preciso até declarar, ou a task é feita no orquestrador e isso vai para o log; **em dúvida,
+  comissiona**, porque comissionar de menos custa raciocínio e comissionar de mais custa token. E o
+  **gate de validação ficou nomeadamente fora do critério**: ele é delegação por **correção** (`L6.2`),
+  e custo nunca decide se ele roda.
+
+  **A tabela `## Custo de comissão` ganhou duas colunas:** `determinado` (`forma` quando o comando deu o
+  artefato exato, `decisao` quando sobrava escolha) e `linhas` (o tamanho entregue, que é a variável
+  concorrente). `determinado` tem **vocabulário fechado** e é **decidido no plano, antes de a task
+  rodar** — e é só isso que o torna evidência: classificar depois, sabendo o custo, mede quem
+  classifica, não a task. Por isso ele **não aceita travessão**: toda task tem uma das duas respostas.
+  `linhas` é o **tamanho entregue**, escrito quando a task fecha — qualquer inteiro, ou travessão como
+  declaração de ausência.
+
+  **Nenhum fator é afirmado, e isto é uma decisão, não uma omissão.** A estimativa que motivou o
+  instrumento não resiste a três conferências: a base era de **duas** fatias e não três (o registro de
+  custo é posterior à terceira), um dos números do par controlado era o **exemplo da documentação** e
+  não uma medição, e a classificação fora feita **depois**, por quem queria o resultado. O número entra
+  quando houver linhas classificadas no plano.
+
+  **E o instrumento parou de mentir duas vezes sobre registro que ele não consegue ler.** Medido em
+  2026-10-01 contra uma fatia já fechada: ao recusar as linhas de 6 colunas, o `measure:cost` passava a
+  emitir **uma afirmação falsa por task** (*"status done mas sem linha no registro"*, quando a linha
+  existe) e a imprimir **`artefato / comissao: 0,0%`** para uma fatia que custou centenas de milhares de
+  tokens — 13 achados onde havia 1, sete deles falsos. Agora **nomeia a causa e declara o que não
+  conferiu** (*"a conferencia de task done sem linha de custo NAO foi feita"*) e imprime **`nao
+  medido`** em vez de zero. Número plausível para toda entrada é o que a `L2.6` chama de instrumento que
+  não mede nada.
+
+  **E a conferencia de task sem registro passou a poder falhar.** Ela exigia cabeçalho `###` com
+  travessão, enquanto `src/plan-parser.js` aceita `#{2,4}` — logo, em plano escrito com `##`, ela
+  devolvia **zero task** e ausencia de achado não significava conformidade. As duas formas agora batem.
+
+  **E a saída do `measure:cost` passou a imprimir as duas colunas**, não só a parsear — sem isso quem roda
+  a ferramenta não via as variáveis que ela existe para medir. O total de `linhas` **exclui o travessão e
+  declara quantas excluiu**, pela mesma razão que `tokens` já seguia: somar zero afirmaria que a task não
+  entregou nada.
+
+  **Limites declarados:** o `measure:cost` passa a **relatar** registro na forma antiga de 6 colunas
+  (exit continua 0, e as fatias já fechadas estão nessa forma) — aceitar as duas em silêncio faria o
+  instrumento somar tabelas incomparáveis, que é o que a `L2.6` proíbe; a forma do cabeçalho de task
+  ficou como **segunda cópia** da de `src/plan-parser.js`, e fonte única exigiria exportá-la de `src/`,
+  o que esta fatia não toca — fica nomeado; `determinado` **não é campo
+  parseado do plano** (`KNOWN_FIELDS` tem sete chaves e chave desconhecida é ignorada), logo a
+  declaração prospectiva é texto lido por pessoa; e **nenhum comando confere** que o texto do critério
+  não perdeu a exceção do gate — isso é conferido por leitura, e está dito como tal.
+
 - **A família `SEC-*`: o revisor passou a ter texto citável para a exigência de segurança que o método
   já fazia ao executor.** O `spec-execute` declara a premissa **Security** com cinco deveres nomeados —
   validação na borda, query parametrizada, dado sensível mascarado em log, segredo fora do código, menor

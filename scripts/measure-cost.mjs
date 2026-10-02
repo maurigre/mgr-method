@@ -23,12 +23,13 @@ export function estimateTokens(chars) {
 }
 
 // Parseia a tabela de custo da secao ## Custo de comissão (ou sem acento,
-// ## Custo de comissao). A tabela tem exatamente 6 colunas:
-// task | agente | modelo | esforço | tokens | chamadas
+// ## Custo de comissao). A tabela tem exatamente 8 colunas:
+// task | agente | modelo | esforço | tokens | chamadas | determinado | linhas
 //
 // Problemas relatados (cada um nomeado com a linha): secao inexistente,
-// linha com numero de colunas != 6, tokens ou chamadas nao inteiro, tabela
-// sem nenhuma linha de dado.
+// linha com numero de colunas != 8, tokens ou chamadas nao inteiro,
+// `determinado` fora de forma/decisao, `linhas` nao inteiro nem travessao, e
+// tabela sem nenhuma linha de dado.
 //
 // NUNCA ignora linha malformada em silencio — isso e o defeito que a L2.6
 // proibe. Instrumento que pula erro sem relatar promete verificacao que
@@ -40,6 +41,7 @@ export function estimateTokens(chars) {
 // unicode porque e o que o autor escreve na tabela, e um ASCII `-` seria ambiguo com
 // subtracao ou com linha de separador.
 const NAO_DEVOLVIDO = "\u2014";
+const DETERMINADO_VALIDO = ["forma", "decisao"];
 
 export function parseCostTable(texto) {
   const linhas = [];
@@ -87,13 +89,19 @@ export function parseCostTable(texto) {
       const colunas = linha.split("|").map((col) => col.trim()).filter((col) => col);
 
       // Valida numero de colunas.
-      if (colunas.length !== 6) {
-        problemas.push(`Linha ${i + 1}: esperadas 6 colunas, obteve ${colunas.length}`);
+      if (colunas.length !== 8) {
+        problemas.push(`Linha ${i + 1}: esperadas 8 colunas, obteve ${colunas.length}`);
         continue;
       }
 
       // Extrai os campos.
-      const [task, agente, modelo, esforco, tokensStr, chamadasStr] = colunas;
+      const [task, agente, modelo, esforco, tokensStr, chamadasStr, determinadoStr, linhasStr] = colunas;
+
+      // Valida determinado — deve ser "forma" ou "decisao".
+      if (!DETERMINADO_VALIDO.includes(determinadoStr)) {
+        problemas.push(`Linha ${i + 1}: 'determinado' nao e "forma" nem "decisao": "${determinadoStr}"`);
+        continue;
+      }
 
       // Task feita no proprio orquestrador nao tem numero devolvido: o harness so reporta
       // custo de COMISSAO. Medido na propria fatia: as tasks P1.3 e P2.1 foram escritas no
@@ -102,7 +110,16 @@ export function parseCostTable(texto) {
       // linha CONTA como presente (a task nao e lacuna de registro), e fica FORA do total,
       // com a exclusao declarada. Zero seria afirmar que foi de graca.
       if (tokensStr === NAO_DEVOLVIDO && chamadasStr === NAO_DEVOLVIDO) {
-        linhas.push({ task, agente, modelo, esforco, tokens: NAO_DEVOLVIDO, chamadas: NAO_DEVOLVIDO });
+        linhas.push({
+          task,
+          agente,
+          modelo,
+          esforco,
+          tokens: NAO_DEVOLVIDO,
+          chamadas: NAO_DEVOLVIDO,
+          determinado: determinadoStr,
+          linhasEntregues: linhasStr === NAO_DEVOLVIDO ? NAO_DEVOLVIDO : Number(linhasStr),
+        });
         continue;
       }
 
@@ -118,6 +135,12 @@ export function parseCostTable(texto) {
         continue;
       }
 
+      // Valida linhas — aceita inteiro ou NAO_DEVOLVIDO.
+      if (linhasStr !== NAO_DEVOLVIDO && !/^\d+$/.test(linhasStr)) {
+        problemas.push(`Linha ${i + 1}: 'linhas' nao e inteiro nem travessao: "${linhasStr}"`);
+        continue;
+      }
+
       linhas.push({
         task,
         agente,
@@ -125,6 +148,8 @@ export function parseCostTable(texto) {
         esforco,
         tokens: Number(tokensStr),
         chamadas: Number(chamadasStr),
+        determinado: determinadoStr,
+        linhasEntregues: linhasStr === NAO_DEVOLVIDO ? NAO_DEVOLVIDO : Number(linhasStr),
       });
     }
   }
@@ -274,6 +299,17 @@ function readExecutionRecord(sliceDir) {
 
 // Le o arquivo 04-plan.md e extrai tasks que estao com status: done.
 // Devolve lista de IDs de task (ex: ["P0.1", "P0.2"]).
+//
+// A FORMA do cabecalho e a mesma que `src/plan-parser.js:18` aceita: `#{2,4}` seguido do id,
+// SEM exigir travessao. Isto e uma SEGUNDA COPIA dessa forma, e e defeito conhecido desta casa
+// — fonte unica exigiria exportar `TASK_HEADER` de `src/plan-parser.js`, e o `CA-8` desta fatia
+// proibe tocar `src/`. Fica nomeado como fatia propria, nao como desenho aceitavel.
+//
+// Medido em 2026-10-01: a versao anterior exigia `###` E travessao. O plano desta fatia usa
+// `##`, logo `readDoneTasks` devolvia ZERO task e a conferencia do `DT-7` **nao podia falhar**
+// — ausencia de achado nao era conformidade. `L2.6`: instrumento que nao falha nao mede nada.
+const TASK_HEADER = /^#{2,4}\s+(P\d+\.\d+)\b/;
+
 function readDoneTasks(sliceDir) {
   const planPath = join(sliceDir, "04-plan.md");
 
@@ -281,28 +317,23 @@ function readDoneTasks(sliceDir) {
     return [];
   }
 
-  const conteudo = readFileSync(planPath, "utf8");
+  const linhas = readFileSync(planPath, "utf8").split("\n");
+
+  // Os inicios primeiro, para que o fim de cada secao seja o inicio da seguinte. A versao
+  // anterior usava `linhas.indexOf(linha)`, que devolve a PRIMEIRA ocorrencia do texto da
+  // linha — dois cabecalhos iguais apontariam para a mesma secao.
+  const inicios = [];
+  for (let i = 0; i < linhas.length; i++) {
+    const match = linhas[i].match(TASK_HEADER);
+    if (match) inicios.push({ id: match[1], linha: i });
+  }
+
   const tasks = [];
-
-  // Procura por cabecalhos de task: ### P<numero>.<numero> —
-  const regexTaskHeader = /^###\s+(P[\d.]+)\s+—/m;
-  const linhas = conteudo.split("\n");
-
-  for (const linha of linhas) {
-    if (!linha.startsWith("###")) continue;
-    const match = linha.match(regexTaskHeader);
-    if (!match) continue;
-
-    const taskId = match[1];
-
-    // Procura por `- **status:** done` na proxima secao ate o proximo ###
-    const indexLinha = linhas.indexOf(linha);
-    const proximoHeader = linhas.findIndex((l, i) => i > indexLinha && l.startsWith("### "));
-    const secaoTask = proximoHeader === -1 ? linhas.slice(indexLinha) : linhas.slice(indexLinha, proximoHeader);
-    const textoSecao = secaoTask.join("\n");
-
+  for (let k = 0; k < inicios.length; k++) {
+    const fim = k + 1 < inicios.length ? inicios[k + 1].linha : linhas.length;
+    const textoSecao = linhas.slice(inicios[k].linha, fim).join("\n");
     if (textoSecao.includes("- **status:** done")) {
-      tasks.push(taskId);
+      tasks.push(inicios[k].id);
     }
   }
 
@@ -311,8 +342,22 @@ function readDoneTasks(sliceDir) {
 
 // Confere se tasks com status done tem linha correspondente no registro de custo.
 // Devolve lista de nomes de tasks que estao done mas sem registro.
-function checkDoneTasksInRecord(sliceDir, costRecords) {
+// `linhasRecusadas` > 0 significa que o registro tem linha que o parser nao conseguiu ler,
+// logo NAO se sabe quais tasks estao registradas. Afirmar "sem linha no registro" ali seria
+// relatar a CONSEQUENCIA de um defeito ja nomeado — o principio que este arquivo declara
+// na secao da tabela vazia. Medido em 2026-10-01 contra `metodo-mede-o-custo`, que esta na
+// forma de 6 colunas: a versao sem esta guarda devolvia **7 afirmacoes falsas**, uma por
+// task, dizendo que a linha nao existia quando ela existe. Em vez delas, uma declaracao do
+// que NAO foi conferido — silencio nao e aprovacao.
+function checkDoneTasksInRecord(sliceDir, costRecords, linhasRecusadas = 0) {
   const doneTasks = readDoneTasks(sliceDir);
+  if (linhasRecusadas > 0) {
+    if (doneTasks.length === 0) return [];
+    return [
+      `Registro com ${linhasRecusadas} linha(s) recusada(s): a conferencia de task done sem `
+      + `linha de custo NAO foi feita para as ${doneTasks.length} task(s) done`,
+    ];
+  }
   const recordTasks = new Set(costRecords.map((r) => r.task));
   const missings = [];
 
@@ -326,6 +371,15 @@ function checkDoneTasksInRecord(sliceDir, costRecords) {
 }
 
 // Formata a saida VERBATIM conforme a secao 3 da spec.
+// `TOTAL 0 0` e `artefato / comissao: 0,0%` sao numeros plausiveis para uma fatia que custou
+// centenas de milhares de tokens — exatamente o que a `L2.6` chama de instrumento que nao mede
+// nada. Medido contra `metodo-mede-o-custo`: imprimia `0,0%` para ~213k de comissao.
+//
+// A PRIMEIRA versao desta guarda olhava `cost.linhas.length === 0 && cost.recusadas > 0`, e o
+// gate isolado de 2026-10-01 mostrou que ela cobria UM dos dois caminhos: fatia inteira feita
+// no orquestrador parseia sem recusa, soma zero, e caia no ramo normal imprimindo `0,0%` **sem
+// nenhum achado**. Medido. A condicao certa nao e sobre COMO o total ficou vazio — e sobre o
+// total estar vazio, e por isso ela e derivada DEPOIS do laco.
 function formatOutput(slug, method, measured, cost) {
   let output = `measure:cost — ${slug}  (caminhos via ${method === "mgr spec status" ? "mgr spec status" : "layout literal"})\n\n`;
 
@@ -341,7 +395,12 @@ function formatOutput(slug, method, measured, cost) {
 
   // Tabela de custo de comissao.
   output += "  custo de comissao (do registro em 05-execution.md)\n";
-  output += "  task      agente        modelo  esforco  tokens   chamadas\n";
+  // O cabecalho e MONTADO com as mesmas larguras das linhas de dado, nunca escrito a mao. A
+  // versao literal anterior dava `tokens` 9 e `chamadas` 8 onde os dados usam 7 e 9: um
+  // deslocamento de uma coluna, invisivel a olho e visivel no `cat -A`. Larguras escritas em
+  // dois lugares divergem — e divergiram.
+  output += `  ${"task".padEnd(10)}${"agente".padEnd(14)}${"modelo".padEnd(8)}${"esforco".padEnd(9)}`
+    + `${"tokens".padStart(7)}${"chamadas".padStart(9)}  ${"determinado".padEnd(13)}${"linhas".padStart(6)}\n`;
 
   // `tokens`/`chamadas` trazem o travessao `NAO_DEVOLVIDO` quando o harness nao devolveu
   // numero (task do orquestrador). Imprimir `0` afirmaria que foi de graca; o travessao diz
@@ -349,6 +408,8 @@ function formatOutput(slug, method, measured, cost) {
   const semNumero = (valor, largura) => String(valor).padStart(largura);
   let totalTokensComissao = 0;
   let totalChamadas = 0;
+  let totalLinhasEntregues = 0;
+  let semTamanho = 0;
   let semCusto = 0;
   for (const linha of cost.linhas) {
     const taskFormatado = linha.task.padEnd(10);
@@ -358,15 +419,29 @@ function formatOutput(slug, method, measured, cost) {
     const tokensFormatado = semNumero(linha.tokens, 7);
     const chamadasFormatado = semNumero(linha.chamadas, 9);
     if (linha.tokens === NAO_DEVOLVIDO) semCusto += 1;
-    output += `  ${taskFormatado}${agenteFormatado}${modeloFormatado}${esforcoFormatado}${tokensFormatado}${chamadasFormatado}\n`;
+    const determinadoFormatado = String(linha.determinado).padEnd(13);
+    const linhasFormatado = semNumero(linha.linhasEntregues, 6);
+    output += `  ${taskFormatado}${agenteFormatado}${modeloFormatado}${esforcoFormatado}${tokensFormatado}${chamadasFormatado}  ${determinadoFormatado}${linhasFormatado}\n`;
     if (linha.tokens !== NAO_DEVOLVIDO) totalTokensComissao += linha.tokens;
     if (linha.chamadas !== NAO_DEVOLVIDO) totalChamadas += linha.chamadas;
+    // `linhas` fora do total pela mesma razao que `tokens`: travessao e ausencia declarada,
+    // e somar zero no lugar afirmaria que a task nao entregou nada.
+    if (linha.linhasEntregues === NAO_DEVOLVIDO) semTamanho += 1;
+    else totalLinhasEntregues += linha.linhasEntregues;
   }
-  output += `  ${"TOTAL".padEnd(10)}${" ".padEnd(14)}${" ".padEnd(8)}${" ".padEnd(9)}${String(totalTokensComissao).padStart(7)}${String(totalChamadas).padStart(9)}\n`;
+  const naoMensuravel = totalTokensComissao === 0;
+  if (naoMensuravel) {
+    output += `  ${"TOTAL".padEnd(10)}${" ".padEnd(14)}${" ".padEnd(8)}${" ".padEnd(9)}${"nao medido".padStart(16)}  ${" ".padEnd(13)}${String(totalLinhasEntregues).padStart(6)}\n`;
+  } else {
+    output += `  ${"TOTAL".padEnd(10)}${" ".padEnd(14)}${" ".padEnd(8)}${" ".padEnd(9)}${String(totalTokensComissao).padStart(7)}${String(totalChamadas).padStart(9)}  ${" ".padEnd(13)}${String(totalLinhasEntregues).padStart(6)}\n`;
+  }
   // A exclusao e DECLARADA. Total que some linha sem numero mentiria; total que as omita
   // sem dizer quantas foram esconderia a parcela — as duas coisas que a L2.6 proibe.
   if (semCusto > 0) {
     output += `  ${semCusto} linha(s) com custo NAO DEVOLVIDO, fora do total (task feita no orquestrador)\n`;
+  }
+  if (semTamanho > 0) {
+    output += `  ${semTamanho} linha(s) sem tamanho entregue, fora do total de linhas\n`;
   }
   output += "\n";
 
@@ -375,8 +450,12 @@ function formatOutput(slug, method, measured, cost) {
   if (totalTokensComissao > 0) {
     razao = (measured.totalTokens / totalTokensComissao) * 100;
   }
-  const razaoFormatada = razao.toFixed(1).replace(".", ",");
-  output += `  artefato / comissao: ${razaoFormatada}%\n\n`;
+  if (naoMensuravel) {
+    output += "  artefato / comissao: nao medido (nenhuma linha do registro devolveu custo)\n\n";
+  } else {
+    const razaoFormatada = razao.toFixed(1).replace(".", ",");
+    output += `  artefato / comissao: ${razaoFormatada}%\n\n`;
+  }
 
   // Bloco do NAO medido.
   output += "  NAO medido: a janela do orquestrador, o retrabalho de comissao que voltou\n";
@@ -393,12 +472,16 @@ function formatOutput(slug, method, measured, cost) {
 // Orquestra a medicao: resolve caminho, le artefatos, le registro, imprime saida.
 // Devolve { problems, canMeasure } onde canMeasure indica se conseguiu medir
 // (decisão de exit code por DT-2).
-export function measureSlice(slug) {
-  const { paths, method, problems: resolveProblems } = resolveSlugPath(slug);
+// `specsDir` existe para TESTE, e nao por generalidade especulativa: sem ele o `main` so
+// alcanca `specs/`, que neste projeto e gitignored — logo em checkout limpo a metade "exit 0"
+// do `CA-4` nunca executava, e o gate de 2026-10-01 reprovou exatamente isso. O default
+// mantem o comportamento do CLI identico.
+export function measureSlice(slug, specsDir = "specs") {
+  const { paths, method, problems: resolveProblems } = resolveSlugPath(slug, specsDir);
 
   // DT-2: fatia inexistente ou caminho que nao resolve = exit != 0.
   if (resolveProblems.length) {
-    return { findings: resolveProblems, canMeasure: false };
+    return { findings: resolveProblems, canMeasure: false, output: "" };
   }
 
   // Le artefatos.
@@ -406,12 +489,12 @@ export function measureSlice(slug) {
   let findings = artifactFindings;
 
   // Le registro de custo.
-  const sliceDir = join("specs", slug);
+  const sliceDir = join(specsDir, slug);
   const { linhas: costLinhas, problemas: costProblemas } = readExecutionRecord(sliceDir);
   findings = findings.concat(costProblemas);
 
   // Confere tasks done sem registro (DT-7).
-  const missingTaskRecords = checkDoneTasksInRecord(sliceDir, costLinhas);
+  const missingTaskRecords = checkDoneTasksInRecord(sliceDir, costLinhas, costProblemas.length);
   findings = findings.concat(missingTaskRecords);
 
   // Calcula totais dos artefatos.
@@ -421,7 +504,7 @@ export function measureSlice(slug) {
   // havia ponto onde afirmar o TEXTO, e duas das cinco mutacoes que a §4 da spec planejou
   // (remover a declaracao do que nao e medido; numero alto virar exit != 0) **nao tinham
   // como ficar vermelhas** — achados E1/E2 do gate isolado.
-  const output = formatOutput(slug, method, measured, { linhas: costLinhas });
+  const output = formatOutput(slug, method, measured, { linhas: costLinhas, recusadas: costProblemas.length });
 
   // DT-2: mediu, com ou sem achado, exit 0.
   return { findings, canMeasure: true, output };
@@ -429,14 +512,14 @@ export function measureSlice(slug) {
 
 // Entry point: processa argumentos, imprime, decide exit code por DT-2.
 // EXPORTADO para o teste poder afirmar o exit code por valor, sem subir processo.
-export function main(argv, imprime = console.log) {
+export function main(argv, imprime = console.log, specsDir = "specs") {
   if (argv.length === 0) {
     console.error("erro: slug nao informado");
     return 1;
   }
 
   const slug = argv[0];
-  const { canMeasure, findings, output } = measureSlice(slug);
+  const { canMeasure, findings, output } = measureSlice(slug, specsDir);
   if (output) imprime(output);
   // DT-7: achado e impresso e NAO muda o exit code.
   for (const finding of findings) imprime(`  ACHADO: ${finding}`);

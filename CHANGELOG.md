@@ -4,6 +4,50 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 
 ## [Não lançado]
 ### Adicionado
+- **A família `PERF-*`: o revisor passou a ter texto citável para a exigência de performance que o
+  método já fazia ao executor — e as duas exigências que NÃO têm fonte ficaram escritas como lacuna.**
+  O `spec-execute` declara a premissa **Performance** com quatro deveres. Medido em 2026-10-02: o guia de
+  review tinha **zero** regra citável para qualquer um deles, e como a `L1.1` proíbe reprovar sem excerto
+  textual, **a premissa era inexequível por construção** — o mesmo defeito do `CP-4` que a família `SEC`
+  fechou para segurança. Terceiro eixo.
+
+  **Cinco regras, com a fonte NA PRÓPRIA REGRA**, e as fontes foram **lidas**: **CWE 4.20** (categoria
+  `CWE-1309`, *CISQ Quality Measures - Efficiency*), **OWASP API Security Top 10 2023** e **Markus
+  Winand, *Use The Index, Luke***. `PERF-1` acesso repetido a dado onde o armazenamento responderia numa
+  ida (`CWE-1073`, `CWE-1060`) · `PERF-2` string crescendo por concatenação dentro de laço (`CWE-1046`) ·
+  `PERF-3` recurso de plataforma adquirido dentro do laço (`CWE-1050`) · `PERF-4` limite de registros na
+  borda da API, validado no servidor (`API4:2023`) · `PERF-5` paginação sem `OFFSET` (Winand).
+
+  **Os limiares entram COMO A FONTE OS APRESENTA, e isso é a decisão mais importante da fatia.** O
+  `CWE-1073` diz *"the definition of 'large number' varies by product, CISQ **recommends** a baseline
+  maximum of 2"*. Escrever *"no máximo 2 acessos por método"* como dever seria **mais estrito que a
+  fonte** e reprovaria método legítimo com três acessos. **Inventar rigor é tão errado quanto inventar
+  frouxidão** — e agora há teste que derruba quem trocar a redação condicional por absoluta.
+
+  **Duas classes viraram Good Practice em vez de regra, pelo critério de ONDE A EVIDÊNCIA MORA:**
+  consulta que não usa índice (`CWE-1067`, cuja própria redação diz *"configured in a way that does
+  not utilize an
+  index"* — está no schema, não no diff) e contagem de joins contra tabela grande (`CWE-1049`, que
+  depende do tamanho do dado em execução). Cada uma **diz qual instrumento falta**: plano de
+  execução, contagem de
+  linhas. Nenhuma das duas tem identificador, porque identificador as tornaria citáveis em reprovação.
+
+  **E a instrução de montagem do guia parou de enumerar prefixo.** Ela dizia `(QUAL- e SEC- — the whole
+  section…)` e, três linhas abaixo, que *"enumerating by prefix is how `SEC-` would have been left out"*
+  — as duas coisas no mesmo parágrafo. A família anterior corrigiu o sintoma e manteve a armadilha; esta
+  tirou a enumeração, e a ressalva deixou de ser necessária.
+
+  **Limites declarados, e dois deles no próprio guia:** a premissa 2 **não fica fechada** — **projeção em
+  vez de agregado inteiro** não tem fonte agnóstica (nenhum CWE cobre recuperar mais colunas do que o
+  chamador usa; a doc do Hibernate sustenta uma regra `JQ-*` futura, não uma universal) e a **paginação
+  além da borda da API** também não, porque o `API4:2023` alcança só a borda. As duas estão escritas na
+  subseção como lacuna, mandando tratar por `L1.3` (sugestão não bloqueante), **para ninguém ler a
+  ausência como permissão**. A `PERF-5` só reprova onde **o artefato ou a spec dizem que o conjunto
+  cresce** — `OFFSET` sobre tabela fixa pequena não custa nada. A premissa 3 (uso de recurso) é fatia
+  própria. O guia já gerado **não é reconciliado**. E o `CWE-1176` (*Inefficient CPU Computation*) **foi
+  recusado como regra**: *"can be optimized further"* não tem borda, e citá-lo licenciaria reprovar
+  qualquer código.
+
 - **O critério de quando comissionar passou a dizer o que fazer quando a premissa dele é falsa, e o
   registro de custo passou a gravar a variável que permitirá pôr número nele.** O `spec-execute` já
   afirmava que *"the plan already declares its exact artifact"* é o que torna uma task trabalho fechado

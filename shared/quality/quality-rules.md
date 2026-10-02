@@ -69,6 +69,48 @@ coding (not only at the end) and cited by the `code-analyzer` in reviews. Opt-in
    error occurs: no stack trace, query, secret key or token in what the consumer receives
    (ASVS 5.0.0, V16.5.1).
 
+### Performance (PERF-*) — CWE 4.20 / CISQ, OWASP API Top 10 2023, Winand (read 2026-10-02)
+
+The thresholds below are reproduced **as their sources state them**: CISQ presents them as
+recommended defaults that vary by product, never as absolute limits. A count is the reference a
+reproval cites; it is not by itself the duty.
+
+1. (PERF-1) A method does not route repeated data accesses through a data manager where the store
+   could answer in one round trip — a query inside a loop over a collection is the common form.
+   The source conditions the number: "While the definition of 'large number' varies by product,
+   CISQ recommends a baseline maximum of 2 data accesses per function/method" (CWE 4.20 CWE-1073;
+   the server-side form, with its own recommended default of 5, is CWE-1060).
+2. (PERF-2) A string built inside a loop does not grow by concatenating onto an immutable string:
+   use the language's text buffer. The source gives the reason — "the use of += to append to the
+   existing string will result in the creation of a new object with each iteration" (CWE 4.20
+   CWE-1046).
+3. (PERF-3) A loop body or loop condition does not acquire a platform resource that could be
+   acquired once outside it; the source gives as examples "messaging, sessions, locks, or file
+   descriptors" (CWE 4.20 CWE-1050).
+4. (PERF-4) An endpoint that returns a collection has a limit on how many records the response
+   returns, and where a request parameter controls that limit, the parameter is validated
+   server-side. A fixed server-side cap with no parameter satisfies this. The source names the
+   missing limit as "Number of records per page to return in a single request-response" and asks
+   for "proper server-side validation for query string and request body parameters,
+   specifically the one that controls the number of records to be returned in the response"
+   (OWASP API Security Top 10, API4:2023). **Scope: the API edge** — an internal query that
+   nothing exposes is outside this rule.
+5. (PERF-5) Paging through a result set does not use OFFSET to skip the preceding pages: use the
+   last value of the previous page as the delimiter. The source gives both reasons — "The
+   database must count all rows from the beginning until it reaches the requested page" and "The
+   pages drift when inserting new sales because the numbering is always done from scratch"
+   (Markus Winand, *Use The Index, Luke*, "Paging Through Results"). **This reproves only where
+   the artifact or the spec says the set grows** — OFFSET over a small fixed table costs nothing,
+   and "it probably grows" is a non-blocking suggestion (`L1.3`), not a reproval.
+
+**What this family does NOT cover, and it is named so that nobody reads the gap as permission.**
+The executor is asked for **projections instead of whole aggregates** and for **pagination on any
+growing collection**, and neither has a citable language-agnostic source: no CWE covers
+retrieving more columns than the caller uses, and `API4:2023` reaches only the API edge. A
+reviewer who finds either raises a **non-blocking suggestion** (`L1.3`), never a reproval. For
+JPA/Java specifically the Hibernate manual does support a projection rule, and that belongs to
+the `JQ-*` profile, not here.
+
 ## Language profile (record only the project's one) — they reprove
 
 ### Java — VALIDATED (*Effective Java*, Joshua Bloch + Google Checkstyle)

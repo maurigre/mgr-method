@@ -293,6 +293,18 @@ and fill each slot with the language's idiom:
      the profile says *with what*. Validated reference ruleset: Hexagonal + Java + ArchUnit
      (see `arch-hexagonal`); other combinations adapt, `[ADAPTED — validate with the team]`.
 
+5. **Query that cannot use an index** — a data query written so that the store performs a
+   sequential search instead of an index access (CWE 4.20 CWE-1067). **Why this is not a
+   mandatory rule:** the source's own wording is "configured in a way that does not utilize an
+   index", and whether an index exists is in the schema, not in the diff. **Instrument
+   missing:** the database's execution plan (`EXPLAIN` or equivalent) for the queries the
+   change touches, with the threshold the project sets for an acceptable scan.
+6. **Join and sub-query count against a large table** — CISQ's defaults are "1 million rows
+   for a 'large' data table, a default minimum of 5 joins, and a default minimum of 3
+   sub-queries" (CWE 4.20 CWE-1049). **Why this is not a mandatory rule:** all three depend on
+   the data's size at run time. **Instrument missing:** row counts for the tables involved
+   plus the execution plan, against those defaults or the project's own.
+
 ## Cross-cutting anti-patterns (they reprove)
 
 > Scope: architectures with dependency inversion (hexagonal, clean, onion). Classic layered

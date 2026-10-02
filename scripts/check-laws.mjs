@@ -223,7 +223,7 @@ export const RULE_SOURCES = {
 // would trap a known divergence. When a slice adds a rule family (SEC-*), it updates the baseline
 // in the same diff — rule never enters nor exits silent (CP-2).
 export const ID_BASELINE = {
-  "shared/arch/cross-cutting-rules.md": { total: 75, prefixes: { DES: 10, NAM: 2, TST: 5, LOG: 4, DOC: 2, MUT: 3, JAVA: 8, GO: 9, PY: 9, NET: 8, TS: 9, GEN: 6 } },
+  "shared/arch/cross-cutting-rules.md": { total: 79, prefixes: { DES: 10, NAM: 2, PAT: 1, MNT: 3, TST: 5, LOG: 4, DOC: 2, MUT: 3, JAVA: 8, GO: 9, PY: 9, NET: 8, TS: 9, GEN: 6 } },
   "shared/quality/quality-rules.md": { total: 31, prefixes: { QUAL: 7, JQ: 8, JS: 4, SEC: 7, PERF: 5 } },
   "skills/arch-clean/SKILL.md": { total: 8, prefixes: { INV: 8 } },
   "skills/arch-hexagonal/SKILL.md": { total: 7, prefixes: { INV: 7 } },

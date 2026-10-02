@@ -4,6 +4,44 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 
 ## [Não lançado]
 ### Adicionado
+- **A disciplina soberana do método passou a ser citável pelo revisor, e três letras do SOLID ficaram
+  declaradas como lacuna.** O `spec-execute` abre as premissas dizendo que padrão, camada e abstração
+  entram **só com evidência de necessidade** — acima das quatro premissas. Medido em 2026-10-02: isso
+  existia apenas como lei `L4.7`, marcada **`[Executor]`**, e **nenhuma regra do guia do revisor** falava
+  disso. Era o `CP-4` na forma mais aguda: a disciplina que o método põe acima de todas era cobrada de
+  quem escreve e invisível para quem revisa. Quarto e último eixo da `G1`.
+
+  **`PAT-1`** cobra que padrão, camada de resiliência ou abstração introduzida pela mudança **cite a
+  evidência de necessidade** — requisito de spec, gargalo medido ou falha real — na spec, no plano ou no
+  log. **E ela NÃO é a `DES-10`:** a `DES-10` reprova a **forma** (indireção cujo propósito ninguém
+  consegue enunciar); a `PAT-1` reprova a **ausência de evidência citada** para estrutura que **tem**
+  propósito claro e nunca teve necessidade demonstrada — uma camada de retry tem propósito óbvio, e num
+  caminho sem chamada de rede a necessidade nunca foi mostrada. A distinção está **dentro da
+  regra**, e há teste que cai se ela sair.
+
+  **Três regras `MNT-*`**, com a fonte na própria regra, do **`CWE-1307`** (*CISQ Quality Measures -
+  Maintainability*, CWE 4.20 — a categoria irmã da que a família `PERF` usou): pai que referencia filho
+  (`CWE-1062`), ciclo entre módulos (`CWE-1047`) e profundidade de herança (`CWE-1074`). Antes disto,
+  **ciclo entre módulos existia só como Good Practice opt-in** de arch-lint, e **herança tinha apenas a
+  `JQ-3`**, específica de Java — a `MNT-3` é a forma agnóstica, e diz isso para ninguém ler as duas como
+  conflito. O limiar entra **como a fonte o apresenta** (*"may vary for each product or developer, CISQ
+  **recommends** a default maximum of 7"*), e há teste que derruba quem o tornar absoluto.
+
+  **O risco desta entrada, dito como risco:** a `PAT-1` **permite reprovar uma abstração**, e é a
+  regra de maior alcance que este guia recebeu. A mitigação está na redação — ela cobra evidência
+  **citada em
+  artefato**, nunca a opinião do revisor sobre necessidade, e quem apenas suspeita levanta `L1.3`. Se em
+  uso real se mostrar excessiva, a correção é estreitá-la. **Não há medição de uso ainda**, e dizer isso
+  agora é parte da entrega.
+
+  **Limites declarados, e dois deles no próprio guia:** **aberto/fechado, Liskov e segregação de
+  interface não entraram**, e a nota de lacuna diz **por quê** — a fonte primária é o artigo do próprio
+  Robert C. Martin, que **não pôde ser lido** nesta execução (o servidor respondeu 429 nas duas
+  tentativas, o arquivo histórico estava inacessível e o terceiro endereço recusou a conexão). **Frase citada de blog secundário não é fonte lida, e este método não
+  cita o que não leu.** Quem achar violação das três levanta `L1.3`. As outras duas letras já estavam
+  cobertas: responsabilidade única por `DES-4`/`DES-5`/`DES-6` e `QUAL-4`, inversão de dependência pelos
+  `INV-*`. A marca `[Executor]` da `L4.7` **não mudou** — a regra espelha, a lei permanece.
+
 - **A família `PERF-*`: o revisor passou a ter texto citável para a exigência de performance que o
   método já fazia ao executor — e as duas exigências que NÃO têm fonte ficaram escritas como lacuna.**
   O `spec-execute` declara a premissa **Performance** com quatro deveres. Medido em 2026-10-02: o guia de

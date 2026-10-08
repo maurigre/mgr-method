@@ -6,6 +6,7 @@ Deciders: Mauri Reis
 ## Status
 
 Accepted
+Ultima frase da decisao 3 revista pelo ADR-0023 (Proposed): sem o runtime, a skill para em vez de rodar sem a politica.
 
 ## Context
 

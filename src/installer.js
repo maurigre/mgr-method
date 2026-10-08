@@ -11,10 +11,10 @@ import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import * as bundle from "./bundle.js";
-import { installAgents, installEngine, isOurAgent } from "./builder.js";
+import { installAgents, installEngine, installRuntime, isOurAgent } from "./builder.js";
 import * as engineDescriptors from "./engines/index.js";
 import { readAgents } from "./registry.js";
-import { readManifest, writeManifest, writeEnv } from "./manifest.js";
+import { readManifest, writeManifest, writeEnv, MODEL_RUNTIME } from "./manifest.js";
 import * as catalog from "./catalog.js";
 
 const KNOWN_PROJECT = [".claude/skills", ".github/skills", ".agents/skills", ".cursor/skills"];
@@ -68,6 +68,12 @@ function archRulesRef(engineDir, scope, repo) {
 function lawsRulesRef(engineDir, scope, repo) {
   const shared = path.join(engineDir, ...catalog.LAWS_INSTALLED);
   return scope === "project" ? path.relative(repo, shared) : shared;
+}
+
+// Referência que substitui o token {{MGR_RUNTIME}}: relativa à raiz com "/" no projeto, absoluta no global.
+export function runtimeRef(engineDir, scope, repo) {
+  const entry = path.join(engineDir, ...catalog.RUNTIME_DIR, ...catalog.RUNTIME_ENTRY);
+  return scope === "project" ? path.relative(repo, entry).split(path.sep).join("/") : entry;
 }
 
 // Referência que substitui o token {{MGR_CHARTER}} DENTRO das leis instaladas (ADR-0022).
@@ -160,6 +166,7 @@ export function execute(plan, { abandoned = [], remove = rmSync } = {}) {
   const agentsDirs = [];
   const agentChanges = [];
   const gateWarnings = [];
+  const runtime = [];
   for (const t of plan.targets) {
     const ref = t.engine === "custom" ? undefined : archRulesRef(t.dir, plan.scope, plan.repo);
     const engineId = t.engine === "custom" ? undefined : t.engine;
@@ -167,8 +174,10 @@ export function execute(plan, { abandoned = [], remove = rmSync } = {}) {
       archRulesRef: ref,
       lawsRulesRef: t.engine === "custom" ? undefined : lawsRulesRef(t.dir, plan.scope, plan.repo),
       charterRulesRef: t.engine === "custom" ? undefined : charterRulesRef(t.dir, plan.scope, plan.repo),
+      runtimeRef: runtimeRef(t.dir, plan.scope, plan.repo),
       userLanguage: plan.userLanguage, engineId, reviewGate: engineId ? gate : undefined,
     });
+    runtime.push(installRuntime(t.dir, { version: bundle.readVersion() }));
     // Motor "custom" (--skills-dir) não é plataforma: não há diretório de agentes para ele.
     //
     // O gate desligado NÃO pula mais o bloco inteiro: cada intenção decide sozinha se é escrita,
@@ -209,7 +218,7 @@ export function execute(plan, { abandoned = [], remove = rmSync } = {}) {
   return {
     targets: plan.targets.map((t) => ({ engine: t.engine, dir: t.dir })),
     skills: plan.skills, migrated, core, projectId: plan.projectId,
-    agents, gate, gateWarnings, agentChanges, removed,
+    agents, gate, gateWarnings, agentChanges, removed, runtime,
   };
 }
 
@@ -220,6 +229,10 @@ export function installs(scope, repo) {
 
 export function detectPrior(scope, repo) {
   return readManifest(coreDir(scope, repo));
+}
+
+export function needsRuntimeMigration(prior) {
+  return Boolean(prior) && prior.model !== MODEL_RUNTIME;
 }
 
 // O conjunto ABANDONADO: o que o manifesto anterior declarava e este plano deixa de declarar.

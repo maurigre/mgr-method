@@ -12,6 +12,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
 import path from "node:path";
+import { Buffer } from "node:buffer";
 
 const BIN = fileURLToPath(new URL("../../bin/mgr.js", import.meta.url));
 
@@ -95,7 +96,41 @@ export function instalacaoComDefeitosDoisMotores() {
 }
 
 
-export const descartar = (repo) => rmSync(repo, { recursive: true, force: true });
+// O runtime e o que o `install` REAL copia (`installRuntime`); a fixture so o muta. Cada helper
+// lanca se o alvo nao existe, para nao plantar defeito em arquivo inexistente sem reclamar.
+const RUNTIME = [".claude", "skills", "_shared", "mgr"];
+
+export const caminhoDoRuntime = (repo, ...segmentos) => path.join(repo, ...RUNTIME, ...segmentos);
+
+const exigir = (alvo) => {
+  if (!existsSync(alvo)) throw new Error(`fixture quebrada: ${alvo} nao existe apos instalar`);
+  return alvo;
+};
+
+/** Layout antigo: a instalacao sem a copia do runtime no motor. */
+export function apagarRuntime(repo) {
+  rmSync(exigir(caminhoDoRuntime(repo)), { recursive: true, force: true });
+}
+
+/** Troca a versao gravada no package.json da copia do runtime. */
+export function alterarVersaoDoRuntime(repo, versao) {
+  const alvo = exigir(caminhoDoRuntime(repo, "package.json"));
+  const dados = JSON.parse(readFileSync(alvo, "utf8"));
+  writeFileSync(alvo, `${JSON.stringify({ ...dados, version: versao }, null, 2)}\n`, "utf8");
+}
+
+/** Acrescenta UM byte ao fim de um arquivo copiado do runtime. */
+export function alterarUmByteDoRuntime(repo, relativo) {
+  const alvo = exigir(caminhoDoRuntime(repo, ...relativo.split("/")));
+  writeFileSync(alvo, Buffer.concat([readFileSync(alvo), Buffer.from("\n")]));
+}
+
+/** Remove um arquivo copiado do runtime, mantendo o diretorio. */
+export function removerArquivoDoRuntime(repo, relativo) {
+  rmSync(exigir(caminhoDoRuntime(repo, ...relativo.split("/"))), { force: true });
+}
+
+export const descartar =(repo) => rmSync(repo, { recursive: true, force: true });
 
 /**
  * Remove o arquivo de fonte compartilhada do diretorio do motor especificado.

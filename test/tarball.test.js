@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { RUNTIME_FILES } from "../src/catalog.js";
 
 // O tarball publicado tem de conter TODO recurso que o instalador exige em tempo de execução.
 //
@@ -45,4 +46,11 @@ test("todo recurso que o instalador exige está no tarball publicado", () => {
 test("o gate de validação viaja no pacote — foi ele que faltou na 0.7.0-beta.8", () => {
   assert.ok(arquivosDoTarball().includes("agents/mgr-review.md"),
     "sem este arquivo, `mgr install` falha antes de escrever qualquer coisa");
+});
+
+test("should ship every RUNTIME_FILES path in the published tarball", () => {
+  const arquivos = arquivosDoTarball();
+  const faltando = RUNTIME_FILES.filter((caminho) => !arquivos.includes(caminho));
+  assert.deepEqual(faltando, [],
+    `arquivo(s) do runtime fora do tarball: ${faltando.join(", ")}`);
 });

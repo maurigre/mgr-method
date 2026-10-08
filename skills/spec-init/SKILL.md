@@ -27,6 +27,18 @@ summary and the constitution in memory. **OFF** → emit visibly:
 
 Never silence the absence; never block because of it.
 
+## MGR runtime (mandatory)
+
+`<project-root>` is the nearest directory, from the working directory upward, that contains
+`.mgr-core/manifest.json`; run every command below from it. Every MGR call is
+`node {{MGR_RUNTIME}} <command>`, run from `<project-root>`. This skill runs before any SDD exists,
+but after the install, so the runtime exists and the stop applies all the same.
+
+**STOP — the MGR runtime is missing.** `{{MGR_RUNTIME}}` was not found under `<project-root>`. Do **not** continue this flow by hand: do not write the document, implement the task or edit `.mgr-core/` yourself. To restore it, run at `<project-root>`: `npx mgr-method@<version> update`, where `<version>` is the `version` field of `.mgr-core/manifest.json`. If that file does not exist either, this project is not installed: run `npx mgr-method@latest install`. Then invoke this skill again.
+
+Trigger: the file `{{MGR_RUNTIME}}` does not exist under `<project-root>`, or the call exits with a
+module-not-found error. Reproduce the text above in the output language.
+
 ## Step 0 — Detect the mode
 
 Inspect the root: is there a build manifest (pom.xml, build.gradle, package.json,
@@ -45,13 +57,11 @@ weighs (**L6.6**). It is a fact about the project, so it is confirmed and record
    that detection is stated here and confirmed too. Detection can be wrong (an empty repository that
    is really a rewrite of an old one; a scaffold that is not legacy), and a wrong origin silently
    changes the weight of every reproval in that project.
-2. **Once confirmed, record it:** run `mgr origin set greenfield` or `mgr origin set brownfield`.
+2. **Once confirmed, record it:** run `node {{MGR_RUNTIME}} origin set greenfield` or
+   `node {{MGR_RUNTIME}} origin set brownfield`.
    The command writes the key `origin` in `.mgr-core/config.json`, preserving every other key, and
    prints what the value was before and what it became.
-3. **Fallback — the `mgr` CLI is NOT installed:** write the key by hand into
-   `.mgr-core/config.json`, **preserving every other key in the file**. The method MUST keep working
-   with the skills alone, so this is a supported path, not a failure. Say in the log which of the two
-   you used.
+3. **Runtime missing:** STOP as described in "MGR runtime (mandatory)". Do not write the key by hand.
 4. Record it **now**, not at the end: the brownfield analysis is long and resumable, and an
    interrupted run must still leave the origin recorded.
 

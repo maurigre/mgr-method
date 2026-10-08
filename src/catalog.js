@@ -88,6 +88,60 @@ export const QUALITY_INSTALLED = [SHARED_DIR, "quality", "quality-rules.md"];
 export const USER_LANGUAGE_TOKEN = "{{MGR_USER_LANGUAGE}}";
 export const USER_LANGUAGE_FALLBACK = "the language the user writes in";
 
+// Runtime do MGR copiado por motor (DT-5): `<motor>/skills/_shared/mgr/`. A entrada e os arquivos
+// sao relativos a raiz do pacote. RUNTIME_FILES e conferida pelo teste de fecho
+// (test/runtime-closure.test.js), que recalcula os imports a partir de RUNTIME_ENTRY.
+export const RUNTIME_DIR = [SHARED_DIR, "mgr"];
+export const RUNTIME_ENTRY = ["bin", "mgr-runtime.js"];
+export const RUNTIME_TOKEN = "{{MGR_RUNTIME}}";
+export const RUNTIME_FILES = [
+  "bin/hook-io.js",
+  "bin/mgr-runtime.js",
+  "src/adapters.js",
+  "src/artifacts.js",
+  "src/builder.js",
+  "src/bundle.js",
+  "src/catalog.js",
+  "src/cli-args.js",
+  "src/commands/agents.js",
+  "src/commands/doctor.js",
+  "src/commands/hooks.js",
+  "src/commands/origin.js",
+  "src/commands/sdd-check.js",
+  "src/commands/spec.js",
+  "src/context-manifest.js",
+  "src/detector.js",
+  "src/doc-rules.js",
+  "src/doc-validator.js",
+  "src/doctor.js",
+  "src/engines/claude-code.js",
+  "src/engines/copilot.js",
+  "src/engines/index.js",
+  "src/findings.js",
+  "src/installer.js",
+  "src/lockfile.js",
+  "src/manifest.js",
+  "src/markdown.js",
+  "src/messages.js",
+  "src/plan-next.js",
+  "src/plan-parser.js",
+  "src/plan-rules.js",
+  "src/plan-validator.js",
+  "src/plugin.js",
+  "src/precompact.js",
+  "src/project-root.js",
+  "src/prompts.js",
+  "src/prov-rules.js",
+  "src/prov-validator.js",
+  "src/provenance.js",
+  "src/registry.js",
+  "src/sdd-check.js",
+  "src/spec-parser.js",
+  "src/spec-rules.js",
+  "src/spec-status.js",
+  "src/spec-validator.js",
+];
+
 // Gate de validação (ADR-0010): a política padrão do agente que revisa. Mora aqui porque o
 // catálogo já é o lugar que sabe coisas SOBRE as skills.
 //

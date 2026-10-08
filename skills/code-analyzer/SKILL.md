@@ -57,22 +57,31 @@ Read it, never infer it:
 
 State in the report header which origin you read and where you read it from — or that it is unknown.
 
+## MGR runtime (mandatory)
+
+`<project-root>` is the nearest directory, from the working directory upward, that contains
+`.mgr-core/manifest.json`; run every command below from it. Every MGR call is
+`node {{MGR_RUNTIME}} <command>`, run from `<project-root>`.
+
+**STOP — the MGR runtime is missing.** `{{MGR_RUNTIME}}` was not found under `<project-root>`. Do **not** continue this flow by hand: do not write the document, implement the task or edit `.mgr-core/` yourself. To restore it, run at `<project-root>`: `npx mgr-method@<version> update`, where `<version>` is the `version` field of `.mgr-core/manifest.json`. If that file does not exist either, this project is not installed: run `npx mgr-method@latest install`. Then invoke this skill again.
+
+Trigger: the file `{{MGR_RUNTIME}}` does not exist under `<project-root>`, or the call exits with a
+module-not-found error. Reproduce the text above in the output language.
+
 ## Loading the spec (Spec axis — before analyzing)
 
 Locate the **originating spec** of what is being reviewed, in this order:
 
 1. **Slug/path given at invocation** — when `spec-create` calls the review at the end of the
    feature (Phase 6), it passes the slug. **Resolve the paths, do not assume them:**
-   `mgr spec status <slug> --json` returns `specRoot` and the resolved `path` of each artifact.
-   **Fallback — when the `mgr` CLI is NOT installed:** use the literal layout
-   (`/specs/<slug>/03-spec.md` and `/specs/<slug>/02-prd.md`). The method MUST keep working with
-   the skills alone; say in the report which of the two you used. The payload's `basis` is
-   `file-existence`: an artifact on disk is **not** an approved artifact, and a resolved path is
+   `node {{MGR_RUNTIME}} spec status <slug> --json` returns `specRoot` and the resolved `path` of
+   each artifact. If the runtime is missing, STOP as described in "MGR runtime (mandatory)". The
+   payload's `basis` is `file-existence`: an artifact on disk is **not** an approved artifact, and a resolved path is
    not an approved spec.
 2. **Path passed by the user** as an argument.
-3. **Search for the feature** matching the current branch. `mgr spec status --all --json` lists
-   every slug with its resolved `specRoot`; without the CLI, read the directories under
-   `/specs/` yourself.
+3. **Search for the feature** matching the current branch. `node {{MGR_RUNTIME}} spec status --all --json`
+   lists every slug with its resolved `specRoot`; if the runtime is missing, STOP as described in
+   "MGR runtime (mandatory)".
 4. **Nothing found → the Spec axis ABSTAINS:** say explicitly "no originating spec
    available" and **do not invent a requirement**. The Standards axis runs normally; the
    review ships with the Standards axis only.

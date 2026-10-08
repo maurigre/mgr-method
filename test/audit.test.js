@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   AUDITED, CLASSES, EMBEDDED_SHELL, EXCEEDS, EXFILTRATION, MATCHES, NOTHING_TO_DECLARE,
   OVERRIDE_ATTEMPT, SELF_MODIFICATION, UNDECLARED, UNREADABLE,
-  auditSkill, blocks, capabilitiesOf, compare, declaredCapabilities, inferCapabilities,
+  auditAll, auditSkill, blocks, capabilitiesOf, compare, declaredCapabilities, inferCapabilities,
 } from "../src/audit.js";
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -163,7 +163,7 @@ test("as três com auto-modificação nomeiam a linha, e duas delas escrevem mes
   for (const nome of ["configure-agents", "spec-init"]) {
     const achados = inferCapabilities(textoDe(nome)).filter((a) => a.capability === SELF_MODIFICATION);
     assert.ok(achados.length > 0, nome);
-    assert.ok(achados.some(({ excerpt }) => /mgr\s+(?:agents|origin)\s+set|\.mgr-core\/config/.test(excerpt)),
+    assert.ok(achados.some(({ excerpt }) => /mgr\s+(?:agents|origin)\s+set|(?:\{\{MGR_RUNTIME\}\}|mgr-runtime\.js)\s+(?:agents\s+(?:set|apply)|origin\s+set)|\.mgr-core\/config/.test(excerpt)),
       `${nome} manda a CLI gravar no config do MGR: achado correto, e o trecho tem de provar isso a quem lê`);
   }
 });
@@ -268,4 +268,31 @@ test("o ramo MATCHES não tem excedente a nomear", () => {
   assert.equal(branch, MATCHES);
   assert.deepEqual(undeclared, [], "a borda só imprime a linha do excedente quando há excedente");
   assert.deepEqual(inferred, [EMBEDDED_SHELL]);
+});
+
+test("should infer self-modification for the runtime agents set form with the {{MGR_RUNTIME}} token", () => {
+  assert.ok(capabilitiesOf("Run `node {{MGR_RUNTIME}} agents set review --effort max`").includes(SELF_MODIFICATION));
+});
+
+test("should infer self-modification for the runtime origin set form with the resolved mgr-runtime.js path", () => {
+  assert.ok(capabilitiesOf("Run `node .claude/skills/_shared/mgr/bin/mgr-runtime.js origin set greenfield`")
+    .includes(SELF_MODIFICATION));
+});
+
+test("should infer self-modification for the runtime agents apply form", () => {
+  assert.ok(capabilitiesOf("Run `node .claude/skills/_shared/mgr/bin/mgr-runtime.js agents apply`")
+    .includes(SELF_MODIFICATION));
+});
+
+test("should keep inferring self-modification for the legacy mgr agents set form", () => {
+  assert.ok(capabilitiesOf("Run `mgr agents set review --effort max`").includes(SELF_MODIFICATION));
+});
+
+test("should match the audit --json baseline for every bundled skill", () => {
+  const baseline = JSON.parse(readFileSync(path.join(raiz, "test", "fixtures", "audit-baseline.json"), "utf8"));
+  const atual = Object.fromEntries(auditAll().map(({ name, branch, inferred }) => [
+    name, { branch, classes: [...inferred].sort() },
+  ]));
+  assert.deepEqual(atual, baseline,
+    "a linha de base é a saída de `mgr audit --json` reduzida a branch e classes: divergir aqui é mudança de contrato");
 });

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { hookCommand, hookFilePath, HOOK_MARKER, removeHook, writeHook } from "../src/hooks.js";
+import { hookCommand, hookFilePath, HOOK_MARKER, removeHook, runtimeCommand, writeHook } from "../src/hooks.js";
 import { ids as engineIds } from "../src/engines/index.js";
 
 const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-hooks-"));
@@ -97,4 +97,30 @@ test("motor desconhecido é erro explícito", () => {
   const repo = diretorioTemporario();
   assert.throws(() => writeHook("cursor", repo, { command: MGR }), /invalid engine for session hook/);
   assert.throws(() => hookFilePath("cursor", repo), /invalid engine for session hook/);
+});
+
+test("should point runtimeCommand at the runtime copied inside each engine skills dir", () => {
+  const root = path.join(path.sep, "work", "proj");
+
+  assert.equal(
+    runtimeCommand("claude-code", root, "project"),
+    `node "${root}/.claude/skills/_shared/mgr/bin/mgr-runtime.js"`,
+  );
+  assert.equal(
+    runtimeCommand("copilot", root, "project"),
+    `node "${root}/.github/skills/_shared/mgr/bin/mgr-runtime.js"`,
+  );
+});
+
+test("should write detect --hook and the ownership marker when the command comes from runtimeCommand", () => {
+  for (const engine of ["claude-code", "copilot"]) {
+    const repo = diretorioTemporario();
+    const runtime = runtimeCommand(engine, repo, "project");
+
+    const gravado = readFileSync(writeHook(engine, repo, { command: runtime }), "utf8");
+
+    assert.ok(gravado.includes(`detect --hook ${engine}`), engine);
+    assert.ok(gravado.includes(`# ${HOOK_MARKER}`), engine);
+    assert.ok(gravado.includes("mgr-runtime.js"), engine);
+  }
 });

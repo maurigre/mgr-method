@@ -262,6 +262,24 @@ export function bodyCheckAvailability({ manifestVersion, packageVersion, file })
 }
 
 /**
+ * Verificacao que depende das fontes do pacote, rodando onde o pacote nao esta (DT-16): o runtime
+ * copiado para o projeto nao leva `skills/` nem `shared/`. Nao e defeito nem aviso — falta o insumo.
+ * Um achado por verificacao (`divergent-body` cobre skills, `_shared` e o runtime). O `fix` e o
+ * comando que roda o `doctor` com o pacote inteiro, na versao do manifesto; vive aqui e nao em
+ * `CHECKS`, porque so existe nesta condicao.
+ */
+function sourcesUnavailable({ check, manifestVersion, file }) {
+  return [achado({
+    check,
+    severity: UNAVAILABLE,
+    file,
+    expected: "as fontes do pacote (skills, shared e arquivos do runtime) ao alcance, para a comparacao",
+    found: "as fontes do pacote nao estao no projeto: o runtime copiado nao as carrega",
+    fix: `npx mgr-method@${manifestVersion} doctor`,
+  })];
+}
+
+/**
  * Fonte compartilhada ausente porque o manifesto esta atras do pacote.
  *
  * Com o manifesto atras do pacote, a ausencia de uma fonte compartilhada e o estado ESPERADO
@@ -283,6 +301,57 @@ export function sharedCheckAvailability({ manifestVersion, packageVersion, file 
     found: `manifesto em ${manifestVersion} e pacote em ${packageVersion}: a ausencia de fonte compartilhada aqui e esperada`,
     fix: FIX_UPDATE,
   })];
+}
+
+/**
+ * Runtime legivel copiado para dentro do motor (`<motor>/skills/_shared/mgr/`, DT-5).
+ *
+ * Ausente (diretorio ou `bin/mgr-runtime.js`) e DEFEITO, com `mgr update`: e o layout antigo, em
+ * que o motor nao tem como rodar o comando. Versao da copia diferente do manifesto e AVISO: a copia
+ * roda, mas nao e a que o manifesto declara.
+ *
+ * Nao alcanca o conteudo: quem compara byte a byte e `runtimeBodies`, e so quando o diretorio existe.
+ */
+function runtimeVersion({ dirDoRuntime, dirExists, entryExists, copyVersion, manifestVersion }) {
+  if (!dirExists || !entryExists) {
+    return [achado({
+      check: "runtime-version",
+      severity: DEFECT,
+      file: dirDoRuntime,
+      expected: "o runtime copiado para o motor, com bin/mgr-runtime.js",
+      found: dirExists ? "bin/mgr-runtime.js ausente" : "diretorio do runtime ausente",
+      fix: FIX_UPDATE,
+    })];
+  }
+  if (copyVersion === manifestVersion) return [];
+  return [achado({
+    check: "runtime-version",
+    severity: WARNING,
+    file: `${dirDoRuntime}/package.json`,
+    expected: `versao ${manifestVersion}, a do manifesto`,
+    found: copyVersion === undefined ? "versao ilegivel ou ausente" : copyVersion,
+    fix: FIX_UPDATE,
+  })];
+}
+
+/**
+ * Arquivo do runtime copiado que difere BYTE A BYTE do arquivo do pacote (D-14).
+ *
+ * Reusa o id `divergent-body` e a condicao `fonte-compartilhada` (o runtime mora sob `_shared/`,
+ * `mgr update` o re-copia). `copy`/`source` sao Buffers; `copy` nulo e arquivo ausente com o
+ * diretorio presente. A ausencia do DIRETORIO e da `runtime-version`, nunca daqui.
+ */
+export function runtimeBodies({ files }) {
+  return files
+    .filter(({ copy, source }) => copy === null || !copy.equals(source))
+    .map(({ rel, file, copy }) => achado({
+      check: "divergent-body",
+      severity: DEFECT,
+      file,
+      expected: `${rel} do runtime como o pacote o traz`,
+      found: copy === null ? "ausente" : "difere do arquivo do pacote",
+      fix: remediacaoDaCondicao(FONTE_COMPARTILHADA),
+    }));
 }
 
 /**
@@ -450,6 +519,22 @@ export const CHECKS = [
       },
     ],
   },
+  {
+    id: "runtime-version",
+    cobre: "runtime copiado para o motor ausente, ou em versão diferente do manifesto",
+    remediacoes: [
+      {
+        condicao: "runtime-ausente",
+        fix: FIX_UPDATE,
+        prova: PROVA_FUNCIONA,
+      },
+      {
+        condicao: "versao-divergente",
+        fix: FIX_UPDATE,
+        prova: PROVA_FUNCIONA,
+      },
+    ],
+  },
 ];
 
 /**
@@ -612,12 +697,19 @@ const arquivosMdEmShared = (dirDoMotor) => {
  *
  * **Nao escreve nada.** O comando e diagnostico; a acao e de quem le (DT-5).
  */
-export function diagnose(repo, { packageVersion } = {}) {
-  const coreDir = path.join(repo, ".mgr-core");
+export function diagnose(repo, { packageVersion, sources } = {}) {
+  const coreDir = path.join(repo, bundle.RUNTIME_DIR_NAME);
   const manifesto = leJson(path.join(coreDir, "manifest.json"));
   if (!manifesto) return { outcome: NO_INSTALL, findings: [], checks: 0 };
 
-  const versaoDoPacote = packageVersion ?? bundle.readVersion();
+  // `sources: null` = as fontes do pacote (skills/, shared/, arquivos do runtime) NAO estao ao
+  // alcance — o runtime copiado para o projeto nao as carrega (DT-16/D-14). `undefined` = fontes do
+  // pacote via `bundle`, como sempre. Com `null` NENHUMA chamada a `bundle` para recurso do pacote
+  // acontece: `pkgDir` lanca quando o recurso falta, e o processo morreria.
+  const semFontes = sources === null;
+  // Sem fontes nao ha "versao do pacote" a comparar; o manifesto serve de valor neutro e nenhuma
+  // verificacao que a use roda neste modo.
+  const versaoDoPacote = semFontes ? manifesto.version : (packageVersion ?? bundle.readVersion());
   const dirDasSkills = (manifesto.skillsDirs ?? []).map((relativo) => path.join(repo, relativo));
   const emDisco = [...new Set(dirDasSkills.flatMap(skillsEmDisco))].filter((nome) => nome !== catalog.SHARED_DIR);
   const declaradas = manifesto.skills ?? [];
@@ -663,24 +755,32 @@ export function diagnose(repo, { packageVersion } = {}) {
       exists: (relativo) => existsSync(path.join(repo, relativo)),
     }),
     ...architectureSkill({ architecture: manifesto.architecture, onDisk: emDisco, skillsDir: relativoDoDir }),
-    ...staleInstall({ manifestVersion: manifesto.version, packageVersion: versaoDoPacote, file: ".mgr-core/manifest.json" }),
+    ...(semFontes
+      ? sourcesUnavailable({ check: "stale-install", manifestVersion: manifesto.version, file: ".mgr-core/manifest.json" })
+      : staleInstall({ manifestVersion: manifesto.version, packageVersion: versaoDoPacote, file: ".mgr-core/manifest.json" })),
   ];
 
-  // Roda ANTES do laco: se a comparacao de corpo esta indisponivel, ela nao roda por skill.
-  const corpoIndisponivel = bodyCheckAvailability({
-    manifestVersion: manifesto.version,
-    packageVersion: versaoDoPacote,
-    file: ".mgr-core/manifest.json",
-  });
+  // Roda ANTES do laco: se a comparacao de corpo esta indisponivel, ela nao roda por skill. Sem
+  // fontes e UM achado so, que cobre skills, `_shared` e o corpo do runtime (D-14).
+  const corpoIndisponivel = semFontes
+    ? sourcesUnavailable({ check: "divergent-body", manifestVersion: manifesto.version, file: ".mgr-core/manifest.json" })
+    : bodyCheckAvailability({
+      manifestVersion: manifesto.version,
+      packageVersion: versaoDoPacote,
+      file: ".mgr-core/manifest.json",
+    });
   achados.push(...corpoIndisponivel);
 
   // Roda ANTES do laco: se a disponibilidade de fonte compartilhada esta indisponivel,
-  // ela nao roda por motor.
-  const compartilhadoIndisponivel = sharedCheckAvailability({
-    manifestVersion: manifesto.version,
-    packageVersion: versaoDoPacote,
-    file: ".mgr-core/manifest.json",
-  });
+  // ela nao roda por motor. Existencia nao depende das fontes do pacote (usa o catalogo), entao sem
+  // fontes ela roda.
+  const compartilhadoIndisponivel = semFontes
+    ? []
+    : sharedCheckAvailability({
+      manifestVersion: manifesto.version,
+      packageVersion: versaoDoPacote,
+      file: ".mgr-core/manifest.json",
+    });
   achados.push(...compartilhadoIndisponivel);
 
   // Por MOTOR, e nunca por posicao em `skillsDirs` — a regra esta em `src/installer.js:82-83`, e o
@@ -690,14 +790,15 @@ export function diagnose(repo, { packageVersion } = {}) {
     for (const nome of emDisco) {
       const instalado = path.join(dirDoMotor, nome, "SKILL.md");
       if (!existsSync(instalado)) continue;
-      const daFonte = path.join(bundle.skillsDir(), nome, "SKILL.md");
       const conteudo = readFileSync(instalado, "utf8");
       const relativo = path.relative(repo, instalado);
       // Derivacao do discriminador e literal: mesma variavel que o `mgr update` consome em `src/installer.js`
       // para decidir o que re-sincronizar. Nao e palpite — e campo do manifesto.
       const condicaoDaSkill = declaradas.includes(nome) ? SKILL_DECLARADA : SKILL_ORFA;
       achados.push(...unresolvedTokens({ installed: conteudo, file: relativo, condicao: condicaoDaSkill }));
-      if (!corpoIndisponivel.length && existsSync(daFonte)) {
+      // Lazy de proposito: com `sources: null` esta linha nao pode tocar `bundle.skillsDir()`.
+      const daFonte = corpoIndisponivel.length ? null : path.join(bundle.skillsDir(), nome, "SKILL.md");
+      if (daFonte && existsSync(daFonte)) {
         achados.push(...divergentBody({
           name: nome,
           source: corpoEsperado(engine, nome, readFileSync(daFonte, "utf8")),
@@ -748,6 +849,40 @@ export function diagnose(repo, { packageVersion } = {}) {
         }
       }
     }
+  }
+
+  // Runtime copiado por motor. Ausencia e versao: `runtime-version`, sempre. Corpo (D-14): so com o
+  // diretorio presente e sob o mesmo escudo de versao do corpo das skills, porque com o manifesto
+  // atras do pacote a copia diferir do pacote e o estado esperado (o indisponivel ja foi emitido).
+  const raizDoPacote = semFontes ? null : path.dirname(bundle.pkgDir("src"));
+  for (const { dir: dirDoMotor } of arvores) {
+    const dirDoRuntime = path.join(dirDoMotor, ...catalog.RUNTIME_DIR);
+    const relativoDoRuntime = path.relative(repo, dirDoRuntime);
+    const dirExists = existsSync(dirDoRuntime);
+    const entryExists = existsSync(path.join(dirDoRuntime, ...catalog.RUNTIME_ENTRY));
+    achados.push(...runtimeVersion({
+      dirDoRuntime: relativoDoRuntime,
+      dirExists,
+      entryExists,
+      copyVersion: leJson(path.join(dirDoRuntime, "package.json"))?.version,
+      manifestVersion: manifesto.version,
+    }));
+    if (!dirExists || corpoIndisponivel.length) continue;
+    // D-14, um fato um alarme: a entrada ausente ja foi acusada pela `runtime-version`.
+    const entrada = catalog.RUNTIME_ENTRY.join("/");
+    const files = catalog.RUNTIME_FILES
+      .filter((rel) => !(rel === entrada && !entryExists))
+      .filter((rel) => existsSync(path.join(raizDoPacote, ...rel.split("/"))))
+      .map((rel) => {
+        const naCopia = path.join(dirDoRuntime, ...rel.split("/"));
+        return {
+          rel,
+          file: path.relative(repo, naCopia),
+          source: readFileSync(path.join(raizDoPacote, ...rel.split("/"))),
+          copy: existsSync(naCopia) ? readFileSync(naCopia) : null,
+        };
+      });
+    achados.push(...runtimeBodies({ files }));
   }
 
   const arquivoDeHook = path.join(repo, ".claude", "settings.local.json");

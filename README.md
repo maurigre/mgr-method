@@ -55,7 +55,26 @@ engine's folder (`.claude/skills/` or `.github/skills/`), no duplication and no 
 ├── manifest.json     # what was installed (engines, skills, language, architecture, userLanguage)
 └── .env              # MGR_PROJECT_ID=<id>, used by the extended memory (mgr-code)
 .claude/skills/       # the skills (single skills tree)
+.claude/skills/_shared/mgr/  # the MGR runtime: readable code, Node only, no external dependency, called by the skills by explicit path; nothing is installed in the operating system
 ```
+
+> **Runtime versioned with the skills (R-7).** The runtime (`<engine>/skills/_shared/mgr/`, in
+> `.claude/` or `.github/`) is code versioned together with the engine's skills. If your project's
+> lint, tests or typecheck scan that folder, you may need to ignore it (`**/skills/_shared/mgr/**`).
+> The skills call the runtime by explicit path. If it is missing, they **stop** and show the restore
+> command (`npx mgr-method@<version> update`) instead of going on without it.
+>
+> The runtime answers only the commands the skills use — `spec status|validate|next`, `agents`
+> (`set`, `apply`), `origin set`, `doctor`, `sdd-check`, `detect`, `precompact`, `version` — and
+> refuses lifecycle commands (`install`, `update`, `add`…), naming the `npx mgr-method@<version>`
+> command to run instead. `doctor` run through the runtime reports `stale-install` and
+> `divergent-body` as **unavailable**: the package sources they compare against are not in the
+> project, so it names `npx mgr-method@<version> doctor` for the full check.
+>
+> **`update` rewrites the MGR hook entries.** When it migrates an old install, `update` replaces the
+> command of the MGR's own entries (the ones carrying `mgr-session-hook`) in the engine's
+> `settings.local.json` so they point to the project runtime. Your entries stay byte for byte, and no
+> new event is created.
 
 Installing for two engines produces two independent trees — deleting one does **not**
 affect the other. Installations in the old model (runtime + `.mgr-core/skills` +
@@ -89,7 +108,7 @@ code-analyzer ─ final 2-axis review: Standards (THE project's guide) + Spec (d
 |---|---|
 | **Artifact validation** | `mgr spec validate` checks a feature's **plan** and **spec**: a dependency that does not exist, a cycle in the DAG, granularity, a task with no done criterion, and a spec with no identified acceptance criterion. Format declared by a marker; **nothing that already exists is reproved** (ADR-0012, ADR-0013). |
 | **Resolved paths** | `mgr spec status` answers which artifacts exist for a feature and **where they are**, so a skill stops building paths from convention. The vocabulary has no `done`: file existence is not step completion, and the payload says so in `basis` and `warning` (ADR-0015). |
-| **A model per intent** | `mgr agents` answers which model and effort each step of the flow uses, and where each value came from. Drafting, execution and review are declared once in `.mgr-core/config.json`; the install writes them into each agent and the invocation can override the model without reinstalling. Changing `effort` needs `mgr update`, and the command says so (ADR-0017). |
+| **A model per intent** | `mgr agents` answers which model and effort each step of the flow uses, and where each value came from. Drafting, execution and review are declared once in `.mgr-core/config.json`; the install writes them into each agent and the invocation can override the model without reinstalling. Changing `effort` needs `mgr agents apply`, and the command says so (ADR-0017). |
 | **Verifiable provenance** | `mgr spec validate` also checks the provenance tag you wrote: its form, and whether a `[code:<path>:<line>]` pointer resolves on disk from the repository root. It never **requires** a tag — the rule that would demand one was rejected on measurement, and nothing that already exists is reproved (ADR-0016). |
 | **Next action, not state** | `mgr spec next` answers what to do now: the task, its exact artifact, the helper skill and what it waits on. A task can declare `status: done`, and the answer always says how much state the plan declares — with none, it says it does not know what you have already done (ADR-0014). |
 | **Execution laws** | **Single source** in `shared/laws/execution-laws.md`: 47 laws (L0–L6) binding on every skill, each declaring **who it binds, by role** (`Planner`, `Executor`, `Verifier`, `Diagnostician`, `All`). Skills point to it; none repeats a law. The central ones enter the context **before the first message**, via the session hook (ADR-0011). |
@@ -109,7 +128,7 @@ code-analyzer ─ final 2-axis review: Standards (THE project's guide) + Spec (d
 | **Skill contract checked** | `mgr validate` gained limits on the **required** fields — `name` up to 64 characters, and `name` or `description` read as a map reproves, a hole that let a skill with no usable `description` pass — and on the **optional** fields of the open Agent Skills standard, when present: `compatibility` up to 500, `metadata` as a one-level string map, and `allowed-tools` as a space-separated string. **Code that passed can now reprove**, and only if it already declared one of those fields in an invalid form. The 13 CORE skills declare `license`, and `junit-clean` also declares the environment it needs (ADR-0021). |
 | **Context reference before compaction** | When the engine announces compaction, the method records **where this session's conversation lives** — the transcript the engine itself keeps, plus subagent reasoning and tool output spilled to disk — in a single per-project manifest, with size and checksum measured at that moment. Nothing is copied: the transcript survives compaction, so duplicating it would pile up megabytes and protect nothing. The method **points** at the context, it does not keep it, and consolidation into `mgr-code` is a separate piece that does not exist yet (ADR-0019). |
 | **Pre-compaction hand-off** | When the engine announces it is about to compact the context, the method writes the hand-off **first**, states the reason and suggests a new session. On a `/compact` you asked for, in claude-code, it blocks once so you decide with the state already safe on disk. In copilot the event is notification only: the hand-off is still written, but the platform gives the hook no way to block and no way to reach you (ADR-0018). |
-| `configure-agents` | Guides the choice of model and effort per intent (`drafting`, `execution`, `review`) and writes it with `mgr agents set`. It says what each intent does and shows the identifiers each engine documents, and it **never suggests** a model for an intent: the available models and the bill both belong to your account. |
+| `configure-agents` | Guides the choice of model and effort per intent (`drafting`, `execution`, `review`) and writes it through the project runtime (`agents set`), asking before `agents apply` rewrites the agent files. It says what each intent does and shows the identifiers each engine documents, and it **never suggests** a model for an intent: the available models and the bill both belong to your account. |
 | `evidence-capture` | Records AI-First evidence per feature (prompts, reviews, skills) in `specs/<feature>/ai/` + a global index; organizes and asks, never invents. |
 | `junit-clean` | Java tests standardized by 13 rules (should+camelCase naming, no inheritance, ParameterizedTest, AAA, boundary + MC/DC, Sonar-safe). |
 | `arch-hexagonal` | Rules guide for Ports & Adapters (Cockburn), language-agnostic (Java/Go/Python/C#/TS profiles + generic). |
@@ -133,6 +152,7 @@ exists without a row here, or a row without a check, fails the build.
 | `broken-hook` | absolute path in `settings.local.json` |
 | `lockfile-drift` | `lockfile.diff()` |
 | `missing-shared` | the `_shared/` sources the installed set requires, against the disk |
+| `runtime-version` | the project runtime `<engine>/skills/_shared/mgr/` and its generated `package.json` against the manifest (missing → defect; other version → warning); each runtime file's body is checked by `divergent-body` |
 
 
 ### Principles that govern everything
@@ -162,22 +182,25 @@ decision automatically generates an ADR. Out comes the same SDD as brownfield; t
 
 ```
 bin/mgr.js          # CLI: install · status · update · uninstall · build · validate · list · version
-                    #      add · remove · registry · detect · agents · tokens · spec · precompact
-src/                # the core, 35 modules: install and build · per-engine descriptor · plugin
+                    #      add · remove · registry · detect · agents · agents apply · tokens · spec · precompact · sdd-check
+src/                # the core, 40 modules: install and build · per-engine descriptor · plugin
                     # skill · spec artifact (parser/rules/validator) · session and context (hooks,
                     # pre-compaction, context reference) · messages
 src/engines/        # what each engine supports, as DATA — never an `if` on the engine name
+src/commands/       # the command glue shared by the CLI and the project runtime (IO injected)
+bin/mgr-runtime.js  # the project runtime entry, copied with its import closure into <engine>/skills/_shared/mgr/
 skills/             # the 13 skills (source)
 agents/             # the 3 agent moulds (drafting, execution, review gate)
-shared/             # cross-cutting sources: architecture and quality rules, laws, sdd-check.sh
+shared/             # cross-cutting sources: architecture and quality rules, laws
 docs/adr/           # the decisions, Nygard format — versioned and self-contained
 docs/plugins.md     # plugin skill format: manifest, registry, lockfile, capability matrix
 docs/engine-hooks.md # hook capability matrix for the six engines studied, with source and date
 test/               # node:test
 ```
 
-Minimal dependencies (@clack/prompts and picocolors in the TUI; esbuild dev-only — the
-published package is a minified bundle). Node ≥ 22. Release: `git tag vX.Y.Z && git push
+Minimal dependencies (@clack/prompts and picocolors in the TUI; esbuild dev-only — the CLI
+is a minified bundle, and the package also carries the readable `src/` that is copied into the
+project as the runtime, ADR-0023). Node ≥ 22. Release: `git tag vX.Y.Z && git push
 --tags` triggers the publish workflow (validates, tests and publishes to npm with
 provenance). Development: `npm test`, `node bin/mgr.js validate`.
 

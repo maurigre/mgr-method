@@ -1,0 +1,1358 @@
+{
+  "en": {
+    "aborted": "aborted.",
+    "agentChanged": [
+      "  a (b): c from d to undefined",
+      "  x (y): 2 from 3 to undefined"
+    ],
+    "agentCreated": [
+      "  a (b): written for the first time",
+      "  x (y): written for the first time"
+    ],
+    "agentsAliasNote": "`reviewGate` and `agents.review` are both set: `agents.review` wins. Remove `reviewGate` to keep one source.",
+    "agentsEffortNote": "Changing `effort` only takes effect after `mgr update`: it lives in the agent file, and the invocation cannot override it. Changing `model` takes effect on the next invocation.",
+    "agentsEngine": [
+      "  a            model=b  effort=c",
+      "THROWS:TypeError"
+    ],
+    "agentsInherited": "inherited from the session",
+    "agentsInheritWarning": [
+      "Running on the session model: a. No model is published by default — the list of models belongs to your account, not to this tool. Declare one per intent in `.mgr-core/config.json` to get the benefit.",
+      "Running on the session model: x. No model is published by default — the list of models belongs to your account, not to this tool. Declare one per intent in `.mgr-core/config.json` to get the benefit."
+    ],
+    "agentsIntent": [
+      "a          b",
+      "THROWS:TypeError"
+    ],
+    "agentsSetEffortEffect": "`effort` only takes effect after `mgr update`: it lives in the agent file, and the invocation cannot override it.",
+    "agentsSetEngineNotInstalled": [
+      "engine `a` is not installed in this project (installed: b)",
+      "engine `x` is not installed in this project (installed: y)"
+    ],
+    "agentsSetModelEffect": "`model` takes effect on the next invocation.",
+    "agentsSetNeedsIntent": [
+      "name the intent to configure (expected a)",
+      "name the intent to configure (expected x)"
+    ],
+    "agentsSetNoEngines": "no engine installed in this project: run `mgr install` first",
+    "agentsSetNothing": "nothing to write: pass `--model`, `--effort`, or both",
+    "agentsSetWriting": [
+      "Writing `agents.a` to .mgr-core/config.json",
+      "Writing `agents.x` to .mgr-core/config.json"
+    ],
+    "agentsSetWritten": [
+      "written to `agents.a` — b",
+      "written to `agents.x` — y"
+    ],
+    "agentsSourceConfigured": "configured",
+    "agentsSourceDefault": "default",
+    "agentsUnknown": [
+      "unknown intent `a` (expected b)",
+      "unknown intent `x` (expected y)"
+    ],
+    "agentsUnsupported": "not supported by this engine",
+    "agentsValueFrom": [
+      "a (b)",
+      "x (y)"
+    ],
+    "agentWritten": [
+      "  agent a written to b",
+      "  agent x written to y"
+    ],
+    "bannerCreatedBy": [
+      "Created by a · b",
+      "Created by x · y"
+    ],
+    "bannerInstaller": [
+      "Installer va",
+      "Installer vx"
+    ],
+    "bannerTagline": "AI Development Framework (SDD for coding agents)",
+    "buildDone": [
+      "runtime built at a: b",
+      "runtime built at x: y"
+    ],
+    "confirmInstall": "Confirm installation?",
+    "confirmRemoval": [
+      "Remove the a skill(s) above from disk?",
+      "Remove the x skill(s) above from disk?"
+    ],
+    "detectItem": [
+      "  a  (from b)",
+      "  x  (from y)"
+    ],
+    "detectNothing": "Nothing detected: no known project file found at the paths mgr looks at.",
+    "detectTitle": "Detected in this project",
+    "doctorNaoAtesta": "  No finding means the checks I run found nothing, never that the install is sound.",
+    "doctorResumo": [
+      "  a checks, b finding(s).",
+      "  x checks, y finding(s)."
+    ],
+    "doctorSemInstalacao": "no MGR installation here: nothing to compare against",
+    "done": "Done! Start with /spec-init, then /spec-create per feature.",
+    "dryRun": "(dry-run: nothing was written.)",
+    "errorPrefix": [
+      "error: a",
+      "error: x"
+    ],
+    "existingSkillsTitle": "Existing skills detected",
+    "gateBlocked": [
+      "  not overwritten: a exists and was not written by MGR",
+      "  not overwritten: x exists and was not written by MGR"
+    ],
+    "gateEffortInherited": "session effort",
+    "gateKept": [
+      "  kept: a lost the MGR marker and was left untouched",
+      "  kept: x lost the MGR marker and was left untouched"
+    ],
+    "gateModelInherited": "inherits the session model",
+    "gateSkipped": [
+      "  a: b not supported by this engine — declared, not applied",
+      "  x: y not supported by this engine — declared, not applied"
+    ],
+    "help": "MGR — Método Governado por Rastreabilidade (Traceability-Governed Method)\n\nUsage: mgr <command> [options]\n\n  install [repo]   installs the skills (selective) straight into the engine folder\n                   (--engine claude-code|copilot|both, --scope, --language, --arch,\n                    --user-language, --project-id, --all-skills, --skills-dir, --dry-run, -y)\n  status [repo]    shows what is installed\n  update [repo]    re-synchronizes (--scope)\n  uninstall [repo] removes the installed skills (--scope, -y)\n  build            generates a directory with the full content (--out)\n  validate         validates the SKILL.md files (skill authoring)\n  audit            infers each skill's dangerous capabilities and compares with what it declares\n  doctor           checks whether the installation is intact, and never writes anything\n  spec validate    validates this project's plan and spec artifacts\n                   ([<slug>], --all, --strict, --json)\n  spec next        the next action from the plan ([<slug>], --json)\n  spec status      which artifacts exist ([<slug>], --all, --json)\n  agents           which model and effort each intent uses, and where each\n                   value came from ([<intent>], --json)\n  agents set       writes one intent's policy (<intent>, --model, --effort,\n                   --engine); it does not run mgr update\n  origin set       records whether the project was born from the method or is\n                   legacy (<greenfield|brownfield>); it does not run mgr update\n  precompact       writes the hand-off before the engine compacts the context\n                   (--hook <engine>); called by the hook, not by hand\n  tokens           how much the flow consumed: pass the conversation\n                   transcript, then each agent transcript (--json)\n  list             lists the skills\n  version          shows the version\n\nPlugin skills (https://github.com/maurigre/mgr-method/blob/main/docs/plugins.md):\n\n  add <@registry/skill>       installs a plugin skill (always asks for confirmation)\n  remove <@registry/skill>    removes a plugin skill\n  registry add <name> <url> [--trusted] | remove <name> | list\n                              manages the registries in .mgr-core/config.json\n  detect [repo]               shows what the project needs and what the registries offer\n                              (--hook <engine> emits the session-hook report)\n",
+    "hookCopilotTrust": "Copilot only loads the repository hook after you trust the folder: the first session will ask, and nothing happens until you accept.",
+    "hookRemoved": [
+      "  hooks removed from a: b",
+      "  hooks removed from x: y"
+    ],
+    "hookWritten": [
+      "  hooks written to a: b",
+      "  hooks written to x: y"
+    ],
+    "installedAt": [
+      "Skills installed at a.",
+      "Skills installed at x."
+    ],
+    "installing": "Installing skills into the engines",
+    "invalidScope": [
+      "invalid scope: a",
+      "invalid scope: x"
+    ],
+    "keptByChoice": [
+      "THROWS:TypeError",
+      "Nothing was removed: x stayed on disk and stay declared, so nothing was orphaned."
+    ],
+    "keptNoConsent": [
+      "THROWS:TypeError",
+      "Nothing was removed: there was no terminal to ask. x stayed on disk and stay declared; `-y` authorizes the removal."
+    ],
+    "keptNoSource": [
+      "THROWS:TypeError",
+      "This version no longer ships x: they stay on disk, out of the manifest, and `mgr doctor` will report them as orphans."
+    ],
+    "langOtherHint": "no language helpers",
+    "langOtherLabel": "other / unspecified",
+    "migrationInfo": [
+      "Migration: old model removed (a item(s), including .mgr-core).",
+      "Migration: old model removed (x item(s), including .mgr-core)."
+    ],
+    "oldInstallWarn": [
+      "Old installation (va, runtime-launcher model) detected — it will be MIGRATED to the new layout.",
+      "Old installation (vx, runtime-launcher model) detected — it will be MIGRATED to the new layout."
+    ],
+    "originNoInstall": [
+      "no MGR installation found at a; writing the origin anyway (this is the global-scope case).",
+      "no MGR installation found at x; writing the origin anyway (this is the global-scope case)."
+    ],
+    "originSetNeedsValue": [
+      "mgr origin set needs a value (a)",
+      "mgr origin set needs a value (x)"
+    ],
+    "originUnknown": [
+      "unknown project origin: a (expected b)",
+      "unknown project origin: x (expected y)"
+    ],
+    "originWriting": [
+      "Writing the project origin to a/config.json",
+      "Writing the project origin to x/config.json"
+    ],
+    "originWritten": [
+      "project origin: a -> b",
+      "project origin: x -> y"
+    ],
+    "outEnHint": "English",
+    "outOtherHint": "specify which",
+    "outOtherLabel": "other",
+    "outPtHint": "Brazilian Portuguese",
+    "planAbandoned": [
+      "THROWS:TypeError",
+      "leaving the declared set (1) — removed only if you confirm:\n  x"
+    ],
+    "planAgentIntent": [
+      "  a: b",
+      "  x: y"
+    ],
+    "planConfig": [
+      "config   →   a",
+      "config   →   x"
+    ],
+    "planConfigHint": "(manifest.json + .env)",
+    "planEngines": [
+      "engine(s):   a",
+      "engine(s):   x"
+    ],
+    "planGate": [
+      "agents   →   a",
+      "agents   →   x"
+    ],
+    "planGateEngine": [
+      "  a: model=b effort=c",
+      "  x: model=y effort=2"
+    ],
+    "planGateHint": "(one agent per intent; the review runs in its own)",
+    "planHooks": [
+      "hooks    →   a",
+      "hooks    →   x"
+    ],
+    "planHooksHint": "(session detection and hand-off before compaction, per engine)",
+    "planLaws": [
+      "laws     →   a",
+      "laws     →   x"
+    ],
+    "planLawsHint": "(execution laws: single source, pointed to by every CORE skill)",
+    "planOutput": [
+      "output:      a",
+      "output:      x"
+    ],
+    "planOutputHint": "(skills output: conversation and artifacts)",
+    "planPreambleOff": "  session preamble: off (lawsPreamble.enabled = false)",
+    "planPreambleOn": "  session preamble: on (the central laws enter before the first message)",
+    "planProject": [
+      "project:     a    scope: b",
+      "project:     x    scope: y"
+    ],
+    "planSkills": [
+      "skills (a): b",
+      "skills (x): y"
+    ],
+    "planSkillsDir": [
+      "skills   →   a",
+      "skills   →   x"
+    ],
+    "planStack": [
+      "language:    a    architecture: b",
+      "language:    x    architecture: y"
+    ],
+    "planTitle": "Installation plan (self-contained per engine)",
+    "pluginCancelled": "installation cancelled by the user.",
+    "pluginCollisionAlongside": "Install alongside",
+    "pluginCollisionAlongsideHint": [
+      "plugin goes to a; the method skill stays",
+      "plugin goes to x; the method skill stays"
+    ],
+    "pluginCollisionQuestion": [
+      "The method already provides the skill \"a\" here. What should mgr do?",
+      "The method already provides the skill \"x\" here. What should mgr do?"
+    ],
+    "pluginCollisionReplace": "Replace the method skill",
+    "pluginCollisionReplaceHint": [
+      "plugin takes the a folder; recorded in the lockfile",
+      "plugin takes the x folder; recorded in the lockfile"
+    ],
+    "pluginConfirm": "Install this skill?",
+    "pluginInstalled": [
+      "a installed at b.",
+      "x installed at y."
+    ],
+    "pluginInstalling": "Downloading and verifying",
+    "pluginLocked": [
+      "locked in a.",
+      "locked in x."
+    ],
+    "pluginNeedsTty": "`mgr add` requires an interactive terminal: every install is confirmed by a human and there is no bypass flag.",
+    "pluginNoPermissions": "none declared",
+    "pluginProposalCategory": [
+      "category:    a",
+      "category:    x"
+    ],
+    "pluginProposalChecksum": [
+      "checksum:    a",
+      "checksum:    x"
+    ],
+    "pluginProposalEngines": [
+      "engine(s):   a",
+      "engine(s):   x"
+    ],
+    "pluginProposalExtends": [
+      "extends:     a (installed together; the extending skill takes precedence)",
+      "extends:     x (installed together; the extending skill takes precedence)"
+    ],
+    "pluginProposalName": [
+      "skill:       a@b",
+      "skill:       x@y"
+    ],
+    "pluginProposalOrigin": [
+      "origin:      a (b)",
+      "origin:      x (y)"
+    ],
+    "pluginProposalPermissions": [
+      "permissions: a",
+      "permissions: x"
+    ],
+    "pluginProposalTitle": "Plugin skill to install",
+    "pluginProposalTrust": [
+      "trusted:     yes",
+      "trusted:     yes"
+    ],
+    "pluginRemoved": [
+      "a removed.",
+      "x removed."
+    ],
+    "pluginRemoveReturns": [
+      "  the method skill a comes back on the next `mgr install` or `mgr update`",
+      "  the method skill x comes back on the next `mgr install` or `mgr update`"
+    ],
+    "pluginRemoveSkipped": [
+      "  kept a: it does not carry b's manifest, so another skill owns that folder",
+      "  kept x: it does not carry y's manifest, so another skill owns that folder"
+    ],
+    "pluginRemoving": [
+      "Removing a from the engines and the lockfile",
+      "Removing x from the engines and the lockfile"
+    ],
+    "pluginsAvailableError": [
+      "  (registry \"a\" unavailable: b)",
+      "  (registry \"x\" unavailable: y)"
+    ],
+    "pluginsAvailableItem": [
+      "  a@b  [c]",
+      "  x@y  [2]"
+    ],
+    "pluginsAvailableTitle": "Available in the configured registries",
+    "pluginsInstalledItem": [
+      "  a@b  (registry: c, folder: d)",
+      "  x@y  (registry: 2, folder: 3)"
+    ],
+    "pluginsInstalledTitle": "Installed plugin skills",
+    "pluginUsageAdd": "usage: mgr add <@registry/skill>",
+    "pluginUsageRemove": "usage: mgr remove <@registry/skill>",
+    "pluginWarning": [
+      "  warning (a): b",
+      "  warning (x): y"
+    ],
+    "precompactBlocked": [
+      "Compaction blocked by MGR: you asked for it, and the state is safe on disk (a). Start a new session and resume from it. If you still want to compact, ask again and it will go through.",
+      "Compaction blocked by MGR: you asked for it, and the state is safe on disk (x). Start a new session and resume from it. If you still want to compact, ask again and it will go through."
+    ],
+    "precompactContextMissed": [
+      "The conversation context could NOT be referenced (a): the hand-off was still written.",
+      "The conversation context could NOT be referenced (x): the hand-off was still written."
+    ],
+    "precompactContextRecovered": "The previous context manifest was corrupt and had to be replaced: references not yet consolidated were lost.",
+    "precompactContextReferenced": [
+      "Context of this session referenced in undefined: undefined records, undefined bytes. The extended memory was NOT consulted: consolidation into mgr-code happens later. The method POINTS at the context, it does not keep it — clearing the engine history loses what the reference pointed to.",
+      "Context of this session referenced in undefined: undefined records, undefined bytes. The extended memory was NOT consulted: consolidation into mgr-code happens later. The method POINTS at the context, it does not keep it — clearing the engine history loses what the reference pointed to."
+    ],
+    "precompactLogContextAfter": [
+      "context referenced in a (b entries)",
+      "context referenced in x (y entries)"
+    ],
+    "precompactLogContextBefore": [
+      "referencing the conversation context in a",
+      "referencing the conversation context in x"
+    ],
+    "precompactLogGitAfter": [
+      "git reported a uncommitted file(s)",
+      "git reported x uncommitted file(s)"
+    ],
+    "precompactLogGitBefore": "reading the git working tree",
+    "precompactLogStampAfter": "refusal stamp written",
+    "precompactLogStampBefore": "writing the refusal stamp",
+    "precompactLogWriteAfter": [
+      "hand-off appended to a",
+      "hand-off appended to x"
+    ],
+    "precompactLogWriteBefore": [
+      "writing the hand-off to a",
+      "writing the hand-off to x"
+    ],
+    "precompactNothingToSave": "Context compaction is about to happen. No feature in progress, so nothing was written.",
+    "precompactProceeding": "Compacting: you asked again, and the hand-off on disk is current. What follows in this window comes from a summary.",
+    "precompactSuggestNewSession": "Start a NEW session and resume from the hand-off: what follows in this window comes from a summary, not from the original context.",
+    "precompactWrote": [
+      "Context compaction is about to happen. Hand-off for `b` written to a.",
+      "Context compaction is about to happen. Hand-off for `y` written to x."
+    ],
+    "precompactWroteBlocked": [
+      "Compaction stopped this time. Hand-off for `b` written to a.",
+      "Compaction stopped this time. Hand-off for `y` written to x."
+    ],
+    "qArchitecture": "Project architecture? (defines which arch-* skill to install)",
+    "qEngines": "Which engines should receive the skills? (space marks, enter confirms)",
+    "qLanguage": "Main programming language? (defines specific helpers)",
+    "qOptionalEvidence": "Include the optional evidence-capture skill?",
+    "qOutputLanguage": "Output language? (conversation and artifacts generated by the skills)",
+    "qProjectId": "MGR_PROJECT_ID (project identifier for the mgr-code memory)?",
+    "qScope": "Installation scope?",
+    "qWhichLanguage": "Which language? (e.g. es-ES, fr-FR)",
+    "registryAdded": [
+      "registry \"a\" added: b",
+      "registry \"x\" added: y"
+    ],
+    "registryAdding": [
+      "Adding registry \"a\" to .mgr-core/config.json",
+      "Adding registry \"x\" to .mgr-core/config.json"
+    ],
+    "registryListEmpty": "No registry configured — run `mgr registry add <name> <index-url>`.",
+    "registryListItem": [
+      "  a (trusted)  b",
+      "  x (trusted)  y"
+    ],
+    "registryListTitle": "Configured registries",
+    "registryRemoved": [
+      "registry \"a\" removed.",
+      "registry \"x\" removed."
+    ],
+    "registryRemoving": [
+      "Removing registry \"a\" from .mgr-core/config.json",
+      "Removing registry \"x\" from .mgr-core/config.json"
+    ],
+    "registryUsage": "usage: mgr registry add <name> <index-url> [--trusted] | mgr registry remove <name> | mgr registry list",
+    "removalReason": [
+      "a — no longer in the declared set",
+      "x — no longer in the declared set"
+    ],
+    "removedItem": [
+      "  removed: a",
+      "  removed: x"
+    ],
+    "removedSkills": [
+      "THROWS:TypeError",
+      "Removed 1 skill(s): x"
+    ],
+    "restoreDone": [
+      "a plugin skill(s) restored.",
+      "x plugin skill(s) restored."
+    ],
+    "restoreSkippedEngine": [
+      "a is locked for b, not an active engine here; that copy was not restored",
+      "x is locked for y, not an active engine here; that copy was not restored"
+    ],
+    "restoring": [
+      "Restoring plugin skills from a",
+      "Restoring plugin skills from x"
+    ],
+    "resyncWarn": "Existing MGR installation detected — it will be re-synchronized.",
+    "scopeGlobalHint": "for all projects (home)",
+    "scopeProjectHint": "in this repository",
+    "specNextAllDone": [
+      "Nothing to do: all a task(s) are marked done.",
+      "Nothing to do: all x task(s) are marked done."
+    ],
+    "specNextAllRefused": "`mgr spec next` does not accept `--all`: the next action is about ONE feature — name one, or run it from inside `specs/<slug>/`",
+    "specNextArtifact": [
+      "  artifact:  a",
+      "  artifact:  x"
+    ],
+    "specNextBasis": [
+      "State declared in a of b task(s).",
+      "State declared in x of y task(s)."
+    ],
+    "specNextBlocked": [
+      "  a waits on b",
+      "  x waits on y"
+    ],
+    "specNextDependsOn": [
+      "  after:     a",
+      "  after:     x"
+    ],
+    "specNextDoneWhen": [
+      "  done when: a",
+      "  done when: x"
+    ],
+    "specNextFile": [
+      "a",
+      "x"
+    ],
+    "specNextFirstStartable": "So this is the first task that CAN start, not necessarily the next one.",
+    "specNextFormatNotDeclared": "This plan does not declare the format, so there is nothing to answer from. Add the marker on the first line and the fields the tasks already have become readable.",
+    "specNextNeedsSlug": [
+      "a feature(s) in specs/ and none was named — name one, or run this from inside `specs/<slug>/`",
+      "x feature(s) in specs/ and none was named — name one, or run this from inside `specs/<slug>/`"
+    ],
+    "specNextNoPlan": [
+      "no plan found in a",
+      "no plan found in x"
+    ],
+    "specNextNoState": [
+      "State declared in 0 of a task(s): this tool does NOT know what you have already done.",
+      "State declared in 0 of x task(s): this tool does NOT know what you have already done."
+    ],
+    "specNextNoTasks": "The plan declares the format but has no task.",
+    "specNextNothingReady": "Nothing is ready to start. Every pending task waits on something.",
+    "specNextRunValidate": "In a valid plan this cannot happen: some task has no dependency and is ready. Run `mgr spec validate`.",
+    "specNextSkill": [
+      "  skill:     a",
+      "  skill:     x"
+    ],
+    "specNextTask": [
+      "a",
+      "x"
+    ],
+    "specStatusArtifacts": [
+      "  artifacts: a",
+      "  artifacts: x"
+    ],
+    "specStatusEmpty": [
+      "no feature found in a",
+      "no feature found in x"
+    ],
+    "specStatusHandoffNone": "  handoff:   none",
+    "specStatusHandoffOn": [
+      "  handoff:   a (on disk; it is never removed automatically)",
+      "  handoff:   x (on disk; it is never removed automatically)"
+    ],
+    "specStatusLine": [
+      "  a                          b",
+      "THROWS:TypeError"
+    ],
+    "specStatusNextReady": [
+      "  to write:  a",
+      "  to write:  x"
+    ],
+    "specStatusNotFound": [
+      "no feature `a` in specs/",
+      "no feature `x` in specs/"
+    ],
+    "specStatusNothingReady": "  to write:  nothing — every artifact is on disk",
+    "specStatusRoot": [
+      "a",
+      "x"
+    ],
+    "specStatusWarning": "This is FILE EXISTENCE, not progress. It does not know which checkpoint you approved, and an artifact on disk is not an approved artifact.",
+    "specValidateExample": [
+      "      like: a",
+      "      like: x"
+    ],
+    "specValidateFix": [
+      "      fix: a",
+      "      fix: x"
+    ],
+    "specValidateHeader": [
+      "a",
+      "x"
+    ],
+    "specValidateItem": [
+      "  ! a c:d — undefined",
+      "  ! x 2:3 — undefined"
+    ],
+    "specValidateNextSteps": "Next steps: fix the errors above and run `mgr spec validate` again.",
+    "specValidateNoSpecs": [
+      "no spec found in a",
+      "no spec found in x"
+    ],
+    "specValidateOk": [
+      "c artifact(s): a task(s) and b acceptance criteria checked, no structural defect found.",
+      "2 artifact(s): x task(s) and y acceptance criteria checked, no structural defect found."
+    ],
+    "specValidateScopeNote": "This check is STRUCTURAL. It does not judge whether the plan is right, whether the tasks are the right ones, whether a done criterion is good, nor whether an acceptance criterion is testable or covers the spec.",
+    "specValidateSummary": [
+      "a error(s), b warning(s).",
+      "x error(s), y warning(s)."
+    ],
+    "statusConfig": [
+      "  config:  a",
+      "  config:  x"
+    ],
+    "statusDivergenceHint": "    run `mgr install` to restore the locked set",
+    "statusDivergenceItem": [
+      "    a: locked, but missing or different on disk",
+      "    x: locked, but missing or different on disk"
+    ],
+    "statusDivergenceTitle": "  divergences (lockfile vs disk):",
+    "statusGate": [
+      "  gate:    a",
+      "  gate:    x"
+    ],
+    "statusGateEngine": [
+      "    a: model=b effort=c",
+      "    x: model=y effort=2"
+    ],
+    "statusGateOff": "off (every intent disabled in `agents`)",
+    "statusGateSource": [
+      "    from: a",
+      "    from: x"
+    ],
+    "statusInstalledAt": [
+      "  at:      a",
+      "  at:      x"
+    ],
+    "statusLaws": [
+      "  laws:    a",
+      "  laws:    x"
+    ],
+    "statusNone": "No MGR installation found (project or global).",
+    "statusOldModel": "runtime-launcher (OLD — run `mgr update` to migrate)",
+    "statusOutput": [
+      "  output:  a",
+      "  output:  x"
+    ],
+    "statusPluginItem": [
+      "    a@b (c)",
+      "    x@y (2)"
+    ],
+    "statusPluginItemReplacing": [
+      "    a@b (c) — replaces the method skill d",
+      "    x@y (2) — replaces the method skill 3"
+    ],
+    "statusPluginsTitle": [
+      "  plugins: a",
+      "  plugins: x"
+    ],
+    "statusProject": [
+      "  project: a",
+      "  project: x"
+    ],
+    "statusSkills": [
+      "  skills:  a",
+      "  skills:  x"
+    ],
+    "statusSkillsDir": [
+      "  skills:  a",
+      "  skills:  x"
+    ],
+    "statusStack": [
+      "  stack:   language=a architecture=b",
+      "  stack:   language=x architecture=y"
+    ],
+    "suggestConfirm": [
+      "Install a?",
+      "Install x?"
+    ],
+    "suggestItem": [
+      "  a@b  — c, from d",
+      "  x@y  — 2, from 3"
+    ],
+    "suggestNone": "No skill in the configured registries matches what was detected.",
+    "suggestNonInteractive": "Not asking without an interactive terminal; install with `mgr add <name>`.",
+    "suggestSkipped": "No skill installed from the suggestion.",
+    "suggestTitle": "Plugin skills available for what was detected",
+    "tokensAgents": [
+      "agents         a  ·  b transcript(s)",
+      "agents         x  ·  y transcript(s)"
+    ],
+    "tokensCacheRead": [
+      "cache read     a  (reported apart, never in the total)",
+      "cache read     x  (reported apart, never in the total)"
+    ],
+    "tokensConversation": [
+      "conversation   context a  ·  b counted",
+      "conversation   context x  ·  y counted"
+    ],
+    "tokensMissing": [
+      "transcript not found: a",
+      "transcript not found: x"
+    ],
+    "tokensNoBudget": "No ceiling declared in `agents.budget.totalTokens`: measured, not judged.",
+    "tokensNoInput": "no transcript given — pass the conversation transcript, and each agent transcript after it",
+    "tokensOver": [
+      "OVER the declared ceiling: a against b.",
+      "OVER the declared ceiling: x against y."
+    ],
+    "tokensTotal": [
+      "total          a",
+      "total          x"
+    ],
+    "tokensWithin": [
+      "Within the declared ceiling: a of b.",
+      "Within the declared ceiling: x of y."
+    ],
+    "uninstallConfirm": [
+      "Remove the MGR installation (a)? docs/ and specs/ will be preserved.",
+      "Remove the MGR installation (x)? docs/ and specs/ will be preserved."
+    ],
+    "uninstalled": "Uninstalled.",
+    "unknownCommand": [
+      "unknown command: a\n",
+      "unknown command: x\n"
+    ],
+    "unknownFlag": [
+      "unknown flag: a",
+      "unknown flag: x"
+    ],
+    "updateDone": [
+      "Re-synchronized (a): b skills at c.",
+      "Re-synchronized (x): y skills at 2."
+    ],
+    "updateMigrated": "(old installation migrated to the new layout)"
+  },
+  "pt-BR": {
+    "aborted": "abortado.",
+    "agentChanged": [
+      "  a (b): c de d para undefined",
+      "  x (y): 2 de 3 para undefined"
+    ],
+    "agentCreated": [
+      "  a (b): gravado pela primeira vez",
+      "  x (y): gravado pela primeira vez"
+    ],
+    "agentsAliasNote": "`reviewGate` e `agents.review` estão os dois escritos: `agents.review` vence. Apague o `reviewGate` para ficar com uma fonte só.",
+    "agentsEffortNote": "Mudar o `effort` só passa a valer depois de `mgr update`: ele vive no arquivo do agente, e a invocação não tem como sobrepô-lo. Mudar o `model` vale já na próxima invocação.",
+    "agentsEngine": [
+      "  a            modelo=b  esforço=c",
+      "THROWS:TypeError"
+    ],
+    "agentsInherited": "herdado da sessão",
+    "agentsInheritWarning": [
+      "Rodando no modelo da sessão: a. Nenhum modelo é publicado por default — a lista de modelos é da sua conta, não desta ferramenta. Declare um por intenção em `.mgr-core/config.json` para ter o benefício.",
+      "Rodando no modelo da sessão: x. Nenhum modelo é publicado por default — a lista de modelos é da sua conta, não desta ferramenta. Declare um por intenção em `.mgr-core/config.json` para ter o benefício."
+    ],
+    "agentsIntent": [
+      "a          b",
+      "THROWS:TypeError"
+    ],
+    "agentsSetEffortEffect": "`effort` só passa a valer depois de `mgr update`: ele mora no arquivo do agente, e a invocação não o sobrescreve.",
+    "agentsSetEngineNotInstalled": [
+      "motor `a` não está instalado neste projeto (instalados: b)",
+      "motor `x` não está instalado neste projeto (instalados: y)"
+    ],
+    "agentsSetModelEffect": "`model` passa a valer na próxima invocação.",
+    "agentsSetNeedsIntent": [
+      "diga a intenção a configurar (esperado a)",
+      "diga a intenção a configurar (esperado x)"
+    ],
+    "agentsSetNoEngines": "nenhum motor instalado neste projeto: rode `mgr install` primeiro",
+    "agentsSetNothing": "nada a escrever: passe `--model`, `--effort`, ou os dois",
+    "agentsSetWriting": [
+      "Escrevendo `agents.a` em .mgr-core/config.json",
+      "Escrevendo `agents.x` em .mgr-core/config.json"
+    ],
+    "agentsSetWritten": [
+      "escrito em `agents.a` — b",
+      "escrito em `agents.x` — y"
+    ],
+    "agentsSourceConfigured": "configurado",
+    "agentsSourceDefault": "default",
+    "agentsUnknown": [
+      "intenção `a` desconhecida (esperado b)",
+      "intenção `x` desconhecida (esperado y)"
+    ],
+    "agentsUnsupported": "não suportado por este motor",
+    "agentsValueFrom": [
+      "a (b)",
+      "x (y)"
+    ],
+    "agentWritten": [
+      "  agente a gravado em b",
+      "  agente x gravado em y"
+    ],
+    "bannerCreatedBy": [
+      "Criado por a · b",
+      "Criado por x · y"
+    ],
+    "bannerInstaller": [
+      "Instalador va",
+      "Instalador vx"
+    ],
+    "bannerTagline": "AI Development Framework (SDD para agentes de código)",
+    "buildDone": [
+      "runtime construído em a: b",
+      "runtime construído em x: y"
+    ],
+    "confirmInstall": "Confirmar instalação?",
+    "confirmRemoval": [
+      "Remover do disco a(s) a skill(s) acima?",
+      "Remover do disco a(s) x skill(s) acima?"
+    ],
+    "detectItem": [
+      "  a  (por b)",
+      "  x  (por y)"
+    ],
+    "detectNothing": "Nada detectado: nenhum arquivo de projeto conhecido nos caminhos que o mgr consulta.",
+    "detectTitle": "Detectado neste projeto",
+    "doctorNaoAtesta": "  Nenhum achado significa que as verificações que eu faço não acharam nada, nunca que está íntegro.",
+    "doctorResumo": [
+      "  a verificações, b achado(s).",
+      "  x verificações, y achado(s)."
+    ],
+    "doctorSemInstalacao": "sem instalação do MGR aqui: não há com o que comparar",
+    "done": "Pronto! Comece com /spec-init e depois /spec-create por feature.",
+    "dryRun": "(dry-run: nada foi escrito.)",
+    "errorPrefix": [
+      "erro: a",
+      "erro: x"
+    ],
+    "existingSkillsTitle": "Skills existentes detectadas",
+    "gateBlocked": [
+      "  não sobrescrito: a já existe e não foi escrito pelo MGR",
+      "  não sobrescrito: x já existe e não foi escrito pelo MGR"
+    ],
+    "gateEffortInherited": "esforço da sessão",
+    "gateKept": [
+      "  preservado: a perdeu o marcador do MGR e não foi tocado",
+      "  preservado: x perdeu o marcador do MGR e não foi tocado"
+    ],
+    "gateModelInherited": "herda o modelo da sessão",
+    "gateSkipped": [
+      "  a: b não suportado por este motor — declarado, não aplicado",
+      "  x: y não suportado por este motor — declarado, não aplicado"
+    ],
+    "help": "MGR — Método Governado por Rastreabilidade\n\nUso: mgr <comando> [opções]\n\n  install [repo]   instala as skills (seletivo) direto na pasta do motor\n                   (--engine claude-code|copilot|both, --scope, --language, --arch,\n                    --user-language, --project-id, --all-skills, --skills-dir, --dry-run, -y)\n  status [repo]    mostra o que está instalado\n  update [repo]    re-sincroniza (--scope)\n  uninstall [repo] remove as skills instaladas (--scope, -y)\n  build            gera um diretório com todo o conteúdo (--out)\n  validate         valida as SKILL.md (autoria de skill)\n  audit            infere as capacidades perigosas de cada skill e compara com o declarado\n  doctor           confere se a instalacao esta integra, e nunca escreve nada\n  spec validate    valida o plano e a spec deste projeto\n                   ([<slug>], --all, --strict, --json)\n  spec next        a próxima ação a partir do plano ([<slug>], --json)\n  spec status      quais artefatos existem ([<slug>], --all, --json)\n  agents           qual modelo e esforço cada intenção usa, e de onde veio\n                   cada valor ([<intenção>], --json)\n  agents set       escreve a política de uma intenção (<intenção>, --model,\n                   --effort, --engine); não roda o mgr update\n  origin set       registra se o projeto nasceu do método ou é legado\n                   (<greenfield|brownfield>); não roda o mgr update\n  precompact       grava o hand-off antes de o motor compactar o contexto\n                   (--hook <motor>); chamado pelo hook, não à mão\n  tokens           quanto o fluxo consumiu: passe o transcript da conversa e,\n                   depois dele, o de cada agente (--json)\n  list             lista as skills\n  version          mostra a versão\n\nSkills plugáveis (ver https://github.com/maurigre/mgr-method/blob/main/docs/plugins.md):\n\n  add <@registry/skill>       instala uma skill plugável (sempre pede confirmação)\n  remove <@registry/skill>    remove uma skill plugável\n  registry add <nome> <url> [--trusted] | remove <nome> | list\n                              gerencia os registries em .mgr-core/config.json\n  detect [repo]               mostra o que o projeto pede e o que os registries oferecem\n                              (--hook <motor> emite o relatório do hook de sessão)\n",
+    "hookCopilotTrust": "O Copilot só carrega o hook do repositório depois que você confia na pasta: a primeira sessão vai perguntar, e nada acontece até você aceitar.",
+    "hookRemoved": [
+      "  hooks removidos de a: b",
+      "  hooks removidos de x: y"
+    ],
+    "hookWritten": [
+      "  hooks gravados em a: b",
+      "  hooks gravados em x: y"
+    ],
+    "installedAt": [
+      "Skills instaladas em a.",
+      "Skills instaladas em x."
+    ],
+    "installing": "Instalando skills nos motores",
+    "invalidScope": [
+      "escopo inválido: a",
+      "escopo inválido: x"
+    ],
+    "keptByChoice": [
+      "THROWS:TypeError",
+      "Nada foi removido: x ficou(aram) em disco e segue(m) declarada(s), então nada virou órfã."
+    ],
+    "keptNoConsent": [
+      "THROWS:TypeError",
+      "Nada foi removido: não havia terminal para perguntar. x ficou(aram) em disco e segue(m) declarada(s); o `-y` autoriza a remoção."
+    ],
+    "keptNoSource": [
+      "THROWS:TypeError",
+      "Esta versão já não distribui x: ficou(aram) em disco, fora do manifesto, e o `mgr doctor` vai reportá-la(s) como órfã(s)."
+    ],
+    "langOtherHint": "sem helpers de linguagem",
+    "langOtherLabel": "outra / não especificar",
+    "migrationInfo": [
+      "Migração: modelo antigo removido (a item(ns), incluindo .mgr-core).",
+      "Migração: modelo antigo removido (x item(ns), incluindo .mgr-core)."
+    ],
+    "oldInstallWarn": [
+      "Instalação antiga (va, modelo runtime-launcher) detectada — será MIGRADA para o novo layout.",
+      "Instalação antiga (vx, modelo runtime-launcher) detectada — será MIGRADA para o novo layout."
+    ],
+    "originNoInstall": [
+      "nenhuma instalação MGR encontrada em a; gravando a origem mesmo assim (é o caso do escopo global).",
+      "nenhuma instalação MGR encontrada em x; gravando a origem mesmo assim (é o caso do escopo global)."
+    ],
+    "originSetNeedsValue": [
+      "mgr origin set precisa de um valor (a)",
+      "mgr origin set precisa de um valor (x)"
+    ],
+    "originUnknown": [
+      "origem de projeto desconhecida: a (esperado b)",
+      "origem de projeto desconhecida: x (esperado y)"
+    ],
+    "originWriting": [
+      "Gravando a origem do projeto em a/config.json",
+      "Gravando a origem do projeto em x/config.json"
+    ],
+    "originWritten": [
+      "origem do projeto: a -> b",
+      "origem do projeto: x -> y"
+    ],
+    "outEnHint": "inglês",
+    "outOtherHint": "informar qual",
+    "outOtherLabel": "outro",
+    "outPtHint": "português do Brasil",
+    "planAbandoned": [
+      "THROWS:TypeError",
+      "sai do conjunto declarado (1) — só com a sua confirmação:\n  x"
+    ],
+    "planAgentIntent": [
+      "  a: b",
+      "  x: y"
+    ],
+    "planConfig": [
+      "config   →   a",
+      "config   →   x"
+    ],
+    "planConfigHint": "(manifest.json + .env)",
+    "planEngines": [
+      "motor(es):   a",
+      "motor(es):   x"
+    ],
+    "planGate": [
+      "agentes  →   a",
+      "agentes  →   x"
+    ],
+    "planGateEngine": [
+      "  a: modelo=b esforço=c",
+      "  x: modelo=y esforço=2"
+    ],
+    "planGateHint": "(um agente por intenção; a revisão roda no próprio)",
+    "planHooks": [
+      "hooks    →   a",
+      "hooks    →   x"
+    ],
+    "planHooksHint": "(detecção por sessão e hand-off antes da compactação, por motor)",
+    "planLaws": [
+      "leis     →   a",
+      "leis     →   x"
+    ],
+    "planLawsHint": "(leis de execução: fonte única, apontada por toda skill do CORE)",
+    "planOutput": [
+      "idioma:      a",
+      "idioma:      x"
+    ],
+    "planOutputHint": "(saída das skills: conversa e artefatos)",
+    "planPreambleOff": "  preâmbulo de sessão: desligado (lawsPreamble.enabled = false)",
+    "planPreambleOn": "  preâmbulo de sessão: ligado (as leis centrais entram antes da primeira mensagem)",
+    "planProject": [
+      "projeto:     a    escopo: b",
+      "projeto:     x    escopo: y"
+    ],
+    "planSkills": [
+      "skills (a): b",
+      "skills (x): y"
+    ],
+    "planSkillsDir": [
+      "skills   →   a",
+      "skills   →   x"
+    ],
+    "planStack": [
+      "linguagem:   a    arquitetura: b",
+      "linguagem:   x    arquitetura: y"
+    ],
+    "planTitle": "Plano de instalação (autossuficiente por motor)",
+    "pluginCancelled": "instalação cancelada pelo usuário.",
+    "pluginCollisionAlongside": "Instalar ao lado",
+    "pluginCollisionAlongsideHint": [
+      "o plugin vai para a; a skill do método fica",
+      "o plugin vai para x; a skill do método fica"
+    ],
+    "pluginCollisionQuestion": [
+      "O método já fornece a skill \"a\" aqui. O que o mgr deve fazer?",
+      "O método já fornece a skill \"x\" aqui. O que o mgr deve fazer?"
+    ],
+    "pluginCollisionReplace": "Substituir a skill do método",
+    "pluginCollisionReplaceHint": [
+      "o plugin ocupa a pasta a; fica registrado no lockfile",
+      "o plugin ocupa a pasta x; fica registrado no lockfile"
+    ],
+    "pluginConfirm": "Instalar esta skill?",
+    "pluginInstalled": [
+      "a instalada em b.",
+      "x instalada em y."
+    ],
+    "pluginInstalling": "Baixando e verificando",
+    "pluginLocked": [
+      "travada em a.",
+      "travada em x."
+    ],
+    "pluginNeedsTty": "`mgr add` exige terminal interativo: toda instalação é confirmada por uma pessoa e não há flag de bypass.",
+    "pluginNoPermissions": "nenhuma declarada",
+    "pluginProposalCategory": [
+      "categoria:   a",
+      "categoria:   x"
+    ],
+    "pluginProposalChecksum": [
+      "checksum:    a",
+      "checksum:    x"
+    ],
+    "pluginProposalEngines": [
+      "motor(es):   a",
+      "motor(es):   x"
+    ],
+    "pluginProposalExtends": [
+      "estende:     a (instalada junto; a skill que estende tem precedência)",
+      "estende:     x (instalada junto; a skill que estende tem precedência)"
+    ],
+    "pluginProposalName": [
+      "skill:       a@b",
+      "skill:       x@y"
+    ],
+    "pluginProposalOrigin": [
+      "origem:      a (b)",
+      "origem:      x (y)"
+    ],
+    "pluginProposalPermissions": [
+      "permissões:  a",
+      "permissões:  x"
+    ],
+    "pluginProposalTitle": "Skill plugável a instalar",
+    "pluginProposalTrust": [
+      "confiável:   sim",
+      "confiável:   sim"
+    ],
+    "pluginRemoved": [
+      "a removida.",
+      "x removida."
+    ],
+    "pluginRemoveReturns": [
+      "  a skill a do método volta no próximo `mgr install` ou `mgr update`",
+      "  a skill x do método volta no próximo `mgr install` ou `mgr update`"
+    ],
+    "pluginRemoveSkipped": [
+      "  preservado a: não tem o manifest de b, então a pasta é de outra skill",
+      "  preservado x: não tem o manifest de y, então a pasta é de outra skill"
+    ],
+    "pluginRemoving": [
+      "Removendo a dos motores e do lockfile",
+      "Removendo x dos motores e do lockfile"
+    ],
+    "pluginsAvailableError": [
+      "  (registry \"a\" indisponível: b)",
+      "  (registry \"x\" indisponível: y)"
+    ],
+    "pluginsAvailableItem": [
+      "  a@b  [c]",
+      "  x@y  [2]"
+    ],
+    "pluginsAvailableTitle": "Disponíveis nos registries configurados",
+    "pluginsInstalledItem": [
+      "  a@b  (registry: c, pasta: d)",
+      "  x@y  (registry: 2, pasta: 3)"
+    ],
+    "pluginsInstalledTitle": "Skills plugáveis instaladas",
+    "pluginUsageAdd": "uso: mgr add <@registry/skill>",
+    "pluginUsageRemove": "uso: mgr remove <@registry/skill>",
+    "pluginWarning": [
+      "  aviso (a): b",
+      "  aviso (x): y"
+    ],
+    "precompactBlocked": [
+      "Compactação bloqueada pelo MGR: você pediu, e o estado está a salvo em disco (a). Abra uma sessão nova e retome por ele. Se ainda quiser compactar, peça de novo que passa.",
+      "Compactação bloqueada pelo MGR: você pediu, e o estado está a salvo em disco (x). Abra uma sessão nova e retome por ele. Se ainda quiser compactar, peça de novo que passa."
+    ],
+    "precompactContextMissed": [
+      "O contexto da conversa NÃO pôde ser referenciado (a): o hand-off foi gravado de todo jeito.",
+      "O contexto da conversa NÃO pôde ser referenciado (x): o hand-off foi gravado de todo jeito."
+    ],
+    "precompactContextRecovered": "O manifesto de contexto anterior estava corrompido e foi substituído: as referências ainda não consolidadas foram perdidas.",
+    "precompactContextReferenced": [
+      "Contexto desta sessão referenciado em undefined: undefined registros, undefined bytes. A memória estendida NÃO foi consultada: a consolidação no mgr-code é posterior. O método APONTA para o contexto, não o guarda — limpar o histórico do motor faz a referência apontar para o vazio.",
+      "Contexto desta sessão referenciado em undefined: undefined registros, undefined bytes. A memória estendida NÃO foi consultada: a consolidação no mgr-code é posterior. O método APONTA para o contexto, não o guarda — limpar o histórico do motor faz a referência apontar para o vazio."
+    ],
+    "precompactLogContextAfter": [
+      "contexto referenciado em a (b entradas)",
+      "contexto referenciado em x (y entradas)"
+    ],
+    "precompactLogContextBefore": [
+      "referenciando o contexto da conversa em a",
+      "referenciando o contexto da conversa em x"
+    ],
+    "precompactLogGitAfter": [
+      "git devolveu a arquivo(s) não commitado(s)",
+      "git devolveu x arquivo(s) não commitado(s)"
+    ],
+    "precompactLogGitBefore": "lendo a árvore de trabalho do git",
+    "precompactLogStampAfter": "carimbo da recusa gravado",
+    "precompactLogStampBefore": "gravando o carimbo da recusa",
+    "precompactLogWriteAfter": [
+      "hand-off acrescentado a a",
+      "hand-off acrescentado a x"
+    ],
+    "precompactLogWriteBefore": [
+      "gravando o hand-off em a",
+      "gravando o hand-off em x"
+    ],
+    "precompactNothingToSave": "A compactação de contexto vai acontecer. Nenhuma feature em andamento, então nada foi gravado.",
+    "precompactProceeding": "Compactando: você pediu de novo, e o hand-off em disco está atual. O que vier depois nesta janela vem de um resumo.",
+    "precompactSuggestNewSession": "Abra uma sessão NOVA e retome pelo hand-off: o que vier depois nesta janela vem de um resumo, e não do contexto original.",
+    "precompactWrote": [
+      "A compactação de contexto vai acontecer. Hand-off de `b` gravado em a.",
+      "A compactação de contexto vai acontecer. Hand-off de `y` gravado em x."
+    ],
+    "precompactWroteBlocked": [
+      "A compactação foi impedida desta vez. Hand-off de `b` gravado em a.",
+      "A compactação foi impedida desta vez. Hand-off de `y` gravado em x."
+    ],
+    "qArchitecture": "Arquitetura do projeto? (define qual skill arch-* instalar)",
+    "qEngines": "Quais motores devem receber as skills? (espaço marca, enter confirma)",
+    "qLanguage": "Linguagem principal? (define helpers específicos)",
+    "qOptionalEvidence": "Incluir a skill opcional evidence-capture?",
+    "qOutputLanguage": "Idioma de saída? (conversa e artefatos gerados pelas skills)",
+    "qProjectId": "MGR_PROJECT_ID (identificador do projeto para a memória do mgr-code)?",
+    "qScope": "Escopo da instalação?",
+    "qWhichLanguage": "Qual idioma? (ex.: es-ES, fr-FR)",
+    "registryAdded": [
+      "registry \"a\" adicionado: b",
+      "registry \"x\" adicionado: y"
+    ],
+    "registryAdding": [
+      "Adicionando o registry \"a\" ao .mgr-core/config.json",
+      "Adicionando o registry \"x\" ao .mgr-core/config.json"
+    ],
+    "registryListEmpty": "Nenhum registry configurado — rode `mgr registry add <nome> <url-do-index>`.",
+    "registryListItem": [
+      "  a (confiável)  b",
+      "  x (confiável)  y"
+    ],
+    "registryListTitle": "Registries configurados",
+    "registryRemoved": [
+      "registry \"a\" removido.",
+      "registry \"x\" removido."
+    ],
+    "registryRemoving": [
+      "Removendo o registry \"a\" de .mgr-core/config.json",
+      "Removendo o registry \"x\" de .mgr-core/config.json"
+    ],
+    "registryUsage": "uso: mgr registry add <nome> <url-do-index> [--trusted] | mgr registry remove <nome> | mgr registry list",
+    "removalReason": [
+      "a — fora do conjunto declarado",
+      "x — fora do conjunto declarado"
+    ],
+    "removedItem": [
+      "  removido: a",
+      "  removido: x"
+    ],
+    "removedSkills": [
+      "THROWS:TypeError",
+      "Removida(s) 1 skill(s): x"
+    ],
+    "restoreDone": [
+      "a skill(s) plugável(is) restaurada(s).",
+      "x skill(s) plugável(is) restaurada(s)."
+    ],
+    "restoreSkippedEngine": [
+      "a está travada para b, motor não ativo aqui; essa cópia não foi restaurada",
+      "x está travada para y, motor não ativo aqui; essa cópia não foi restaurada"
+    ],
+    "restoring": [
+      "Restaurando skills plugáveis de a",
+      "Restaurando skills plugáveis de x"
+    ],
+    "resyncWarn": "Instalação MGR existente detectada — será re-sincronizada.",
+    "scopeGlobalHint": "para todos os projetos (home)",
+    "scopeProjectHint": "neste repositório",
+    "specNextAllDone": [
+      "Nada a fazer: as a task(s) estão marcadas como concluídas.",
+      "Nada a fazer: as x task(s) estão marcadas como concluídas."
+    ],
+    "specNextAllRefused": "`mgr spec next` não aceita `--all`: a próxima ação é sobre UMA feature — nomeie uma, ou rode de dentro de `specs/<slug>/`",
+    "specNextArtifact": [
+      "  artefato:  a",
+      "  artefato:  x"
+    ],
+    "specNextBasis": [
+      "Estado declarado em a de b task(s).",
+      "Estado declarado em x de y task(s)."
+    ],
+    "specNextBlocked": [
+      "  a espera por b",
+      "  x espera por y"
+    ],
+    "specNextDependsOn": [
+      "  depois de: a",
+      "  depois de: x"
+    ],
+    "specNextDoneWhen": [
+      "  pronta em: a",
+      "  pronta em: x"
+    ],
+    "specNextFile": [
+      "a",
+      "x"
+    ],
+    "specNextFirstStartable": "Então esta é a primeira task que PODE começar, não necessariamente a próxima.",
+    "specNextFormatNotDeclared": "Este plano não declara o formato, então não há de onde responder. Acrescente o marcador na primeira linha e os campos que as tasks já têm passam a ser lidos.",
+    "specNextNeedsSlug": [
+      "a feature(s) em specs/ e nenhuma foi nomeada — nomeie uma, ou rode isto de dentro de `specs/<slug>/`",
+      "x feature(s) em specs/ e nenhuma foi nomeada — nomeie uma, ou rode isto de dentro de `specs/<slug>/`"
+    ],
+    "specNextNoPlan": [
+      "nenhum plano encontrado em a",
+      "nenhum plano encontrado em x"
+    ],
+    "specNextNoState": [
+      "Estado declarado em 0 de a task(s): esta ferramenta NÃO sabe o que você já fez.",
+      "Estado declarado em 0 de x task(s): esta ferramenta NÃO sabe o que você já fez."
+    ],
+    "specNextNoTasks": "O plano declara o formato mas não tem nenhuma task.",
+    "specNextNothingReady": "Nada pronto para começar. Toda task pendente espera por algo.",
+    "specNextRunValidate": "Num plano válido isto não acontece: alguma task não depende de nada e está pronta. Rode `mgr spec validate`.",
+    "specNextSkill": [
+      "  skill:     a",
+      "  skill:     x"
+    ],
+    "specNextTask": [
+      "a",
+      "x"
+    ],
+    "specStatusArtifacts": [
+      "  artefatos: a",
+      "  artefatos: x"
+    ],
+    "specStatusEmpty": [
+      "nenhuma feature encontrada em a",
+      "nenhuma feature encontrada em x"
+    ],
+    "specStatusHandoffNone": "  handoff:   nenhum",
+    "specStatusHandoffOn": [
+      "  handoff:   a (em disco; ele nunca é removido automaticamente)",
+      "  handoff:   x (em disco; ele nunca é removido automaticamente)"
+    ],
+    "specStatusLine": [
+      "  a                          b",
+      "THROWS:TypeError"
+    ],
+    "specStatusNextReady": [
+      "  escrever:  a",
+      "  escrever:  x"
+    ],
+    "specStatusNotFound": [
+      "não há a feature `a` em specs/",
+      "não há a feature `x` em specs/"
+    ],
+    "specStatusNothingReady": "  escrever:  nada — todos os artefatos estão em disco",
+    "specStatusRoot": [
+      "a",
+      "x"
+    ],
+    "specStatusWarning": "Isto é EXISTÊNCIA DE ARQUIVO, não progresso. Ele não sabe qual checkpoint você aprovou, e artefato em disco não é artefato aprovado.",
+    "specValidateExample": [
+      "      assim: a",
+      "      assim: x"
+    ],
+    "specValidateFix": [
+      "      corrija: a",
+      "      corrija: x"
+    ],
+    "specValidateHeader": [
+      "a",
+      "x"
+    ],
+    "specValidateItem": [
+      "  ! a c:d — undefined",
+      "  ! x 2:3 — undefined"
+    ],
+    "specValidateNextSteps": "Próximos passos: corrija os erros acima e rode `mgr spec validate` de novo.",
+    "specValidateNoSpecs": [
+      "nenhuma spec encontrada em a",
+      "nenhuma spec encontrada em x"
+    ],
+    "specValidateOk": [
+      "c artefato(s): a task(s) e b critérios de aceitação conferidos, nenhum defeito estrutural encontrado.",
+      "2 artefato(s): x task(s) e y critérios de aceitação conferidos, nenhum defeito estrutural encontrado."
+    ],
+    "specValidateScopeNote": "Esta verificação é ESTRUTURAL. Ela não julga se o plano está certo, se as tasks são as certas, se um critério de done é bom, nem se um critério de aceitação é testável ou cobre a spec.",
+    "specValidateSummary": [
+      "a erro(s), b aviso(s).",
+      "x erro(s), y aviso(s)."
+    ],
+    "statusConfig": [
+      "  config:  a",
+      "  config:  x"
+    ],
+    "statusDivergenceHint": "    rode `mgr install` para restaurar o conjunto travado",
+    "statusDivergenceItem": [
+      "    a: travada no lockfile, ausente ou diferente no disco",
+      "    x: travada no lockfile, ausente ou diferente no disco"
+    ],
+    "statusDivergenceTitle": "  divergências (lockfile x disco):",
+    "statusGate": [
+      "  gate:    a",
+      "  gate:    x"
+    ],
+    "statusGateEngine": [
+      "    a: modelo=b esforço=c",
+      "    x: modelo=y esforço=2"
+    ],
+    "statusGateOff": "desligado (todas as intenções desligadas em `agents`)",
+    "statusGateSource": [
+      "    origem: a",
+      "    origem: x"
+    ],
+    "statusInstalledAt": [
+      "  em:      a",
+      "  em:      x"
+    ],
+    "statusLaws": [
+      "  leis:    a",
+      "  leis:    x"
+    ],
+    "statusNone": "Nenhuma instalação MGR encontrada (projeto ou global).",
+    "statusOldModel": "runtime-launcher (ANTIGO — rode `mgr update` para migrar)",
+    "statusOutput": [
+      "  idioma:  a",
+      "  idioma:  x"
+    ],
+    "statusPluginItem": [
+      "    a@b (c)",
+      "    x@y (2)"
+    ],
+    "statusPluginItemReplacing": [
+      "    a@b (c) — substitui a skill d do método",
+      "    x@y (2) — substitui a skill 3 do método"
+    ],
+    "statusPluginsTitle": [
+      "  plugins: a",
+      "  plugins: x"
+    ],
+    "statusProject": [
+      "  projeto: a",
+      "  projeto: x"
+    ],
+    "statusSkills": [
+      "  skills:  a",
+      "  skills:  x"
+    ],
+    "statusSkillsDir": [
+      "  skills:  a",
+      "  skills:  x"
+    ],
+    "statusStack": [
+      "  stack:   linguagem=a arquitetura=b",
+      "  stack:   linguagem=x arquitetura=y"
+    ],
+    "suggestConfirm": [
+      "Instalar a?",
+      "Instalar x?"
+    ],
+    "suggestItem": [
+      "  a@b  — c, por d",
+      "  x@y  — 2, por 3"
+    ],
+    "suggestNone": "Nenhuma skill dos registries configurados corresponde ao que foi detectado.",
+    "suggestNonInteractive": "Sem terminal interativo não há pergunta; instale com `mgr add <nome>`.",
+    "suggestSkipped": "Nenhuma skill instalada a partir da sugestão.",
+    "suggestTitle": "Skills plugáveis disponíveis para o que foi detectado",
+    "tokensAgents": [
+      "agentes        a  ·  b transcript(s)",
+      "agentes        x  ·  y transcript(s)"
+    ],
+    "tokensCacheRead": [
+      "cache lido     a  (reportado à parte, nunca no total)",
+      "cache lido     x  (reportado à parte, nunca no total)"
+    ],
+    "tokensConversation": [
+      "conversa       contexto a  ·  b contados",
+      "conversa       contexto x  ·  y contados"
+    ],
+    "tokensMissing": [
+      "transcript não encontrado: a",
+      "transcript não encontrado: x"
+    ],
+    "tokensNoBudget": "Nenhum teto declarado em `agents.budget.totalTokens`: medido, não julgado.",
+    "tokensNoInput": "nenhum transcript informado — passe o transcript da conversa e, depois dele, o de cada agente",
+    "tokensOver": [
+      "ACIMA do teto declarado: a contra b.",
+      "ACIMA do teto declarado: x contra y."
+    ],
+    "tokensTotal": [
+      "total          a",
+      "total          x"
+    ],
+    "tokensWithin": [
+      "Dentro do teto declarado: a de b.",
+      "Dentro do teto declarado: x de y."
+    ],
+    "uninstallConfirm": [
+      "Remover instalação MGR (a)? docs/ e specs/ serão preservados.",
+      "Remover instalação MGR (x)? docs/ e specs/ serão preservados."
+    ],
+    "uninstalled": "Desinstalado.",
+    "unknownCommand": [
+      "comando desconhecido: a\n",
+      "comando desconhecido: x\n"
+    ],
+    "unknownFlag": [
+      "flag desconhecida: a",
+      "flag desconhecida: x"
+    ],
+    "updateDone": [
+      "Re-sincronizado (a): b skills em c.",
+      "Re-sincronizado (x): y skills em 2."
+    ],
+    "updateMigrated": "(instalação antiga migrada para o novo layout)"
+  }
+}

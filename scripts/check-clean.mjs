@@ -15,7 +15,7 @@
 // runner. Verde aqui NAO prova verde la; vermelho aqui prova vermelho la.
 
 import { execFileSync, execSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, symlinkSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -42,6 +42,24 @@ export function pendentes(raiz = RAIZ) {
     .filter((relativo) => existsSync(path.join(raiz, relativo)));
 }
 
+/**
+ * Arquivos apagados na arvore ou no indice (status `D` em qualquer coluna). Eles NAO existem no
+ * worktree, por isso `pendentes()` os descarta, e sem esta lista a arvore limpa ficaria com o
+ * arquivo que o desenvolvedor apagou.
+ */
+export function removidos(raiz = RAIZ) {
+  // LOG-2: par de logs em volta do subprocesso.
+  console.log("  lendo os arquivos removidos (git status)");
+  const saida = execSync("git status --porcelain", { cwd: raiz, encoding: "utf8" });
+  const lista = saida
+    .split("\n")
+    .filter((linha) => linha[0] === "D" || linha[1] === "D")
+    .map((linha) => linha.slice(3).trim())
+    .filter(Boolean);
+  console.log(`  lidos: ${lista.length} caminho(s) removido(s) em stage ou na arvore`);
+  return lista;
+}
+
 // Remove a arvore e nunca lanca: ela roda no `finally` e no caminho de erro, e uma excecao aqui
 // substituiria o motivo real da falha pelo problema da limpeza.
 function removeArvore(destino) {
@@ -63,6 +81,13 @@ function montaArvore() {
   execFileSync("git", ["worktree", "add", "-q", "--detach", destino, "HEAD"], { cwd: RAIZ });
   console.log("  arvore criada no HEAD");
   try {
+    // LOG-1: par de logs em volta da remocao, para o numero de arquivos apagados ficar visivel.
+    const apagados = removidos();
+    console.log(`  removendo ${apagados.length} arquivo(s) apagado(s) da arvore`);
+    for (const relativo of apagados) {
+      rmSync(path.join(destino, relativo), { force: true });
+    }
+    console.log("  remocao concluida");
     const copiados = pendentes();
     console.log(`  copiando ${copiados.length} arquivo(s) pendente(s) para a arvore`);
     for (const relativo of copiados) {

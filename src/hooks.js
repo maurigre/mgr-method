@@ -16,6 +16,11 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { get as engineDescriptor, ids as engineIds } from "./engines/index.js";
+import { RUNTIME_DIR, RUNTIME_ENTRY } from "./catalog.js";
+import { engineSkillsDir } from "./installer.js";
+
+export const runtimeCommand = (engine, root, scope) =>
+  `node "${path.join(engineSkillsDir(engine, scope, root), ...RUNTIME_DIR, ...RUNTIME_ENTRY)}"`;
 
 // Comentário de shell inerte que torna a entrada do MGR inequívoca no arquivo do usuário.
 export const HOOK_MARKER = "mgr-session-hook";
@@ -105,6 +110,35 @@ export function writeHook(engine, repo, { command }) {
     if (atualizado[chave] === undefined) atualizado[chave] = valor;
   }
   return writeSettings(file, atualizado);
+}
+
+// Troca o comando das entradas do MGR que JÁ existem, e só dele (DT-13): matcher, timeout e
+// envelope da própria entrada ficam, entrada alheia fica byte a byte, e evento ausente NÃO é criado
+// (gravar evento novo é F2). A posse é provada pelo marcador, como no `removeHook`. Devolve o arquivo
+// e os eventos reescritos, para a borda anunciar sem remontar a regra de posse.
+export function rewriteOwnedHooks(engine, repo, { command }) {
+  const file = hookFilePath(engine, repo);
+  if (!existsSync(file)) return null;
+
+  const settings = readSettings(file);
+  const trocar = (valor, novo) => {
+    if (typeof valor === "string") return valor.includes(HOOK_MARKER) ? novo : valor;
+    if (Array.isArray(valor)) return valor.map((item) => trocar(item, novo));
+    if (valor && typeof valor === "object") {
+      return Object.fromEntries(Object.entries(valor).map(([k, v]) => [k, trocar(v, novo)]));
+    }
+    return valor;
+  };
+
+  const hooks = { ...settings.hooks };
+  const events = [];
+  for (const { event, command: comando } of eventosDe(engine, command)) {
+    if (!Array.isArray(hooks[event]) || !hooks[event].some(isOurs)) continue;
+    hooks[event] = hooks[event].map((entry) => (isOurs(entry) ? trocar(entry, comando) : entry));
+    events.push(event);
+  }
+  if (!events.length) return null;
+  return { file: writeSettings(file, { ...settings, hooks }), events };
 }
 
 // Remove a entrada do MGR e devolve o arquivo ao que era. Contêiner que ficou vazio some;

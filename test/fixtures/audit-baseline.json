@@ -1,0 +1,67 @@
+{
+  "adr-create": {
+    "branch": "nothing-to-declare",
+    "classes": []
+  },
+  "arch-clean": {
+    "branch": "nothing-to-declare",
+    "classes": []
+  },
+  "arch-hexagonal": {
+    "branch": "nothing-to-declare",
+    "classes": []
+  },
+  "arch-layered": {
+    "branch": "nothing-to-declare",
+    "classes": []
+  },
+  "arch-onion": {
+    "branch": "nothing-to-declare",
+    "classes": []
+  },
+  "code-analyzer": {
+    "branch": "undeclared",
+    "classes": [
+      "embedded-shell",
+      "self-modification"
+    ]
+  },
+  "configure-agents": {
+    "branch": "undeclared",
+    "classes": [
+      "embedded-shell",
+      "self-modification"
+    ]
+  },
+  "diagnosing-bugs": {
+    "branch": "nothing-to-declare",
+    "classes": []
+  },
+  "evidence-capture": {
+    "branch": "nothing-to-declare",
+    "classes": []
+  },
+  "junit-clean": {
+    "branch": "nothing-to-declare",
+    "classes": []
+  },
+  "spec-create": {
+    "branch": "undeclared",
+    "classes": [
+      "embedded-shell"
+    ]
+  },
+  "spec-execute": {
+    "branch": "undeclared",
+    "classes": [
+      "embedded-shell"
+    ]
+  },
+  "spec-init": {
+    "branch": "undeclared",
+    "classes": [
+      "embedded-shell",
+      "self-modification"
+    ]
+  }
+}

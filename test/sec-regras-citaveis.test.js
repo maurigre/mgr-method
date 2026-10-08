@@ -38,7 +38,7 @@ test("shouldRoundtripAFullManifestUnchanged", () => {
     const read = readManifest(tmpdir);
 
     assert.ok(read);
-    assert.equal(read.model, "self-contained");
+    assert.equal(read.model, "self-contained-runtime");
     assert.ok(read.installedAt);
     assert.deepEqual(read.engines, original.engines);
     assert.deepEqual(read.skills, original.skills);

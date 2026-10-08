@@ -8,28 +8,41 @@ import { fileURLToPath } from "node:url";
 import * as catalogo from "../src/catalog.js";
 import { get as engineDescriptor } from "../src/engines/index.js";
 
-// A regressão mais grave possível nesta feature é o método deixar de funcionar SEM a CLI
-// instalada — hoje ele funciona. As skills passaram a preferir `mgr spec status --json`, e a
-// única coisa que impede isso de virar dependência dura é o fallback estar ESCRITO.
+// Contrato revisado pelo ADR-0023 (antes: ADR-0015/0017, "o método funciona SEM a CLI").
+// Toda chamada ao MGR feita por uma skill é `node {{MGR_RUNTIME}} <comando>`, a partir de
+// `<project-root>`, e o runtime ausente PARA o fluxo com o texto da DT-9. O plano B silencioso
+// (a skill seguir à mão sem o runtime) foi a causa medida desta fatia.
 //
-// Este arquivo é o gate disso. Remover o fallback de qualquer uma das três skills quebra aqui.
+// Este arquivo é o gate disso. Remover a chamada pelo runtime ou a parada de qualquer skill
+// quebra aqui, e reintroduzir o fallback "CLI is NOT installed" também.
 const RAIZ = fileURLToPath(new URL("..", import.meta.url));
 const BIN = path.join(RAIZ, "bin", "mgr.js");
 
-// O alvo do fallback é POR SKILL: as duas do fluxo retomam por `.handoff.md`; o `code-analyzer`
-// não retoma nada — ele carrega a spec de origem. Exigir o mesmo alvo das três faria o teste cobrar
-// da terceira um caminho que ela não tem razão de citar.
-const SKILLS_DO_FLUXO = {
-  "spec-create": /\/specs\/<slug>\/\.handoff\.md/,
-  "spec-execute": /\/specs\/<slug>\/\.handoff\.md/,
-  "code-analyzer": /\/specs\/<slug>\/03-spec\.md/,
-};
+const SKILLS_DO_FLUXO = ["spec-create", "spec-execute", "code-analyzer"];
+const TODAS_AS_SKILLS = [...SKILLS_DO_FLUXO, "spec-init", "configure-agents"];
 
-// Os três sinais, medidos separadamente: a consulta, o fallback e o alvo do fallback.
 // Sem limite de distância isto viraria `.*` depois de `semQuebras`, que remove todo `\n`:
 // a asserção passaria com a consulta e o `--json` em pontas opostas do arquivo.
-const CONSULTA = /mgr spec status[^.]{0,40}--json/;
-const FALLBACK = /Fallback — when the `mgr` CLI is NOT installed/;
+const CONSULTA = /node \{\{MGR_RUNTIME\}\} spec status[^.]{0,40}--json/;
+const CONSULTA_INSTALADA = /node \S+mgr-runtime\.js spec status[^.]{0,40}--json/;
+const REMISSAO_A_PARADA = /STOP as described in/;
+const SECAO_DO_RUNTIME = "## MGR runtime (mandatory)";
+const TOKEN = "{{MGR_RUNTIME}}";
+
+// Texto canônico da DT-9 (03-spec.md), literal. O `>` de citação não faz parte dele.
+const PARADA_CANONICA =
+  "**STOP — the MGR runtime is missing.** `{{MGR_RUNTIME}}` was not found under `<project-root>`. " +
+  "Do **not** continue this flow by hand: do not write the document, implement the task or edit " +
+  "`.mgr-core/` yourself. To restore it, run at `<project-root>`: `npx mgr-method@<version> update`, " +
+  "where `<version>` is the `version` field of `.mgr-core/manifest.json`. If that file does not " +
+  "exist either, this project is not installed: run `npx mgr-method@latest install`. " +
+  "Then invoke this skill again.";
+
+const FRASES_PROIBIDAS = [
+  /`mgr` CLI is NOT installed/,
+  /skills alone/,
+  /without the CLI/i,
+];
 
 
 // Normaliza o espaço em branco antes de casar: as skills quebram linha em ~95 colunas, e uma
@@ -39,38 +52,47 @@ const semQuebras = (texto) => texto.replace(/\s+/g, " ");
 const fonteDa = (skill) =>
   semQuebras(readFileSync(path.join(RAIZ, "skills", skill, "SKILL.md"), "utf8"));
 
-test("as três skills consultam o comando E declaram o fallback", () => {
-  for (const [skill, alvoDoFallback] of Object.entries(SKILLS_DO_FLUXO)) {
+test("as três skills chamam o runtime E trazem a seção e o texto da parada", () => {
+  for (const skill of SKILLS_DO_FLUXO) {
     const texto = fonteDa(skill);
-    assert.match(texto, CONSULTA, `${skill}: precisa preferir o caminho resolvido`);
-    assert.match(texto, FALLBACK, `${skill}: sem o fallback escrito, a CLI vira dependência dura`);
-    assert.match(texto, alvoDoFallback, `${skill}: o fallback precisa dizer QUAL caminho usar`);
+    assert.match(texto, CONSULTA, `${skill}: precisa chamar o runtime, não a CLI`);
+    assert.ok(texto.includes(SECAO_DO_RUNTIME), `${skill}: sem a seção, a parada não tem onde morar`);
+    assert.ok(texto.includes(PARADA_CANONICA),
+      `${skill}: sem o texto da DT-9, o runtime ausente volta ao plano B silencioso`);
   }
 });
 
-test("o fallback aparece junto da consulta, não numa seção esquecida do arquivo", () => {
-  for (const skill of Object.keys(SKILLS_DO_FLUXO)) {
+test("a parada aparece junto da consulta, não numa seção esquecida do arquivo", () => {
+  for (const skill of SKILLS_DO_FLUXO) {
     const texto = fonteDa(skill);
-    const distancia = Math.abs(texto.search(FALLBACK) - texto.search(CONSULTA));
+    const distancia = Math.abs(texto.search(REMISSAO_A_PARADA) - texto.search(CONSULTA));
     assert.ok(distancia < 600,
-      `${skill}: consulta e fallback a ${distancia} caracteres de distância; quem lê um tem de ler o outro`);
+      `${skill}: consulta e remissão à parada a ${distancia} caracteres de distância; quem lê um tem de ler o outro`);
   }
 });
 
-test("nenhuma das três afirma que a CLI é obrigatória", () => {
-  for (const skill of Object.keys(SKILLS_DO_FLUXO)) {
+test("nenhuma das cinco skills resta com o plano B da CLI ausente", () => {
+  for (const skill of TODAS_AS_SKILLS) {
     const texto = fonteDa(skill);
-    assert.match(texto, /MUST keep working with the skills alone/,
-      `${skill}: a promessa de operar sem a CLI é explícita, não subentendida`);
-    // A afirmação positiva sozinha não é gate: a skill poderia prometer isso num parágrafo e
-    // exigir a CLI noutro. A asserção negativa é a que fecha o eixo.
+    for (const frase of FRASES_PROIBIDAS) {
+      assert.doesNotMatch(texto, frase, `${skill}: ${frase} reabre o fallback silencioso`);
+    }
     assert.doesNotMatch(texto, /requires the `mgr` CLI|the `mgr` CLI is required|CLI is mandatory/i,
-      `${skill}: nenhuma frase pode transformar a CLI em dependência dura`);
+      `${skill}: a dependência é do runtime, dita na seção própria`);
+  }
+});
+
+test("as cinco skills trazem a seção do runtime com o texto canônico da parada", () => {
+  for (const skill of TODAS_AS_SKILLS) {
+    const texto = fonteDa(skill);
+    assert.ok(texto.includes(SECAO_DO_RUNTIME), `${skill}: falta a seção`);
+    assert.ok(texto.includes(PARADA_CANONICA), `${skill}: falta o texto canônico`);
+    assert.match(texto, /node \{\{MGR_RUNTIME\}\} /, `${skill}: não chama o runtime`);
   }
 });
 
 // O que vale é o que chega ao disco do usuário. Instalação real, nos dois motores.
-test("o fallback sobrevive à instalação, nos dois motores", () => {
+test("a parada sobrevive à instalação, nos dois motores, com o caminho do runtime resolvido", () => {
   const repo = mkdtempSync(path.join(tmpdir(), "mgr-fb-"));
   execFileSync("node", [BIN, "install", repo, "--engine", "both", "--scope", "project",
     "--all-skills", "-y"], { encoding: "utf8" });
@@ -80,18 +102,43 @@ test("o fallback sobrevive à instalação, nos dois motores", () => {
     [".github", "skills"],
   ];
   for (const base of instalados) {
-    for (const skill of Object.keys(SKILLS_DO_FLUXO)) {
+    for (const skill of TODAS_AS_SKILLS) {
+      const rotulo = `${base[0]}/${skill}`;
       const texto = semQuebras(readFileSync(path.join(repo, ...base, skill, "SKILL.md"), "utf8"));
-      assert.match(texto, CONSULTA, `${base[0]}/${skill}`);
-      assert.match(texto, FALLBACK, `${base[0]}/${skill}: o usuário sem CLI depende desta frase`);
+      assert.ok(!texto.includes(TOKEN), `${rotulo}: o token ficou sem resolver no disco do usuário`);
+      assert.ok(texto.includes(SECAO_DO_RUNTIME), rotulo);
+      const resolvido = texto.match(/node (\S+mgr-runtime\.js) /);
+      assert.ok(resolvido, `${rotulo}: nenhuma chamada ao runtime resolvido`);
+      assert.ok(texto.includes(PARADA_CANONICA.replaceAll(TOKEN, resolvido[1])),
+        `${rotulo}: o usuário com o runtime ausente depende desta parada`);
+      for (const frase of FRASES_PROIBIDAS) assert.doesNotMatch(texto, frase, rotulo);
     }
+    const texto = semQuebras(readFileSync(path.join(repo, ...base, "spec-create", "SKILL.md"), "utf8"));
+    assert.match(texto, CONSULTA_INSTALADA, `${base[0]}: a consulta de estado precisa estar resolvida`);
+  }
+});
+
+const BASE_MGR_CODE = JSON.parse(
+  readFileSync(path.join(RAIZ, "test", "fixtures", "mgr-code-sections-baseline.json"), "utf8"),
+);
+const linhasComMencao = (texto) => texto.split("\n").filter((linha) => /mgr-mcp|mgr-code/i.test(linha));
+
+test("should keep every mgr-code block of the base literally and add no mgr-code line outside them", () => {
+  for (const [skill, blocos] of Object.entries(BASE_MGR_CODE)) {
+    const atual = readFileSync(path.join(RAIZ, "skills", skill, "SKILL.md"), "utf8");
+    for (const bloco of blocos) {
+      assert.ok(atual.includes(bloco), `${skill}: bloco mgr-code da base sumiu ou mudou`);
+    }
+    const linhasNaBase = blocos.reduce((total, bloco) => total + linhasComMencao(bloco).length, 0);
+    assert.equal(linhasComMencao(atual).length, linhasNaBase,
+      `${skill}: há menção a mgr-mcp/mgr-code fora dos blocos da base`);
   }
 });
 
 // O aviso do payload também é contrato com quem lê a skill: ela não pode ensinar que
 // existência de arquivo é aprovação.
 test("as skills repetem que artefato em disco não é artefato aprovado", () => {
-  for (const skill of Object.keys(SKILLS_DO_FLUXO)) {
+  for (const skill of SKILLS_DO_FLUXO) {
     // `\*{0,2}` porque uma das duas põe `not` em negrito. O contrato é a frase, não a ênfase.
     assert.match(fonteDa(skill), /\bnot\*{0,2} an approved artifact/,
       `${skill}: sem isto, o verde do comando seria lido como aprovação`);
@@ -100,8 +147,7 @@ test("as skills repetem que artefato em disco não é artefato aprovado", () => 
 
 // A delegação da redação e da execução a agentes (ADR-0017). O que o gate protege aqui não é o
 // caminho feliz: é que NENHUM checkpoint humano tenha ido junto com o trabalho para o agente.
-const CONSULTA_DE_AGENTE = /mgr agents [a-z]+[^.]{0,20}--json/;
-const FALLBACK_SEM_CLI = /The `mgr` CLI is NOT installed/;
+const CONSULTA_DE_AGENTE = /node \{\{MGR_RUNTIME\}\} agents [a-z]+[^.]{0,20}--json/;
 const FALLBACK_AGENTE_AUSENTE = /the agent does not exist/;
 
 const CHECKPOINTS_QUE_NAO_PODEM_SUMIR = {
@@ -117,11 +163,11 @@ const CHECKPOINTS_QUE_NAO_PODEM_SUMIR = {
 // suíte verde entre elas, em vez de deixar vermelho declarado atravessando o bloco.
 const SKILLS_QUE_DELEGAM = ["spec-create", "spec-execute"];
 
-test("a skill que delega consulta o `mgr agents` e declara os DOIS fallbacks", () => {
+test("a skill que delega consulta o `agents` pelo runtime e mantém o fallback do agente ausente", () => {
   for (const skill of SKILLS_QUE_DELEGAM) {
     const texto = fonteDa(skill);
     assert.match(texto, CONSULTA_DE_AGENTE, `${skill}: pergunta qual modelo, não assume`);
-    assert.match(texto, FALLBACK_SEM_CLI, `${skill}: o método opera sem a CLI`);
+    assert.match(texto, REMISSAO_A_PARADA, `${skill}: runtime ausente PARA, não segue à mão`);
     assert.match(texto, FALLBACK_AGENTE_AUSENTE,
       `${skill}: agente recém-instalado demora a aparecer, e isso é recuperável`);
   }
@@ -150,17 +196,20 @@ test("a skill diz que o agente NÃO vê a conversa", () => {
 const CONFIGURA = "configure-agents";
 const ALIASES = /\b(sonnet|opus|haiku|fable)\b/;
 
-test("a skill de configuração lê o estado pelo comando e declara os três fallbacks", () => {
+test("a skill de configuração lê o estado pelo runtime, aplica por `agents apply` e para nos três pontos", () => {
   const texto = fonteDa(CONFIGURA);
-  assert.match(texto, /mgr agents --json/, "lê o estado antes de propor mudança");
-  assert.match(texto, /mgr agents set <intent>/, "e escreve pelo comando, não editando o JSON");
-  const fallbacks = texto.match(new RegExp(FALLBACK.source, "g")) || [];
-  assert.equal(fallbacks.length, 3,
-    "os três caminhos que dependem da CLI — ler o estado, ler os motores e escrever — têm fallback");
+  assert.match(texto, /node \{\{MGR_RUNTIME\}\} agents --json/, "lê o estado antes de propor mudança");
+  assert.match(texto, /node \{\{MGR_RUNTIME\}\} agents set <intent>/,
+    "e escreve pelo comando, não editando o JSON");
+  assert.match(texto, /node \{\{MGR_RUNTIME\}\} agents apply/,
+    "a parte local é `agents apply`, que não precisa de rede");
+  assert.doesNotMatch(texto, /(?<!npx )\bmgr update\b/, "`mgr update` sem `npx` assume a CLI global");
+  const paradas = texto.match(/If the runtime is missing, follow the stop in "MGR runtime \(mandatory\)"/g) || [];
+  assert.equal(paradas.length, 3,
+    "os três caminhos que dependem do runtime — ler o estado, ler os motores e escrever — param");
   assert.match(texto, /`\.mgr-core\/manifest\.json`/,
     "mostrar alias de motor que o projeto não tem é oferecer o que o comando vai recusar");
-  assert.match(texto, /`\.mgr-core\/config\.json`/, "o fallback diz QUAL arquivo abrir");
-  assert.match(texto, /MUST keep working with the skills alone/);
+  assert.match(texto, /`\.mgr-core\/config\.json`/, "a skill diz QUAL arquivo é o estado");
 });
 
 test("a skill NÃO sugere modelo por intenção, em nenhuma das duas ordens", () => {

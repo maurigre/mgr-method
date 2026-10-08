@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
 import path from "node:path";
+import { RUNTIME_DIR, RUNTIME_FILES } from "../src/catalog.js";
 
 const BIN = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
 const CONFIG = path.join(".mgr-core", "config.json");
@@ -143,13 +144,13 @@ test("negativo: com config existente e sem origem, o update nao acrescenta a cha
   }
 });
 
-test("a origem ausente nao muda o doctor: 10 verificacoes e o mesmo exit code", () => {
+test("a origem ausente nao muda o doctor: 11 verificacoes e o mesmo exit code", () => {
   const repo = repoTemporario();
   try {
     instala(repo, "--arch", "hexagonal");
     const r = cli(["doctor", repo], repo);
     assert.equal(r.code, 0);
-    assert.match(r.out, /10 checks/);
+    assert.match(r.out, /11 checks/);
   } finally {
     rmSync(repo, { recursive: true, force: true });
   }
@@ -162,7 +163,11 @@ test("negativo: a fatia nao introduziu token — a arvore instalada nao tem MGR_
     const sobraram = spawnSync("grep", ["-rl", "{{MGR_", path.join(repo, SKILLS)], { encoding: "utf8" });
     assert.equal(sobraram.error, undefined, "grep ausente devolve stdout vazio, e vazio contra vazio nao e prova");
     assert.ok([0, 1].includes(sobraram.status), `grep falhou: status ${sobraram.status}`);
-    assert.equal(`${sobraram.stdout}`.trim(), "",
+    // Exclusao por caminho COMPLETO: as copias do runtime (D-15) sao provadas identicas ao pacote
+    // pela D-14, e nelas o token e constante de codigo. Prefixo de pasta excluiria arquivo novo.
+    const copiasRuntime = new Set(RUNTIME_FILES.map((arquivo) => path.join(repo, SKILLS, ...RUNTIME_DIR, arquivo)));
+    const sobrantes = `${sobraram.stdout}`.split("\n").filter((linha) => linha !== "" && !copiasRuntime.has(linha));
+    assert.deepEqual(sobrantes, [],
       "token novo seria resolvido no install, quando a origem ainda nao existe, e a copia ficaria errada sem o doctor poder ver");
   } finally {
     rmSync(repo, { recursive: true, force: true });

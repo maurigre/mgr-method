@@ -1,27 +1,23 @@
 #!/usr/bin/env node
 // CLI do MGR — Método Governado por Rastreabilidade.
-import { existsSync, writeSync } from "node:fs";
+import { existsSync } from "node:fs";
 import path from "node:path";
-import { Buffer } from "node:buffer";
-import { execFileSync } from "node:child_process";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import * as bundle from "../src/bundle.js";
 import * as installer from "../src/installer.js";
 import * as catalogo from "../src/catalog.js";
-import * as planValidator from "../src/plan-validator.js";
-import * as specValidator from "../src/spec-validator.js";
-import * as provValidator from "../src/prov-validator.js";
-import * as docValidator from "../src/doc-validator.js";
-import * as planNext from "../src/plan-next.js";
-import * as specStatus from "../src/spec-status.js";
-import { repoRoot, slugs } from "../src/artifacts.js";
-import { CONFIGURED, ORIGINS, readAgents, writeAgentPolicy, writeOrigin } from "../src/registry.js";
+import { agents } from "../src/commands/agents.js";
+import { specNext, specStatus, specValidate } from "../src/commands/spec.js";
+import { detectHook, precompactHook, suggestionsFor } from "../src/commands/hooks.js";
+import { escreverSync, lerPayload, modificados } from "./hook-io.js";
+import { projectRoot } from "../src/project-root.js";
+import { readAgents } from "../src/registry.js";
 import * as tokens from "../src/tokens.js";
 import * as audit from "../src/audit.js";
-import * as doctor from "../src/doctor.js";
-import { ids as engineIds } from "../src/engines/index.js";
-import { blocking, summarize } from "../src/findings.js";
+import { doctor } from "../src/commands/doctor.js";
+import { sddCheck } from "../src/commands/sdd-check.js";
+import { origin } from "../src/commands/origin.js";
 import { buildRuntime, gateSummary, inheritingModel } from "../src/builder.js";
 import { validateAll } from "../src/validator.js";
 import { printBanner } from "../src/banner.js";
@@ -32,15 +28,13 @@ import {
   installedPluginNames, CANCELLED_EXIT_CODE,
 } from "../src/plugin-installer.js";
 import {
-  addRegistry, fetchIndex, lawsFallbackRef, listRegistries, readDetectionMode,
+  addRegistry, fetchIndex, listRegistries, readDetectionMode,
   readLawsPreamble, removeRegistry,
 } from "../src/registry.js";
 import { diff as lockfileDiff, readLockfile, replacedByEngine, LOCKFILE_NAME } from "../src/lockfile.js";
-import { collectSuggestions, detect, hookReport, lawsPreamble } from "../src/detector.js";
-import { hookFilePath, removeHook, writeHook, writtenEvents } from "../src/hooks.js";
-import { ASSEMBLED, assemble, decide, notice, persist, readStamp, writeStamp } from "../src/precompact.js";
-import * as contexto from "../src/context-manifest.js";
-import { readManifest } from "../src/manifest.js";
+import { detect } from "../src/detector.js";
+import { hookFilePath, removeHook, rewriteOwnedHooks, runtimeCommand, writeHook, writtenEvents } from "../src/hooks.js";
+import { parseArgs } from "../src/cli-args.js";
 
 const SCOPES = ["project", "global"];
 // Comandos de skill plugável: o posicional é o nome da skill/registry, nunca o repositório.
@@ -51,14 +45,6 @@ const PLUGIN_COMMANDS = ["add", "remove", "registry"];
 // flag > manifesto > locale que os demais respeitam.
 const SUBCOMMAND_COMMANDS = ["spec", "agents", "tokens", "precompact", "origin"];
 const isTTY = process.stdin.isTTY && process.stdout.isTTY;
-
-// Glue: junta os dados que o nucleo precisa. A decisao de como combinar e do detector.
-const suggestionsFor = (repo, detected) => collectSuggestions(
-  detected,
-  listRegistries(installer.coreDir("project", repo)),
-  readLockfile(repo),
-  { fetchImpl: globalThis.fetch, fetchIndexImpl: fetchIndex },
-);
 
 // Tabela de mensagens da CLI. Começa pelo locale; o main refina com a precedência
 // flag --user-language > manifesto (project > global) > locale.
@@ -73,44 +59,7 @@ const CLACK = {
   isCancel: p.isCancel,
 };
 
-function parseArgs(argv) {
-  const flags = { engines: [] };
-  const positional = [];
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === "-y" || a === "--yes") flags.yes = true;
-    else if (a === "--dry-run") flags.dryRun = true;
-    else if (a === "--engine") flags.engines.push(...argv[++i].split(","));
-    else if (a === "--scope") flags.scope = argv[++i];
-    else if (a === "--skills-dir") flags.skillsDir = argv[++i];
-    else if (a === "--language") flags.language = argv[++i];
-    else if (a === "--user-language") flags.userLanguage = argv[++i];
-    else if (a === "--arch") flags.arch = argv[++i];
-    else if (a === "--project-id") flags.projectId = argv[++i];
-    else if (a === "--all-skills") flags.allSkills = true;
-    else if (a === "--trusted") flags.trusted = true;
-    else if (a === "--hook") flags.hook = argv[++i];
-    else if (a === "--no-hooks") flags.noHooks = true;
-    else if (a === "--strict") flags.strict = true;
-    else if (a === "--all") flags.all = true;
-    else if (a === "--json") flags.json = true;
-    else if (a === "--out") flags.out = argv[++i];
-    else if (a === "--model") flags.model = argv[++i];
-    else if (a === "--effort") flags.effort = argv[++i];
-    else if (a.startsWith("-")) { console.error(M.unknownFlag(a)); process.exit(1); }
-    else positional.push(a);
-  }
-  // compat: --engine both = os dois motores
-  flags.engines = flags.engines.flatMap((e) => (e === "both" ? installer.ENGINES : [e]));
-  return { flags, positional };
-}
-
 function bail(msg) { p.cancel(msg || M.aborted); process.exit(0); }
-
-// Comando que o hook vai executar. A borda é quem sabe como o CLI foi invocado; o núcleo
-// recebe isso pronto. O caminho absoluto é aceitável porque o arquivo de hook é local à
-// máquina e gitignored — não viaja para o time.
-const mgrCommand = () => `node "${process.argv[1]}"`;
 
 // Motores que recebem hook nesta instalação: os escolhidos pelo usuário, menos o alvo
 // `custom` do --skills-dir, e nenhum quando `--no-hooks`.
@@ -160,8 +109,10 @@ async function cmdInstall(flags, positional) {
 
   const prior = installer.detectPrior(scope, repo);
   if (prior) {
+    const migrada = installer.needsRuntimeMigration(prior);
     if (prior.model === "runtime-launcher") p.log.warn(M.oldInstallWarn(prior.version));
-    else p.log.warn(M.resyncWarn);
+    else if (!migrada) p.log.warn(M.resyncWarn);
+    if (migrada) p.log.warn(M.runtimeMigrated(prior.version ?? "?", runtimeDirsOf(prior, repo)));
   }
 
   const replaced = replacedByEngine(readLockfile(repo));
@@ -189,6 +140,8 @@ async function cmdInstall(flags, positional) {
       ...(motoresComHook.length
         ? [`${M.planHooks(motoresComHook.map((engine) => path.relative(plan.repo, hookFilePath(engine, plan.repo))).join(" · "))}  ${pc.dim(M.planHooksHint)}`]
         : []),
+      // O runtime também é escrita em diretório do usuário: aparece no plano antes da confirmação.
+      M.planRuntime(plan.targets.map((alvo) => path.relative(plan.repo, path.join(alvo.dir, ...catalogo.RUNTIME_DIR))).join(" · "), catalogo.RUNTIME_FILES.length + 1),
       // O agente também mora em diretório do usuário: ele vê modelo e esforço por motor
       // ANTES de confirmar, e vê o que o motor não suporta (ADR-0010).
       ...linhasDoGate(plan),
@@ -223,6 +176,7 @@ async function cmdInstall(flags, positional) {
   const res = installer.execute(installer.keepDeclared(plan, mantidas), { abandoned: aRemover });
   s.stop(M.installedAt(res.targets.map((t) => t.dir).join(" · ")));
   if (res.migrated) p.log.info(M.migrationInfo(res.migrated.removed.length));
+  for (const item of res.runtime || []) p.log.success(M.runtimeWritten(path.relative(plan.repo, item.dir), item.files));
   // Os quatro caminhos saem 0: recusar a remocao nunca transforma a instalacao em erro. Escrita em
   // diretorio do usuario e anunciada, e o que NAO saiu tambem e — em silencio, viraria orfa.
   // A lista do "continua declarado" e a das MANTIDAS, nunca a das abandonadas: dizer que uma skill
@@ -244,7 +198,7 @@ async function cmdInstall(flags, positional) {
   }
 
   for (const engine of motoresComHook) {
-    const file = writeHook(engine, plan.repo, { command: mgrCommand() });
+    const file = writeHook(engine, plan.repo, { command: runtimeCommand(engine, plan.repo, plan.scope) });
     p.log.success(M.hookWritten(path.relative(plan.repo, file), writtenEvents(engine).join(" · ")));
   }
   // O hook do repositório só carrega depois do folder trust; sem este aviso o usuário conclui,
@@ -446,27 +400,11 @@ async function restoreLockedPlugins(repo, targets, warn) {
 // NAO ESCREVE NADA: nem lockfile, nem config, nem pasta de motor. Com `--hook <motor>`,
 // emite o relatorio no formato daquele motor, que e o que o hook de sessao consome.
 async function cmdDetect(flags, positional) {
-  const repo = path.resolve(positional[0] || ".");
-  const detected = detect(repo);
+  // O ramo do hook vive na cola testável (src/commands/hooks.js); este ramo é saída de terminal.
+  if (flags.hook) return detectHook({ ...commandIo(flags, positional), proc: hookProc });
 
-  if (flags.hook) {
-    // Falha aqui nao pode poluir nem derrubar a sessao do agente: no pior caso, silencio.
-    try {
-      // O preâmbulo das leis entra ANTES do relatório, no mesmo canal do motor (ADR-0011).
-      // Desligado, a saída volta a ser exatamente a de antes — nem uma linha a mais.
-      const core = installer.coreDir("project", repo);
-      const ligado = readLawsPreamble(core).enabled;
-      const referencia = installer.installedLawsRef(flags.hook, "project", repo) || lawsFallbackRef();
-      process.stdout.write(hookReport(
-        (await suggestionsFor(repo, detected)).suggestions,
-        flags.hook,
-        { preamble: ligado ? lawsPreamble(referencia) : null },
-      ));
-    } catch {
-      return 0;
-    }
-    return 0;
-  }
+  const repo = positional[0] ? path.resolve(positional[0]) : projectRoot(process.cwd()).root;
+  const detected = detect(repo);
 
   if (!detected.length) { console.log(M.detectNothing); return 0; }
   console.log(pc.bold(M.detectTitle));
@@ -518,66 +456,29 @@ async function proposeDetected(repo, scope, targets) {
   if (!instaladas) p.log.info(M.suggestSkipped);
 }
 
-// Linhas do gate no plano de instalação: um resumo por motor, com o que não se aplica dito
-// em vez de omitido. Vazio quando o gate está desligado — o plano fica igual ao de antes.
-// Formatação de uma linha do gate. A DECISÃO de o que se aplica vem do núcleo
-// (`gateSummary`); aqui só se escolhe a palavra para o que não se aplica.
+// IO dos comandos montado na borda (Humble Object): raiz do projeto, cwd, flags, mensagens e saída.
+// As colas testáveis vivem em src/commands/*.js e recebem este objeto.
+const commandIo = (flags, positional) => ({
+  root: projectRoot(process.cwd()).root,
+  cwd: process.cwd(),
+  flags,
+  positional,
+  M,
+  io: {
+    out: (l) => console.log(l),
+    err: (l) => console.error(l),
+    style: { dim: pc.dim, yellow: pc.yellow, green: pc.green, red: pc.red, bold: pc.bold },
+    invocation: "mgr",
+    lifecycle: "mgr",
+  },
+});
 // `mgr spec validate` — valida artefato do PROJETO do usuário. Não confundir com `mgr validate`,
-// que valida autoria de SKILL.md: são contratos diferentes (ADR-0012). Aqui só há parse de flag,
-// formatação e exit code; descoberta, leitura e política vivem em src/plan-validator.js (INV-5).
-function cmdSpecValidate(flags, positional) {
-  const repo = repoRoot(process.cwd());
-  const slug = flags.all ? null : (positional[0] || planValidator.slugFromCwd(repo, process.cwd()));
-  // Quatro verificações, um comando: o plano (ADR-0012), a spec (ADR-0013), a proveniência
-  // (ADR-0016) e a documentação declarada no fechamento (ADR-0020). As duas primeiras leem UM
-  // arquivo por feature, a terceira vale para qualquer artefato e a quarta só para o fechamento —
-  // por isso a lista de arquivos é a UNIÃO das quatro, sem repetir quem aparece em mais de uma.
-  const planos = planValidator.validatePlans(repo, { slug });
-  const specs = specValidator.validateSpecs(repo, { slug });
-  const proveniencia = provValidator.validateProvenance(repo, { slug });
-  const documentacao = docValidator.validateDocs(repo, { slug });
-  const arquivos = [...new Set([...planos.files, ...specs.files, ...proveniencia.files, ...documentacao.files])];
-  const achados = [...planos.findings, ...specs.findings, ...proveniencia.findings, ...documentacao.findings];
+// que valida autoria de SKILL.md: são contratos diferentes (ADR-0012). Descoberta, leitura e
+// política vivem em src/plan-validator.js (INV-5); a cola vive em src/commands/spec.js.
+const cmdSpecValidate = (flags, positional) => specValidate(commandIo(flags, positional));
 
-  if (!arquivos.length) {
-    console.error(M.errorPrefix(M.specValidateNoSpecs(slug || path.join(repo, "specs"))));
-    return 1;
-  }
-
-  const resultado = {
-    files: arquivos,
-    tasks: planos.tasks,
-    criteria: specs.criteria,
-    findings: achados,
-    summary: summarize(achados),
-  };
-  const bloqueantes = blocking(resultado.findings, { strict: flags.strict });
-
-  if (flags.json) {
-    console.log(JSON.stringify({
-      schemaVersion: 1,
-      scope: "structural",
-      files: resultado.files,
-      findings: resultado.findings,
-      summary: resultado.summary,
-    }, null, 2));
-    return bloqueantes ? 1 : 0;
-  }
-
-  let arquivoAtual = null;
-  for (const finding of resultado.findings) {
-    if (finding.file !== arquivoAtual) { console.log(M.specValidateHeader(finding.file)); arquivoAtual = finding.file; }
-    console.log(M.specValidateItem(finding.code, finding.severity, finding.task, finding.line, finding.message));
-    console.log(M.specValidateFix(finding.remediation));
-    for (const linha of finding.example.split("\n")) console.log(M.specValidateExample(linha));
-  }
-  if (!resultado.findings.length) console.log(M.specValidateOk(resultado.tasks, resultado.criteria, resultado.files.length));
-  console.log(M.specValidateSummary(resultado.summary.errors, resultado.summary.warnings));
-  console.log(pc.dim(M.specValidateScopeNote));
-  if (bloqueantes) console.log(M.specValidateNextSteps);
-  return bloqueantes ? 1 : 0;
-}
-
+// Linhas das leis no plano de instalação: onde elas são gravadas e se o preâmbulo está ligado.
+// Vazio quando só há o motor `custom`.
 function linhasDasLeis(plan) {
   const motores = plan.targets.filter((alvo) => alvo.engine !== "custom");
   if (!motores.length) return [];
@@ -627,521 +528,28 @@ function linhasDoGate(plan) {
   return linhas;
 }
 
-// Namespace `mgr spec <sub>`: separado do `mgr validate` de propósito (ADR-0012).
 // `mgr spec next` — a próxima AÇÃO, não o estado (ADR-0014). Sem `--all`: a pergunta "o que faço
 // agora" é sobre UMA feature. Aqui só há formatação e exit code; a decisão vive em src/plan-next.js.
-function cmdSpecNext(flags, positional) {
-  const repo = repoRoot(process.cwd());
+const cmdSpecNext = (flags, positional) => specNext(commandIo(flags, positional));
 
-  // `--all` não é aceito e ignorado: a pergunta "o que faço agora" é sobre UMA feature, e aceitar a
-  // flag em silêncio faz o comando responder sobre uma feature qualquer com cara de resposta sobre
-  // todas (ADR-0016, DT-8).
-  if (flags.all) {
-    console.error(M.errorPrefix(M.specNextAllRefused));
-    return 1;
-  }
+// `mgr spec status` — delegação à cola testável em src/commands/spec.js.
+const cmdSpecStatus = (flags, positional) => specStatus(commandIo(flags, positional));
 
-  const slug = positional[0] || planValidator.slugFromCwd(repo, process.cwd());
+// `mgr agents` — delegação à cola testável em src/commands/agents.js.
+const cmdAgents = (flags, positional) => agents(commandIo(flags, positional));
 
-  // Sem slug e fora de `specs/<slug>/`, a descoberta escolhia a primeira feature em ordem
-  // alfabética e respondia como se fosse A resposta. Dizer quantas existem e pedir o nome custa uma
-  // linha; a escolha silenciosa custa uma resposta errada que ninguém tem como perceber.
-  const existentes = slugs(repo);
-  if (!slug && existentes.length) {
-    console.error(M.errorPrefix(M.specNextNeedsSlug(existentes.length)));
-    return 1;
-  }
-
-  const resultado = planNext.nextTask(repo, { slug });
-
-  if (resultado.outcome === "no-plan") {
-    console.error(M.errorPrefix(M.specNextNoPlan(slug || path.join(repo, "specs"))));
-    return 1;
-  }
-
-  if (flags.json) {
-    console.log(JSON.stringify({
-      schemaVersion: 1,
-      outcome: resultado.outcome,
-      file: resultado.file,
-      task: resultado.task,
-      blocked: resultado.blocked || [],
-      stateDeclared: resultado.stateDeclared,
-      taskCount: resultado.taskCount,
-    }, null, 2));
-    return 0;
-  }
-
-  // O arquivo, sempre: sem slug e com vários planos a descoberta escolhe um, e o leitor precisa
-  // saber de qual feature a resposta fala.
-  console.log(M.specNextFile(resultado.file));
-
-  if (resultado.outcome === "task") {
-    const { task } = resultado;
-    console.log(M.specNextTask(task.id));
-    if (task.artifact) console.log(M.specNextArtifact(task.artifact));
-    if (task.doneWhen) console.log(M.specNextDoneWhen(task.doneWhen));
-    if (task.helperSkill) console.log(M.specNextSkill(task.helperSkill));
-    if (task.dependsOn.length) console.log(M.specNextDependsOn(task.dependsOn.join(", ")));
-  } else if (resultado.outcome === "all-done") {
-    console.log(M.specNextAllDone(resultado.taskCount));
-  } else if (resultado.outcome === "nothing-ready") {
-    console.log(M.specNextNothingReady);
-    for (const item of resultado.blocked) console.log(M.specNextBlocked(item.id, item.waitingFor.join(", ")));
-    console.log(M.specNextRunValidate);
-  } else if (resultado.outcome === "no-tasks") {
-    console.log(M.specNextNoTasks);
-  } else {
-    console.log(M.specNextFormatNotDeclared);
-  }
-
-  // A base do que se afirma, em TODA resposta — a CA-6 diz "toda", e o caminho sem marcador não
-  // era exceção escrita em lugar nenhum. Sem ela, devolver P0.1 para sempre seria lido como
-  // "esta é a próxima", quando o correto é "esta é a primeira que pode começar" (ADR-0014).
-  console.log("");
-  console.log(resultado.stateDeclared
-    ? M.specNextBasis(resultado.stateDeclared, resultado.taskCount)
-    : M.specNextNoState(resultado.taskCount));
-  // A ressalva só é verdadeira quando de fato se devolveu uma task. Dizê-la em "nada pronto"
-  // seria a saída prometendo o que não fez.
-  if (!resultado.stateDeclared && resultado.outcome === "task") console.log(M.specNextFirstStartable);
-  return 0;
-}
-
-// `mgr spec status` — o que EXISTE em disco, e o aviso de que existência não é progresso
-// (ADR-0015). Aqui só há formatação e exit code; o modelo e o IO vivem em src/spec-status.js.
-function cmdSpecStatus(flags, positional) {
-  const repo = repoRoot(process.cwd());
-
-  if (flags.all) {
-    const todas = specStatus.statusAll(repo);
-    if (!todas.length) {
-      console.error(M.errorPrefix(M.specStatusEmpty(path.join(repo, "specs"))));
-      return 1;
-    }
-    if (flags.json) {
-      console.log(JSON.stringify({ schemaVersion: 1, basis: specStatus.BASIS, warning: M.specStatusWarning, features: todas }, null, 2));
-      return 0;
-    }
-    for (const feature of todas) console.log(M.specStatusLine(feature.slug, resumoDeStatus(feature)));
-    console.log("");
-    console.log(M.specStatusWarning);
-    return 0;
-  }
-
-  const slug = positional[0] || planValidator.slugFromCwd(repo, process.cwd());
-  const resultado = specStatus.statusFor(repo, { slug });
-
-  if (!resultado.found) {
-    console.error(M.errorPrefix(M.specStatusNotFound(slug || "")));
-    return 1;
-  }
-
-  if (flags.json) {
-    console.log(JSON.stringify({ schemaVersion: 1, ...resultado, warning: M.specStatusWarning }, null, 2));
-    return 0;
-  }
-
-  console.log(M.specStatusRoot(resultado.specRoot));
-  console.log(M.specStatusArtifacts(resultado.artifacts.map(marcaDeArtefato).join(" ")));
-  console.log(resultado.nextReady.length
-    ? M.specStatusNextReady(resultado.nextReady.join(", "))
-    : M.specStatusNothingReady);
-  console.log(resultado.handoff.exists
-    ? M.specStatusHandoffOn(resultado.handoff.path)
-    : M.specStatusHandoffNone);
-  console.log("");
-  console.log(M.specStatusWarning);
-  return 0;
-}
-
-// `brief` vira `brief`, ausente vira `-brief`. O traço marca o que NÃO está lá sem inventar
-// palavra nova, e o aviso logo abaixo diz o que a marca significa e o que ela não significa.
-const marcaDeArtefato = (artefato) =>
-  (artefato.status === specStatus.PRESENT ? "" : "-") + artefato.id;
-
-const resumoDeStatus = (feature) =>
-  `${feature.artifacts.filter((a) => a.status === specStatus.PRESENT).length}/${feature.artifacts.length}`
-  + (feature.handoff.exists ? "  handoff" : "");
-
-// `mgr agents` — qual modelo e qual esforço cada intenção usa, e DE ONDE veio cada valor
-// (ADR-0017). A decisão vem do núcleo: `readAgents` diz o valor e a origem, `gateSummary` diz o que
-// o motor sustenta. Aqui só se escolhe a palavra.
-function cmdAgents(flags, positional) {
-  if (positional[0] === "set") return cmdAgentsSet(flags, positional.slice(1));
-  const repo = repoRoot(process.cwd());
-  const core = installer.coreDir("project", repo);
-  const { policies, sources, aliasOverridden } = readAgents(core);
-
-  const pedida = positional[0];
-  if (pedida && !catalogo.INTENTS.includes(pedida)) {
-    console.error(M.errorPrefix(M.agentsUnknown(pedida, catalogo.INTENTS.join(" | "))));
-    return 1;
-  }
-  const intents = pedida ? [pedida] : catalogo.INTENTS;
-  const motores = engineIds();
-
-  if (flags.json) {
-    console.log(JSON.stringify({
-      schemaVersion: 1,
-      aliasOverridden,
-      intents: Object.fromEntries(intents.map((intent) => [intent, {
-        agent: catalogo.AGENTS[intent].agent,
-        needs: catalogo.AGENTS[intent].needs,
-        enabled: policies[intent].enabled,
-        engines: Object.fromEntries(motores.map((engine) => {
-          const { model, effort, skipped } = gateSummary(engine, policies[intent]);
-          return [engine, {
-            model, effort, skipped,
-            modelSource: model ? sources[intent].model[engine] : null,
-            effortSource: effort ? sources[intent].effort : null,
-          }];
-        })),
-      }])),
-    }, null, 2));
-    return 0;
-  }
-
-  const palavraDaOrigem = (origem) =>
-    (origem === CONFIGURED ? M.agentsSourceConfigured : M.agentsSourceDefault);
-  for (const intent of intents) {
-    console.log(M.agentsIntent(intent, catalogo.AGENTS[intent].agent));
-    for (const engine of motores) {
-      const { model, effort, skipped } = gateSummary(engine, policies[intent]);
-      const textoDoModelo = model
-        ? M.agentsValueFrom(model, palavraDaOrigem(sources[intent].model[engine]))
-        : (skipped.includes("model") ? M.agentsUnsupported : M.agentsInherited);
-      // Mesma forma do ramo do `model` logo acima: sem valor pode ser incapacidade do MOTOR ou
-      // escolha do autor, e chamar as duas de "não suportado" faz a saída mentir sobre a
-      // plataforma — o claude-code suporta `effort`.
-      const textoDoEsforco = effort
-        ? M.agentsValueFrom(effort, palavraDaOrigem(sources[intent].effort))
-        : (skipped.includes("effort") ? M.agentsUnsupported : M.agentsInherited);
-      console.log(M.agentsEngine(engine, textoDoModelo, textoDoEsforco));
-    }
-  }
-  // O aviso do default: sem modelo declarado, o agente roda no da sessão. Some quando todas as
-  // intenções mostradas têm modelo em algum motor — avisar sobre o que já foi resolvido vira ruído.
-  const herdando = inheritingModel(intents, motores, policies);
-  if (herdando.length) console.log(pc.yellow(M.agentsInheritWarning(herdando.join(", "))));
-  console.log("");
-  console.log(pc.dim(M.agentsEffortNote));
-  if (aliasOverridden) console.log(M.agentsAliasNote);
-  return 0;
-}
-
-// `mgr precompact --hook <motor>` — o gatilho mecânico das leis L3.2 e L3.4 (ADR-0018). O motor
-// anuncia que vai compactar, e o método põe o estado em disco ANTES.
-//
-// Disciplina do `mgr detect --hook`, pela mesma razão: falha aqui não pode poluir o contexto do
-// agente nem derrubar a sessão de quem só abriu o editor. A ÚNICA saída diferente de zero é o
-// bloqueio deliberado, e ele é intencional.
-async function cmdPrecompact(flags) {
-  try {
-    const repo = repoRoot(process.cwd());
-    const core = installer.coreDir("project", repo);
-    const payload = await lerPayload();
-    const engine = flags.hook;
-    // Motor desconhecido sai em silêncio, e ANTES de gravar: sem esta guarda o hand-off seria
-    // escrito dizendo ter vindo de um motor que não existe, e só depois a decisão falharia. É a
-    // validação de entrada da borda (QUAL-2), com a saída silenciosa que a DT-8 exige em lugar do
-    // fail fast ruidoso — o `mgr detect --hook` faz igual.
-    if (!engineIds().includes(engine)) return 0;
-    // O gatilho vem do payload, e SÓ dele. Sem ele, `decide` trata como desconhecido e não bloqueia.
-    const trigger = payload.trigger ?? null;
-
-    // Git é da BORDA — o núcleo recebe a lista pronta, e repositório sem git devolve vazio.
-    logHook(M.precompactLogGitBefore);
-    const changedFiles = modificados(repo);
-    logHook(M.precompactLogGitAfter(changedFiles.length));
-
-    // Gravar vem antes de decidir (RN-1): se só der para fazer uma coisa, é pôr o estado em disco.
-    const montado = assemble(repo, { engine, trigger, changedFiles });
-    const gravou = montado.outcome === ASSEMBLED;
-    if (gravou) {
-      logHook(M.precompactLogWriteBefore(montado.destination));
-      const { appended } = persist(repo, montado);
-      logHook(M.precompactLogWriteAfter(montado.destination, appended));
-    }
-
-    // A referência ao contexto da conversa (ADR-0019). Vem junto do hand-off, e pela mesma razão:
-    // é preservação de estado, e preservar vem antes de decidir.
-    //
-    // O caminho do transcript vem do payload em duas grafias, porque as duas plataformas o nomeiam
-    // diferente — `transcript_path` no claude-code e `transcriptPath` no copilot.
-    const referencia = referenciarContexto(repo, {
-      engine,
-      trigger,
-      // Só string vale como caminho: número truthy chegaria a `readFileSync` como **file
-      // descriptor**, lendo algo que ninguém pediu. A recusa é silenciosa, como todo o resto deste
-      // comando (DT-8), em vez do fail fast ruidoso que a QUAL-2 prescreve em geral.
-      transcriptPath: caminhoDoTranscript(payload),
-      sessionId: payload.session_id ?? payload.sessionId ?? null,
-    });
-
-    // A borda passa o FATO de ter gravado; quem conjuga isso com gatilho e carimbo é o núcleo.
-    const veredito = decide({ engine, trigger, blockedAt: readStamp(core, engine), saved: gravou });
-    if (veredito.block) {
-      // A palavra é escolhida DEPOIS da decisão, e não antes: dizer "a compactação vai acontecer" no
-      // caminho em que ela foi impedida seria a saída se contradizendo dentro do mesmo envelope.
-      //
-      // O motivo vai no envelope, e não no stderr: a doc diz que a mensagem de bloqueio é "the
-      // reason from your JSON's blocking decision when it makes one, and your stderr text
-      // otherwise" — declarando a decisão, o stderr fica livre para ser canal de log.
-      const entregue = emitirAviso(engine, {
-        message: `${M.precompactWroteBlocked(montado.destination, montado.slug)}${referencia}`,
-        deny: M.precompactBlocked(montado.destination),
-      });
-      // Bloquear sem conseguir entregar o motivo obstruiria o usuário sem explicação — e é pior que
-      // isso: sem envelope válido, a própria doc diz que a mensagem de bloqueio passa a ser o
-      // stderr, que aqui carrega as linhas de log. Então não bloqueia. E **não carimba**: a próxima
-      // tentativa continua valendo como recusa nova, em vez de ser liberada por uma recusa que o
-      // usuário nunca viu.
-      if (!entregue) return 0;
-      logHook(M.precompactLogStampBefore);
-      writeStamp(core, { engine });
-      logHook(M.precompactLogStampAfter);
-      return 2;
-    }
-    const gravacao = gravou
-      ? M.precompactWrote(montado.destination, montado.slug)
-      : M.precompactNothingToSave;
-    const seguinte = veredito.repeated ? M.precompactProceeding : M.precompactSuggestNewSession;
-    emitirAviso(engine, { message: `${gravacao} ${seguinte}${referencia}` });
-    return 0;
-  } catch {
-    // Silêncio é melhor que ruído no contexto do agente. O aviso, quando houve, já saiu acima.
-    return 0;
-  }
-}
-
-// Registra a referência ao contexto e devolve o TEXTO a acrescentar ao aviso — nunca lança, e
-// qualquer falha vira string vazia: perder a referência não pode custar o hand-off nem a sessão
-// (RN-5). O núcleo mede e escreve; aqui se resolve o destino e se escolhe a palavra (INV-5).
-//
-// O manifesto vai para o escopo GLOBAL de propósito: ele carrega caminhos absolutos e ids de sessão
-// da máquina, e o `.mgr-core/` do projeto é o que o README manda versionar.
-const caminhoDoTranscript = (payload) => {
-  const bruto = payload.transcript_path ?? payload.transcriptPath ?? null;
-  return typeof bruto === "string" && bruto ? bruto : null;
+// IO de processo dos hooks, injetado na cola (src/commands/hooks.js). A borda é quem sabe de stdin,
+// fds e git (ADR-0018, "Git é da BORDA").
+const hookProc = {
+  escreverSync, lerPayload, modificados, stdoutFd: 1, stderrFd: 2,
+  write: (texto) => process.stdout.write(texto),
 };
 
-function referenciarContexto(repo, { engine, trigger, transcriptPath, sessionId }) {
-  try {
-    const projectId = readManifest(installer.coreDir("project", repo))?.projectId;
-    // Sem projeto instalado não há por onde endereçar o manifesto. Silêncio, como todo o resto deste
-    // comando: quem só abriu o editor não pode receber ruído.
-    if (!projectId) return "";
+// `mgr precompact --hook <motor>` — delegação à cola testável em src/commands/hooks.js.
+const cmdPrecompact = (flags) => precompactHook({ ...commandIo(flags, []), proc: hookProc });
 
-    const entrada = contexto.entryFor({ engine, trigger, transcriptPath, sessionId });
-    if (entrada.outcome !== contexto.REFERENCED) return ` ${M.precompactContextMissed(entrada.reason)}`;
-
-    const global = installer.coreDir("global", repo);
-    logHook(M.precompactLogContextBefore(contexto.manifestPath(global, projectId)));
-    const { file, entries, recovered } = contexto.write(global, projectId, entrada);
-    logHook(M.precompactLogContextAfter(file, entries));
-
-    const perda = recovered ? ` ${M.precompactContextRecovered}` : "";
-    return ` ${M.precompactContextReferenced({
-      file,
-      records: entrada.transcriptRecords,
-      bytes: entrada.transcriptBytes,
-      artifacts: entrada.sessionArtifacts.length,
-    })}${perda}`;
-  } catch {
-    // Referência é acréscimo: se ela falhar, o hand-off e o aviso da fatia anterior seguem intactos.
-    return "";
-  }
-}
-
-// Escrita SÍNCRONA nos dois canais do hook, e isto não é preferência de estilo: o processo termina em
-// `process.exit`, e em pipe o stdout do Node é assíncrono — o `write` enfileira e a saída pode ser
-// truncada antes do flush. Perder o envelope aqui é perder a única mensagem que chega ao usuário.
-// Tentativas em canal que não drenou. NÃO é medição: é escolha de desenho declarada. Existe porque
-// dentro do hook a espera é limitada pelo teto de 15s da entrada, mas numa invocação à mão com o
-// stdout redirecionado para um pipe non-blocking não há teto nenhum — girar sem limite queimaria CPU
-// até alguém ler. Passado o teto, trata-se o canal como indisponível, que é o que o desenho já faz
-// para qualquer outro erro.
-const MAX_TENTATIVAS_DE_ESCRITA = 1000;
-
-// Erros retentáveis: canal non-blocking que ainda não drenou, e chamada interrompida por sinal. Os
-// dois são "tente de novo", e não "o canal morreu".
-const RETENTAVEIS = new Set(["EAGAIN", "EINTR"]);
-
-// Devolve se a mensagem saiu INTEIRA. O retorno importa: escrita parcial seguida de canal fechado
-// deixaria um envelope truncado, e quem chamou precisa saber para não agir como se tivesse avisado.
-const escreverSync = (fd, texto) => {
-  const bytes = Buffer.from(texto, "utf8");
-  let escrito = 0;
-  let tentativas = 0;
-  // Laço porque `writeSync` devolve QUANTOS bytes escreveu: em pipe a escrita pode ser parcial, e
-  // parar na primeira chamada truncaria a mensagem no meio de um JSON.
-  while (escrito < bytes.length) {
-    try {
-      const n = writeSync(fd, bytes, escrito);
-      // Zero byte escrito sem erro não progride: repetir seria laço infinito.
-      if (n <= 0) return false;
-      escrito += n;
-      tentativas = 0;
-    } catch (erro) {
-      if (!RETENTAVEIS.has(erro.code)) return false;
-      if (++tentativas > MAX_TENTATIVAS_DE_ESCRITA) return false;
-    }
-  }
-  return true;
-};
-
-// Log de hook vai para o STDERR, nunca para o stdout: o stdout deste evento carrega o envelope JSON,
-// e texto solto ali o tornaria impossível de parsear. A doc diz que "stderr from a hook that exits 0
-// goes to the debug log only, never the transcript, and Claude never sees it" — é destino de
-// diagnóstico, que é o que a LOG-1/LOG-2 pedem, sem virar ruído no contexto de ninguém.
-// Log não tem o que fazer com o resultado: se o canal de diagnóstico caiu, não há onde relatar isso
-// — e relatar pelo próprio canal seria recursivo.
-const logHook = (linha) => { escreverSync(2, `[mgr] ${linha}\n`); };
-
-// O aviso ao usuário sai pelo envelope que o motor declara, ou não sai. Motor sem canal não recebe
-// texto solto: imprimir no que a plataforma descarta faria a fatia parecer avisar.
-// Devolve se NADA foi perdido. Motor sem canal devolve `true`: não havia o que entregar, e isso não
-// é falha de entrega — é a degradação que o descritor declara.
-const emitirAviso = (engine, conteudo) => {
-  const envelope = notice(engine, conteudo);
-  return envelope === null || escreverSync(1, `${envelope}\n`);
-};
-
-// O payload chega por stdin. Vazio e JSON inválido são entrada legítima de uma sessão estranha, não
-// erro do usuário: viram objeto vazio, e o gatilho desconhecido não bloqueia (`decide`).
-async function lerPayload() {
-  const pedacos = [];
-  for await (const pedaco of process.stdin) pedacos.push(pedaco);
-  try {
-    return JSON.parse(Buffer.concat(pedacos).toString("utf8")) ?? {};
-  } catch {
-    return {};
-  }
-}
-
-const modificados = (repo) => {
-  try {
-    // `stdio` ignora o stderr do git de propósito: em repositório sem git ele imprime "not a git
-    // repository", e isso cairia no contexto do agente — o ruído que a DT-8 quer impedir.
-    return execFileSync("git", ["status", "--short"], {
-      cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
-    })
-      .split("\n").map((linha) => linha.trim()).filter(Boolean);
-  } catch {
-    return [];
-  }
-};
-
-// `mgr origin set` — grava a ORIGEM do projeto e diz o que passou a valer.
-//
-// Sem `--scope`: a origem e fato do PROJETO, e um metodo instalado globalmente que revisa o projeto
-// X precisa ler a origem de X. Sem leitor (`mgr origin` sozinho): capacidade sem demanda medida nao
-// entra, e o estado ja e visivel na saida deste comando, no arquivo, e no cabecalho do relatorio de
-// review.
-function cmdOriginSet(_f, positional) {
-  const repo = repoRoot(process.cwd());
-  const core = installer.coreDir("project", repo);
-
-  const valor = positional[0];
-  if (!valor) {
-    console.error(M.errorPrefix(M.originSetNeedsValue(ORIGINS.join(" | "))));
-    return 1;
-  }
-  if (!ORIGINS.includes(valor)) {
-    console.error(M.errorPrefix(M.originUnknown(valor, ORIGINS.join(" | "))));
-    return 1;
-  }
-
-  // Instalacao ausente NAO e erro: e o caso do metodo instalado em escopo global, e o `writeConfig`
-  // ja cria o diretorio. Mas o usuario ouve, para nao sair achando que configurou o lugar errado.
-  if (!installer.detectPrior("project", repo)) console.log(M.originNoInstall(core));
-
-  // LOG-1: informacao ANTES e logo depois de alterar estado em disco. Sem a de antes, um config
-  // somente-leitura devolve so o erro cru e ninguem sabe qual arquivo o comando tentou escrever.
-  console.log(M.originWriting(core));
-  const { antes, depois } = writeOrigin(core, valor);
-  console.log(M.originWritten(antes.estado === "ausente" ? "—" : antes.valor, depois));
-  return 0;
-}
-
-function cmdOrigin(flags, positional) {
-  if (positional[0] === "set") return cmdOriginSet(flags, positional.slice(1));
-  // A unica forma valida e `origin set <valor>`; a mensagem mostra a forma certa em vez de so
-  // recusar, porque quem digita `mgr origin brownfield` esqueceu o `set` e nao errou o valor.
-  console.error(M.errorPrefix(M.originSetNeedsValue(ORIGINS.join(" | "))));
-  return 1;
-}
-
-// `mgr agents set` — escreve a política de UMA intenção e diz o que passou a valer (ADR-0017).
-//
-// A decisão de MERGE e a validação são do núcleo (`writeAgentPolicy`); aqui só se resolve para
-// QUAIS motores escrever, e se escolhe a palavra. Este comando NÃO roda o `update`: reescrever o
-// arquivo do agente sem o autor pedir mexeria no disco dele por conta própria.
-//
-// `model` é mapa POR MOTOR e `effort` é da intenção inteira — por isso `--engine` só tem efeito
-// sobre o modelo, e o esforço é escrito uma vez, sem motor.
-function cmdAgentsSet(flags, positional) {
-  const repo = repoRoot(process.cwd());
-  const core = installer.coreDir("project", repo);
-
-  const intent = positional[0];
-  if (!intent) {
-    console.error(M.errorPrefix(M.agentsSetNeedsIntent(catalogo.INTENTS.join(" | "))));
-    return 1;
-  }
-  if (!catalogo.INTENTS.includes(intent)) {
-    console.error(M.errorPrefix(M.agentsUnknown(intent, catalogo.INTENTS.join(" | "))));
-    return 1;
-  }
-  if (flags.model === undefined && flags.effort === undefined) {
-    console.error(M.errorPrefix(M.agentsSetNothing));
-    return 1;
-  }
-
-  // Sem `--engine`, os motores vêm do manifesto — é o que o autor instalou, e não um palpite.
-  const manifesto = installer.detectPrior("project", repo);
-  const instalados = (manifesto?.engines || [manifesto?.engine]).filter((e) => engineIds().includes(e));
-  const motores = flags.engines.length ? flags.engines : instalados;
-  for (const engine of flags.engines) {
-    // Motor não instalado é RECUSADO, e não gravado e ignorado: config que ninguém lê é pior que
-    // erro na hora, porque o autor sai achando que configurou.
-    if (!instalados.includes(engine)) {
-      console.error(M.errorPrefix(M.agentsSetEngineNotInstalled(engine, instalados.join(", "))));
-      return 1;
-    }
-  }
-  if (flags.model !== undefined && !motores.length) {
-    console.error(M.errorPrefix(M.agentsSetNoEngines));
-    return 1;
-  }
-
-  const escrita = {};
-  if (flags.model !== undefined) escrita.model = Object.fromEntries(motores.map((e) => [e, flags.model]));
-  if (flags.effort !== undefined) escrita.effort = flags.effort;
-  // Valor inválido sai pelo `throw` do núcleo, capturado no `main` — e nada é gravado.
-  console.log(M.agentsSetWriting(intent));
-  const policy = writeAgentPolicy(core, intent, escrita);
-  console.log(M.agentsSetWritten(intent, catalogo.AGENTS[intent].agent));
-
-  // `effort` vale para a INTENÇÃO inteira: mostrar só o motor do `--engine` esconderia que ele
-  // passou a valer nos outros também. Com `--model` sozinho, mostra-se só onde se escreveu.
-  const mostrados = (flags.effort !== undefined && instalados.length)
-    ? instalados
-    : (motores.length ? motores : engineIds());
-  for (const engine of mostrados) {
-    const { model, effort, skipped } = gateSummary(engine, policy);
-    console.log(M.agentsEngine(engine,
-      model || (skipped.includes("model") ? M.agentsUnsupported : M.agentsInherited),
-      effort || (skipped.includes("effort") ? M.agentsUnsupported : M.agentsInherited)));
-  }
-  console.log("");
-  // Uma frase por campo ESCRITO: os dois campos passam a valer em momentos diferentes, e dizer só
-  // "pronto" deixaria o autor esperando efeito que ainda não existe.
-  if (flags.model !== undefined) console.log(pc.dim(M.agentsSetModelEffect));
-  if (flags.effort !== undefined) console.log(pc.dim(M.agentsSetEffortEffect));
-  return 0;
-}
+// `mgr origin` — delegação à cola testável em src/commands/origin.js (despacha `set` lá dentro).
+const cmdOrigin = (flags, positional) => origin(commandIo(flags, positional));
 
 // `mgr tokens` — quanto o fluxo consumiu (ADR-0017). O PRIMEIRO transcript é o da conversa; os
 // demais são os dos agentes que ela subiu. Medir só a conversa contaria a economia e esconderia o
@@ -1164,7 +572,7 @@ function cmdTokens(flags, positional) {
 
   const [conversation, ...agents] = positional;
   const medicao = tokens.summarize({ conversation, agents });
-  const { budget } = readAgents(installer.coreDir("project", repoRoot(process.cwd())));
+  const { budget } = readAgents(installer.coreDir("project", projectRoot(process.cwd()).root));
   const teto = budget?.totalTokens ?? null;
   const veredito = tokens.verdict(medicao, teto);
 
@@ -1194,7 +602,7 @@ function cmdSpec(flags, positional) {
 }
 
 function cmdStatus(_f, positional) {
-  const repo = path.resolve(positional[0] || ".");
+  const repo = positional[0] ? path.resolve(positional[0]) : projectRoot(process.cwd()).root;
   let shown = false;
   for (const scope of SCOPES) {
     for (const man of installer.installs(scope, repo)) {
@@ -1255,14 +663,34 @@ function cmdStatus(_f, positional) {
   return 0;
 }
 
+// Diretórios do runtime que a migração vai criar, a partir dos alvos que o manifesto anterior declarou.
+const runtimeDirsOf = (prior, repo) =>
+  (prior.skillsDirs || [])
+    .map((dir) => path.relative(repo, path.join(path.resolve(repo, dir), ...catalogo.RUNTIME_DIR)))
+    .join(" · ");
+
 async function cmdUpdate(flags, positional) {
-  const repo = path.resolve(positional[0] || ".");
+  const repo = positional[0] ? path.resolve(positional[0]) : projectRoot(process.cwd()).root;
   let scope = flags.scope;
   if (!scope) {
     scope = installer.detectPrior("global", repo) && !installer.detectPrior("project", repo)
       ? "global" : "project";
   }
+  const prior = installer.detectPrior(scope, repo);
+  const migrar = installer.needsRuntimeMigration(prior);
+  if (migrar) {
+    console.log(M.runtimeMigrated(prior.version ?? "?", runtimeDirsOf(prior, repo)));
+  }
   const res = installer.update(scope, repo, { replaced: replacedByEngine(readLockfile(repo)) });
+  if (migrar) {
+    // Só as entradas do MGR que já existem recebem o comando novo; nenhum evento é criado (DT-13).
+    for (const engine of new Set(res.targets.map((t) => t.engine).filter((e) => installer.ENGINES.includes(e)))) {
+      const reescrito = rewriteOwnedHooks(engine, repo, { command: runtimeCommand(engine, repo, scope) });
+      if (reescrito) {
+        console.log(pc.dim(M.hookWritten(path.relative(repo, reescrito.file), reescrito.events.join(" · "))));
+      }
+    }
+  }
   if (res.migrated) console.log(pc.dim(M.updateMigrated));
   console.log(pc.green(M.updateDone(scope, res.skills.length, res.targets.map((t) => t.dir).join(" · "))));
 
@@ -1320,38 +748,6 @@ function cmdBuild(flags) {
 // **Só `EXCEEDS` sai com 1.** O ADR-0007 manda "bloqueio ou warning forte" para "declarou X e
 // detectou X+Y", e para "não declarou" manda CONFIRMAÇÃO OBRIGATÓRIA, que é exigência do fluxo de
 // instalação e não falha de gate.
-// `mgr doctor` — diz se a instalacao esta INTEGRA, e nao so o que esta instalada (U2).
-//
-// **Nao escreve nada, em nenhum modo.** Nao ha `--fix`: a maioria das correcoes era rodar o
-// `mgr update`, e chama-lo passaria `-y` pela pessoa. O comando nomeia a remediacao; a acao e dela.
-function cmdDoctor(repo, flags) {
-  const resultado = doctor.diagnose(repo);
-
-  if (resultado.outcome === doctor.NO_INSTALL) {
-    console.log(M.doctorSemInstalacao);
-    return 0;
-  }
-
-  const bloqueia = doctor.hasDefect(resultado);
-  if (flags.json) {
-    console.log(JSON.stringify({ schemaVersion: 1, blocks: bloqueia, ...resultado }, null, 2));
-    return bloqueia ? 1 : 0;
-  }
-
-  const cor = { [doctor.DEFECT]: pc.red, [doctor.WARNING]: pc.yellow, [doctor.UNAVAILABLE]: pc.dim };
-  for (const { check, severity, file, expected, found, fix } of resultado.findings) {
-    console.log(cor[severity](`${severity === doctor.DEFECT ? "x" : "!"} ${check} — ${file}`));
-    console.log(`    esperado:  ${expected}`);
-    console.log(`    encontrado: ${found}`);
-    console.log(fix ? `    resolva com: ${fix}` : pc.dim("    sem correcao automatica"));
-  }
-
-  console.log("");
-  console.log(M.doctorResumo(resultado.checks, resultado.findings.length));
-  console.log(M.doctorNaoAtesta);
-  return bloqueia ? 1 : 0;
-}
-
 function cmdAudit(flags) {
   const resultados = audit.auditAll();
   const bloqueia = audit.blocks(resultados);
@@ -1411,11 +807,21 @@ function cmdValidate() {
 }
 
 async function main() {
+  // DT-10: um dist/ gerado para outra versão do package.json ao lado não roda nenhum comando.
+  const versaoBundle = bundle.buildVersion();
+  if (versaoBundle !== null) {
+    const versaoPacote = bundle.packageVersion();
+    if (versaoPacote !== versaoBundle) {
+      console.error(`dist/mgr.min.js foi gerado para ${versaoBundle} e o pacote está em ${versaoPacote}: rode npm run build`);
+      return 1;
+    }
+  }
   const [, , command, ...rest] = process.argv;
-  const { flags, positional } = parseArgs(rest);
+  const { flags, positional, unknownFlag } = parseArgs(rest, { engines: installer.ENGINES });
+  if (unknownFlag) { console.error(M.unknownFlag(unknownFlag)); process.exit(1); }
   // Refina o idioma da CLI: flag > manifesto (project > global) > locale (default acima).
   const semRepoPosicional = PLUGIN_COMMANDS.includes(command) || SUBCOMMAND_COMMANDS.includes(command);
-  const repo = path.resolve(semRepoPosicional ? "." : (positional[0] || "."));
+  const repo = !semRepoPosicional && positional[0] ? path.resolve(positional[0]) : projectRoot(process.cwd()).root;
   // Manifesto corrompido não pode derrubar o processo ANTES do try: num hook, um stack trace no
   // stderr é exatamente o ruído no contexto do agente que a DT-8 do ADR-0018 quer impedir.
   let manifestLang = null;
@@ -1438,7 +844,8 @@ async function main() {
       case "build": return cmdBuild(flags);
       case "validate": return cmdValidate();
       case "audit": return cmdAudit(flags);
-      case "doctor": return cmdDoctor(repo, flags);
+      case "doctor": return doctor({ ...commandIo(flags, positional), root: repo });
+      case "sdd-check": return sddCheck({ ...commandIo(flags, positional), root: repo });
       case "spec": return cmdSpec(flags, positional);
       case "agents": return cmdAgents(flags, positional);
       case "origin": return cmdOrigin(flags, positional);

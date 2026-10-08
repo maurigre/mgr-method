@@ -59,7 +59,26 @@ motor (`.claude/skills/` ou `.github/skills/`), sem duplicação e sem apontador
 ├── manifest.json     # o que foi instalado (motores, skills, linguagem, arquitetura, userLanguage)
 └── .env              # MGR_PROJECT_ID=<id>, usado pela memória estendida (mgr-code)
 .claude/skills/       # as skills (única árvore de skills)
+.claude/skills/_shared/mgr/  # o runtime do MGR: código legível, só Node, sem dependência externa, chamado pelas skills por caminho explícito; nada é instalado no sistema operacional
 ```
+
+> **Runtime versionado junto com as skills (R-7).** O runtime (`<motor>/skills/_shared/mgr/`, em
+> `.claude/` ou `.github/`) é código versionado junto com as skills do motor. Se o lint, os testes ou
+> o typecheck do seu projeto varrerem essa pasta, pode ser preciso ignorá-la (`**/skills/_shared/mgr/**`).
+> As skills chamam o runtime por caminho explícito. Se ele faltar, elas **param** e mostram o comando
+> de restauração (`npx mgr-method@<versão> update`), em vez de seguir sem ele.
+>
+> O runtime atende só os comandos que as skills usam — `spec status|validate|next`, `agents`
+> (`set`, `apply`), `origin set`, `doctor`, `sdd-check`, `detect`, `precompact`, `version` — e recusa
+> comando de ciclo de vida (`install`, `update`, `add`…), nomeando o `npx mgr-method@<versão>` a rodar
+> no lugar. O `doctor` rodado pelo runtime declara `stale-install` e `divergent-body`
+> **indisponíveis**: as fontes do pacote com que eles comparam não estão no projeto, então ele nomeia
+> `npx mgr-method@<versão> doctor` para a conferência completa.
+>
+> **O `update` reescreve as entradas de hook do MGR.** Ao migrar uma instalação antiga, o `update`
+> troca o comando das entradas do próprio MGR (as que levam `mgr-session-hook`) no
+> `settings.local.json` do motor para apontar ao runtime do projeto. As suas entradas ficam byte a
+> byte, e nenhum evento novo é criado.
 
 Instalar para dois motores gera duas árvores independentes — apagar uma **não** afeta a
 outra. Instalações no modelo antigo (runtime + `.mgr-core/skills` + lançadores) são
@@ -94,7 +113,7 @@ code-analyzer ─ review final de 2 eixos: Standards (guia DO projeto) + Spec (c
 |---|---|
 | **Validação de artefato** | `mgr spec validate` verifica o **plano** e a **spec** de uma feature: dependência inexistente, ciclo no DAG, granularidade, task sem critério de done, e spec sem critério de aceitação identificado. Formato declarado por marcador; **nada do que já existe é reprovado** (ADR-0012, ADR-0013). |
 | **Caminho resolvido** | `mgr spec status` responde quais artefatos existem numa feature e **onde estão**, para a skill parar de montar caminho por convenção. O vocabulário não tem `done`: existência de arquivo não é conclusão de etapa, e o payload diz isso em `basis` e `warning` (ADR-0015). |
-| **Um modelo por intenção** | O `mgr agents` responde qual modelo e qual esforço cada etapa do fluxo usa, e de onde veio cada valor. Redação, execução e revisão são declaradas uma vez no `.mgr-core/config.json`; a instalação grava em cada agente e a invocação troca o modelo sem reinstalar. Mudar o esforço exige `mgr update`, e o comando avisa (ADR-0017). |
+| **Um modelo por intenção** | O `mgr agents` responde qual modelo e qual esforço cada etapa do fluxo usa, e de onde veio cada valor. Redação, execução e revisão são declaradas uma vez no `.mgr-core/config.json`; a instalação grava em cada agente e a invocação troca o modelo sem reinstalar. Mudar o esforço exige `mgr agents apply`, e o comando avisa (ADR-0017). |
 | **Proveniência verificável** | O `mgr spec validate` também confere a etiqueta de proveniência que você escreveu: a forma dela, e se o ponteiro `[code:<caminho>:<linha>]` resolve em disco a partir da raiz do repositório. Ele nunca **cobra** etiqueta — a regra que cobraria foi rejeitada por medição, e nada do que já existe é reprovado (ADR-0016). |
 | **Ação, não estado** | `mgr spec next` responde o que fazer agora: a task, o artefato exato dela, a skill auxiliar e o que ela espera. A task pode declarar `status: done`, e a resposta sempre diz quanto estado o plano declara — sem nenhum, ela diz que não sabe o que você já fez (ADR-0014). |
 | **Leis de execução** | **Fonte única** em `shared/laws/execution-laws.md`: 47 leis (L0–L6) que valem para todas as skills, cada uma declarando **a quem se aplica por papel** (`Planner`, `Executor`, `Verifier`, `Diagnostician`, `All`). As skills apontam para ela; nenhuma repete lei. As centrais entram no contexto **antes da primeira mensagem**, pelo hook de sessão (ADR-0011). |
@@ -114,7 +133,7 @@ code-analyzer ─ review final de 2 eixos: Standards (guia DO projeto) + Spec (c
 | **Contrato de skill conferido** | O `mgr validate` ganhou limites nos campos **obrigatórios** — `name` até 64 caracteres, e `name` ou `description` lidos como mapa reprovam, um buraco que deixava passar skill sem `description` utilizável — e nos **opcionais** do padrão aberto Agent Skills, quando presentes: `compatibility` até 500, `metadata` como mapa string→string de um nível, e `allowed-tools` como texto separado por espaço. **Código que passava pode reprovar**, e só se já declarava um desses campos com forma inválida. As 13 skills do CORE declaram `license`, e a `junit-clean` também o ambiente que exige (ADR-0021). |
 | **Referência ao contexto antes da compactação** | Quando o motor anuncia a compactação, o método registra **onde está a conversa desta sessão** — o transcript que o próprio motor mantém, mais o raciocínio dos subagentes e a saída de ferramenta que foi para disco — num único manifesto por projeto, com tamanho e checksum medidos no instante. Nada é copiado: o transcript sobrevive à compactação, então duplicá-lo acumularia megabytes sem proteger de nada. O método **aponta** para o contexto, não o guarda, e a consolidação no `mgr-code` é peça própria que ainda não existe (ADR-0019). |
 | **Hand-off antes da compactação** | Quando o motor anuncia que vai compactar o contexto, o método grava o hand-off **antes**, diz o motivo e sugere sessão nova. No `/compact` que você pediu, no claude-code, ele impede uma vez para você decidir com o estado já a salvo. No copilot o evento é só notificação: o hand-off continua sendo gravado, mas a plataforma não dá ao hook como impedir nem como falar com você (ADR-0018). |
-| `configure-agents` | Conduz a escolha de modelo e esforço por intenção (`drafting`, `execution`, `review`) e escreve com `mgr agents set`. Diz o que cada intenção faz e mostra os identificadores que cada motor documenta, e **nunca sugere** modelo para uma intenção: os modelos disponíveis e a conta são seus. |
+| `configure-agents` | Conduz a escolha de modelo e esforço por intenção (`drafting`, `execution`, `review`) e escreve pelo runtime do projeto (`agents set`), perguntando antes de o `agents apply` reescrever os arquivos de agente. Diz o que cada intenção faz e mostra os identificadores que cada motor documenta, e **nunca sugere** modelo para uma intenção: os modelos disponíveis e a conta são seus. |
 | `evidence-capture` | Registra evidências AI-First por funcionalidade (prompts, revisões, habilidades) em `specs/<feature>/ai/` + índice global; organiza e pergunta, nunca inventa. |
 | `junit-clean` | Testes Java padronizados por 13 regras (naming should+camelCase, sem herança, ParameterizedTest, AAA, boundary + MC/DC, Sonar-safe). |
 | `arch-hexagonal` | Guia de regras para Ports & Adapters (Cockburn), agnóstico à linguagem (perfis Java/Go/Python/C#/TS + genérico). |
@@ -138,6 +157,7 @@ linha aqui, ou linha sem verificação, quebra o build.
 | `broken-hook` | caminho absoluto em `settings.local.json` |
 | `lockfile-drift` | `lockfile.diff()` |
 | `missing-shared` | as fontes de `_shared/` que o conjunto instalado exige, contra o disco |
+| `runtime-version` | o runtime do projeto `<motor>/skills/_shared/mgr/` e o seu `package.json` gerado contra o manifesto (ausente → defeito; outra versão → aviso); o corpo de cada arquivo do runtime é conferido por `divergent-body` |
 
 
 ### Princípios que governam tudo
@@ -165,22 +185,25 @@ feature, idêntico.
 
 ```
 bin/mgr.js          # CLI: install · status · update · uninstall · build · validate · list · version
-                    #      add · remove · registry · detect · agents · tokens · spec · precompact
-src/                # o núcleo, 35 módulos: instalação e build · descritor por motor · skill
+                    #      add · remove · registry · detect · agents · agents apply · tokens · spec · precompact · sdd-check
+src/                # o núcleo, 40 módulos: instalação e build · descritor por motor · skill
                     # plugável · artefato de spec (parser/regras/validador) · sessão e contexto
                     # (hooks, pré-compactação, referência ao contexto) · mensagens
 src/engines/        # o que cada motor suporta, como DADO — nunca `if` por nome de motor
+src/commands/       # a cola dos comandos, comum à CLI e ao runtime do projeto (IO injetado)
+bin/mgr-runtime.js  # a entrada do runtime do projeto, copiada com o fecho de imports para <motor>/skills/_shared/mgr/
 skills/             # as 13 skills (fonte)
 agents/             # os 3 moldes de agente (redação, implementação, gate de review)
-shared/             # fontes transversais: regras de arquitetura e qualidade, leis, sdd-check.sh
+shared/             # fontes transversais: regras de arquitetura e qualidade, leis
 docs/adr/           # as decisões, formato Nygard — versionadas e autocontidas
 docs/plugins.md     # formato de skill plugável: manifest, registry, lockfile, matriz de suporte
 docs/engine-hooks.md # matriz de capacidade de hook dos seis motores estudados, com fonte e data
 test/               # node:test
 ```
 
-Dependências mínimas (@clack/prompts e picocolors na TUI; esbuild só em dev — o pacote
-publicado é um bundle minificado). Node ≥ 22. Release: `git tag vX.Y.Z && git push --tags`
+Dependências mínimas (@clack/prompts e picocolors na TUI; esbuild só em dev — a CLI é
+um bundle minificado, e o pacote leva também o `src/` legível, copiado para o projeto como runtime,
+ADR-0023). Node ≥ 22. Release: `git tag vX.Y.Z && git push --tags`
 dispara o workflow de publish (valida, testa e publica no npm com provenance). Desenvolvimento: `npm test`,
 `node bin/mgr.js validate`.
 

@@ -1,20 +1,21 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, existsSync, writeFileSync, cpSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, writeFileSync, cpSync, rmSync } from "node:fs";
 import {
   DEFECT, FIX_RESTORE, FIX_UPDATE, NO_FIX, UNAVAILABLE, WARNING,
   SKILL_DECLARADA, SKILL_ORFA, FONTE_COMPARTILHADA,
   PROVA_FUNCIONA, PROVA_NAO_FUNCIONA, PROVA_NAO_MEDIDA, SEM_REMEDIACAO,
   architectureSkill, bodyCheckAvailability, brokenHooks, divergentBody, lockfileDrift, missingAgents, missingShared, missingSkills,
-  orphanSkills, sharedCheckAvailability, staleInstall, unresolvedTokens,
+  orphanSkills, runtimeBodies, sharedCheckAvailability, staleInstall, unresolvedTokens,
   AUDITED, NO_INSTALL, diagnose, hasDefect, CHECKS,
 } from "../src/doctor.js";
 import path from "node:path";
+import { Buffer } from "node:buffer";
 import { diff } from "../src/lockfile.js";
 import * as bundle from "../src/bundle.js";
 import * as catalog from "../src/catalog.js";
 import * as engineDescriptors from "../src/engines/index.js";
-import { ORFA, VERSAO_VELHA, descartar, instalacaoComDefeitos, instalacaoComDefeitosDoisMotores, instalacaoLimpa, instalacaoLimpaDoisMotores, apagarFonteCompartilhada, plantarTokenEmShared, alterarCorpoEmShared } from "./fixtures/instalacao.js";
+import { ORFA, VERSAO_VELHA, descartar, instalacaoComDefeitos, instalacaoComDefeitosDoisMotores, instalacaoLimpa, instalacaoLimpaDoisMotores, apagarFonteCompartilhada, plantarTokenEmShared, alterarCorpoEmShared, apagarRuntime, alterarVersaoDoRuntime, alterarUmByteDoRuntime, removerArquivoDoRuntime } from "./fixtures/instalacao.js";
 
 const DIR = ".claude/skills";
 
@@ -457,11 +458,141 @@ test("a derivacao do gate de review esta travada contra o instalador", () => {
   }
 });
 
-test("CHECKS tem exatamente 10 entradas com id unico", () => {
-  assert.equal(CHECKS.length, 10, "registro de verificacoes tem dez entradas e nada mais");
+test("CHECKS tem exatamente 11 entradas com id unico", () => {
+  assert.equal(CHECKS.length, 11, "registro de verificacoes tem onze entradas e nada mais");
   const ids = CHECKS.map(({ id }) => id);
   const idsUnicos = new Set(ids);
-  assert.equal(idsUnicos.size, 10, "cada id do registro deve ser unico");
+  assert.equal(idsUnicos.size, 11, "cada id do registro deve ser unico");
+  assert.ok(ids.includes("runtime-version"), "a verificacao nova esta no registro");
+});
+
+test("as 10 verificacoes antigas mantem remediacao e severidade de antes", () => {
+  const antes = {
+    "orphan-skill": [["em-disco", null, SEM_REMEDIACAO]],
+    "missing-skill": [["declarada-ausente", FIX_UPDATE, PROVA_FUNCIONA]],
+    "missing-agent": [["declarado-ausente", FIX_UPDATE, PROVA_FUNCIONA]],
+    "architecture-skill": [["skill-ausente", FIX_UPDATE, PROVA_FUNCIONA]],
+    "divergent-body": [["skill-declarada", FIX_UPDATE, PROVA_FUNCIONA], ["skill-orfa", null, PROVA_NAO_FUNCIONA],
+      ["fonte-compartilhada", FIX_UPDATE, PROVA_FUNCIONA], ["manifesto-atrasado", FIX_UPDATE, PROVA_FUNCIONA]],
+    "unresolved-token": [["skill-declarada", FIX_UPDATE, PROVA_FUNCIONA], ["skill-orfa", null, PROVA_NAO_FUNCIONA],
+      ["fonte-compartilhada", FIX_UPDATE, PROVA_FUNCIONA]],
+    "stale-install": [["manifesto-atrasado", FIX_UPDATE, PROVA_FUNCIONA]],
+    "broken-hook": [["binario-ausente", null, SEM_REMEDIACAO]],
+    "lockfile-drift": [["sem-lockfile", null, SEM_REMEDIACAO], ["travado-ausente", "mgr install", PROVA_NAO_MEDIDA]],
+    "missing-shared": [["fonte-ausente", FIX_UPDATE, PROVA_FUNCIONA], ["manifesto-atrasado", FIX_UPDATE, PROVA_FUNCIONA]],
+  };
+  for (const [id, esperado] of Object.entries(antes)) {
+    const entrada = CHECKS.find((c) => c.id === id);
+    assert.ok(entrada, `${id} segue no registro`);
+    assert.deepEqual(entrada.remediacoes.map((r) => [r.condicao, r.fix, r.prova]), esperado,
+      `${id}: condicoes, fix e prova iguais as de antes`);
+  }
+});
+
+const doRuntime = (findings) => findings.filter((f) => f.check === "runtime-version");
+const corposDoRuntime = (findings) => findings.filter((f) => f.check === "divergent-body"
+  && f.file.includes("_shared/mgr"));
+
+test("runtime integro nao produz achado de runtime-version nem de divergent-body do runtime", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const { findings } = diagnose(repo);
+    assert.deepEqual(doRuntime(findings), []);
+    assert.deepEqual(corposDoRuntime(findings), []);
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("runtime ausente num motor acusa runtime-version como defeito e nenhum divergent-body do runtime", () => {
+  const repo = instalacaoLimpa();
+  try {
+    apagarRuntime(repo);
+    const { findings } = diagnose(repo);
+    const achados = doRuntime(findings);
+    assert.equal(achados.length, 1);
+    assert.equal(achados[0].severity, DEFECT);
+    assert.equal(achados[0].fix, FIX_UPDATE);
+    assert.deepEqual(corposDoRuntime(findings), [], "ausencia e so da runtime-version");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("bin/mgr-runtime.js ausente com o diretorio presente tambem e defeito de runtime-version", () => {
+  const repo = instalacaoLimpa();
+  try {
+    removerArquivoDoRuntime(repo, "bin/mgr-runtime.js");
+    const { findings } = diagnose(repo);
+    const achados = doRuntime(findings);
+    assert.equal(achados.length, 1);
+    assert.equal(achados[0].severity, DEFECT);
+    assert.deepEqual(corposDoRuntime(findings), [], "um fato, um alarme: a entrada ausente e so da runtime-version (D-14)");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("package.json da copia ausente acusa runtime-version como aviso de versao ilegivel ou ausente", () => {
+  const repo = instalacaoLimpa();
+  try {
+    removerArquivoDoRuntime(repo, "package.json");
+    const achados = doRuntime(diagnose(repo).findings);
+    assert.equal(achados.length, 1);
+    assert.equal(achados[0].severity, WARNING);
+    assert.equal(achados[0].found, "versao ilegivel ou ausente");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("versao da copia diferente do manifesto acusa runtime-version como aviso", () => {
+  const repo = instalacaoLimpa();
+  try {
+    alterarVersaoDoRuntime(repo, "0.0.0-copia");
+    const { findings } = diagnose(repo);
+    const achados = doRuntime(findings);
+    assert.equal(achados.length, 1);
+    assert.equal(achados[0].severity, WARNING);
+    assert.equal(achados[0].found, "0.0.0-copia");
+    assert.equal(achados[0].fix, FIX_UPDATE);
+    assert.equal(hasDefect({ findings }), false, "aviso nao bloqueia");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("um byte alterado num arquivo copiado do runtime acusa divergent-body naquele arquivo (D-14)", () => {
+  const repo = instalacaoLimpa();
+  try {
+    alterarUmByteDoRuntime(repo, "src/catalog.js");
+    const { findings } = diagnose(repo);
+    const achados = corposDoRuntime(findings);
+    assert.equal(achados.length, 1, "so o arquivo mutado");
+    assert.equal(achados[0].file, path.join(".claude", "skills", "_shared", "mgr", "src", "catalog.js"));
+    assert.equal(achados[0].severity, DEFECT);
+    assert.equal(achados[0].fix, FIX_UPDATE);
+    assert.deepEqual(doRuntime(findings), [], "o diretorio esta presente e a versao confere");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("arquivo do runtime ausente com o diretorio presente acusa divergent-body com found ausente", () => {
+  const repo = instalacaoLimpa();
+  try {
+    removerArquivoDoRuntime(repo, "src/detector.js");
+    const achados = corposDoRuntime(diagnose(repo).findings);
+    assert.equal(achados.length, 1);
+    assert.equal(achados[0].found, "ausente");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("runtimeBodies nao acusa quando as copias sao identicas ao pacote", () => {
+  const conteudoDoPacote = Buffer.from("igual");
+  assert.deepEqual(runtimeBodies({ files: [{ rel: "a", file: "f", source: conteudoDoPacote, copy: Buffer.from("igual") }] }), []);
 });
 
 test("diagnose devolve contagem derivada do registro CHECKS", () => {
@@ -801,11 +932,11 @@ test("skill declarada com corpo divergente mantém a remediação no diagnose", 
   }
 });
 
-test("CHECKS tem exatamente dez entradas com id único", () => {
-  assert.equal(CHECKS.length, 10, "registro tem dez entradas de verificacoes");
+test("CHECKS tem exatamente onze entradas com id único", () => {
+  assert.equal(CHECKS.length, 11, "registro tem onze entradas de verificacoes");
   const ids = CHECKS.map(({ id }) => id);
   const idsUnicos = new Set(ids);
-  assert.equal(idsUnicos.size, 10, "cada id do registro deve ser único");
+  assert.equal(idsUnicos.size, 11, "cada id do registro deve ser único");
 });
 
 test("toda entrada de CHECKS tem remediacoes com pelo menos um item", () => {
@@ -815,10 +946,10 @@ test("toda entrada de CHECKS tem remediacoes com pelo menos um item", () => {
   }
 });
 
-test("soma de todas as condicoes em remediacoes e exatamente dezessete", () => {
+test("soma de todas as condicoes em remediacoes e exatamente dezenove", () => {
   const totalCondicoes = CHECKS.reduce((soma, entrada) => soma + entrada.remediacoes.length, 0);
-  assert.equal(totalCondicoes, 17,
-    "a tabela D-2 do plano declara dezessete condicoes no total");
+  assert.equal(totalCondicoes, 19,
+    "dezessete da tabela D-2 mais as duas de runtime-version");
 });
 
 test("todo item de remediacao tem condicao, fix e prova obrigatorios", () => {
@@ -882,6 +1013,76 @@ test("coerência: fix não é nulo quando prova é PROVA_FUNCIONA", () => {
           `${entrada.id}/${item.condicao}: PROVA_FUNCIONA exige fix não nulo`);
       }
     }
+  }
+});
+
+test("com sources null divergent-body e stale-install saem UM achado unavailable cada, com npx na versao do manifesto", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const versao = JSON.parse(readFileSync(path.join(repo, ".mgr-core", "manifest.json"), "utf8")).version;
+    const { outcome, findings } = diagnose(repo, { sources: null });
+    assert.equal(outcome, AUDITED);
+    for (const check of ["divergent-body", "stale-install"]) {
+      const achados = findings.filter((f) => f.check === check);
+      assert.equal(achados.length, 1, `${check}: um achado so, nao um por skill, motor ou arquivo`);
+      assert.equal(achados[0].severity, UNAVAILABLE);
+      assert.match(achados[0].found, /fontes do pacote nao estao no projeto/);
+      assert.equal(achados[0].fix, `npx mgr-method@${versao} doctor`);
+      assert.ok(achados[0].fix.startsWith("npx mgr-method@"));
+    }
+    assert.equal(hasDefect({ findings }), false, "sem fontes nao e defeito: falta o insumo");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("com sources null as demais verificacoes rodam inteiras", () => {
+  const repo = instalacaoLimpa();
+  try {
+    assert.deepEqual(doRuntime(diagnose(repo, { sources: null }).findings), [],
+      "runtime-version nao depende das fontes e confere com o manifesto");
+
+    const declaradas = JSON.parse(readFileSync(path.join(repo, ".mgr-core", "manifest.json"), "utf8")).skills;
+    rmSync(path.join(repo, ".claude", "skills", declaradas[0]), { recursive: true, force: true });
+    apagarRuntime(repo);
+    const { findings } = diagnose(repo, { sources: null });
+    assert.equal(findings.filter((f) => f.check === "missing-skill" && f.severity === DEFECT).length, 1,
+      "skill declarada e apagada continua acusada sem fontes");
+    assert.equal(doRuntime(findings).filter((f) => f.severity === DEFECT).length, 1,
+      "runtime ausente continua acusado sem fontes");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("com sources null o corpo adulterado NAO e comparado e nada lanca", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const declaradas = JSON.parse(readFileSync(path.join(repo, ".mgr-core", "manifest.json"), "utf8")).skills;
+    const alvo = path.join(repo, ".claude", "skills", declaradas[0], "SKILL.md");
+    writeFileSync(alvo, `${readFileSync(alvo, "utf8")}\nlinha que nao existe na fonte\n`);
+    alterarUmByteDoRuntime(repo, "src/catalog.js");
+    const { findings } = diagnose(repo, { sources: null });
+    assert.deepEqual(findings.filter((f) => f.check === "divergent-body" && f.severity === DEFECT), [],
+      "sem a fonte nao ha com o que comparar; o indisponivel declara isso");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("sem sources o comportamento de hoje fica: fonte do pacote compara e acusa corpo adulterado", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const declaradas = JSON.parse(readFileSync(path.join(repo, ".mgr-core", "manifest.json"), "utf8")).skills;
+    const alvo = path.join(repo, ".claude", "skills", declaradas[0], "SKILL.md");
+    writeFileSync(alvo, `${readFileSync(alvo, "utf8")}\nlinha que nao existe na fonte\n`);
+    for (const opcoes of [undefined, {}, { sources: undefined }]) {
+      const corpo = diagnose(repo, opcoes).findings
+        .filter((f) => f.check === "divergent-body" && f.severity === DEFECT);
+      assert.equal(corpo.length, 1);
+    }
+  } finally {
+    descartar(repo);
   }
 });
 

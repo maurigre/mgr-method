@@ -1,6 +1,6 @@
 ---
 name: configure-agents
-description: Guides the user through declaring which model and which effort each MGR intent uses - drafting, execution and review - reading the current state, explaining what each intent does, and writing the choice with `mgr agents set`. It conducts the decision and NEVER suggests a model for an intent, because the available models and the bill both belong to the user's account. Use when the user asks to configure or change the model of a step, set the effort of the review gate, acts on the warning that the agents are running on the session model, or asks how to stop editing `.mgr-core/config.json` by hand.
+description: Guides the user through declaring which model and which effort each MGR intent uses - drafting, execution and review - reading the current state, explaining what each intent does, and writing the choice with the MGR runtime's `agents set`. It conducts the decision and NEVER suggests a model for an intent, because the available models and the bill both belong to the user's account. Use when the user asks to configure or change the model of a step, set the effort of the review gate, acts on the warning that the agents are running on the session model, or asks how to stop editing `.mgr-core/config.json` by hand.
 license: Source-Available v1.0. LICENSE has complete terms
 ---
 
@@ -13,6 +13,19 @@ The method runs each intent in its own agent, and each agent can hold a declared
 declared effort for the whole execution. Without a declaration the agent inherits the session
 model. You help the user declare it: you READ the current state, EXPLAIN what each intent
 does, and WRITE the choice through the command. The choice itself is theirs.
+
+## MGR runtime (mandatory)
+
+`<project-root>` is the nearest directory, from the working directory upward, that contains
+`.mgr-core/manifest.json`; run every command below from it. Every command is
+`node {{MGR_RUNTIME}} <command>`.
+
+> **STOP — the MGR runtime is missing.** `{{MGR_RUNTIME}}` was not found under `<project-root>`. Do **not** continue this flow by hand: do not write the document, implement the task or edit `.mgr-core/` yourself. To restore it, run at `<project-root>`: `npx mgr-method@<version> update`, where `<version>` is the `version` field of `.mgr-core/manifest.json`. If that file does not exist either, this project is not installed: run `npx mgr-method@latest install`. Then invoke this skill again.
+
+Reproduce the text above in the output language.
+
+The stop applies when that file does not exist under `<project-root>`, or when a call fails with
+a module-not-found error.
 
 ## Sovereign rule: conduct, never suggest
 
@@ -33,16 +46,14 @@ or their bill, give them the facts of the table below, and ask them to choose.
 ## 1. Read the state before touching anything
 
 ```
-mgr agents --json
+node {{MGR_RUNTIME}} agents --json
 ```
 
 The payload gives, per intent and per engine, the current model and effort and where each
 value came from: `configured` when the user wrote it, `default` when it is the catalogue's.
 Show the user what is already declared before proposing any change.
 
-**Fallback — when the `mgr` CLI is NOT installed:** read `.mgr-core/config.json` directly,
-under the `agents` key, and treat a missing key as "nothing declared". The method MUST keep
-working with the skills alone; say which of the two paths you used.
+If the runtime is missing, follow the stop in "MGR runtime (mandatory)".
 
 ## 1.1 Read which engines this project actually has
 
@@ -53,8 +64,7 @@ This matters because the state payload reports every engine the method knows, in
 while the write command refuses an engine that is not installed. Showing a user identifiers for an
 engine they do not have is offering them something that will be rejected.
 
-**Fallback — when the `mgr` CLI is NOT installed:** the same file holds the same key, so read it
-the same way; with no manifest at all, ask the user which engine they use instead of assuming one.
+If the runtime is missing, follow the stop in "MGR runtime (mandatory)".
 
 ## 2. The three intents
 
@@ -112,7 +122,7 @@ account does not have what was declared, the engine itself says so at runtime.
 ## 5. Write the choice
 
 ```
-mgr agents set <intent> [--model <id>] [--effort <level>] [--engine <engine>]
+node {{MGR_RUNTIME}} agents set <intent> [--model <id>] [--effort <level>] [--engine <engine>]
 ```
 
 - without `--engine`, the model is written for the engines this project has installed;
@@ -123,33 +133,22 @@ mgr agents set <intent> [--model <id>] [--effort <level>] [--engine <engine>]
 Write one intent at a time, and read back what the command reports. It prints what took
 effect, per engine.
 
-**The command does not run `mgr update`, and neither do you without asking.** The two fields
-take effect at different moments, and the command says so: `model` applies on the next
-invocation, while `effort` lives inside the agent file and only applies after the user runs
-`mgr update`. Tell the user that plainly rather than leaving them waiting for an effect that
-has not happened yet.
+**The command does not run `node {{MGR_RUNTIME}} agents apply`, and neither do you without
+asking.** The two fields take effect at different moments, and the command says so: `model`
+applies on the next invocation, while `effort` lives inside the agent file and only applies
+after the user runs `node {{MGR_RUNTIME}} agents apply`, which rewrites `model` and `effort` in
+the agent files from the config. Ask the user before running it. Tell the user that plainly
+rather than leaving them waiting for an effect that has not happened yet.
 
-**Fallback — when the `mgr` CLI is NOT installed:** write the same shape by hand in
-`.mgr-core/config.json`, preserving every other key in the file:
+Re-syncing the package's skills is a different action: `npx mgr-method@<version> update`, where
+`<version>` is the `version` field of `.mgr-core/manifest.json`. That one needs network access.
 
-```json
-{
-  "agents": {
-    "review": {
-      "model": { "claude-code": "<identifier>" },
-      "effort": "<level>"
-    }
-  }
-}
-```
-
-Then tell the user that the file is read on the next run, and that `effort` still needs
-`mgr update` to reach the agent file.
+If the runtime is missing, follow the stop in "MGR runtime (mandatory)".
 
 ## What this skill never does
 
 - suggest, rank or hint at a model for an intent, in any wording;
 - invent model identifiers for an engine that publishes none;
 - validate what the user typed against a list of its own;
-- run `mgr update`, install anything, or touch any file other than the config;
+- run `node {{MGR_RUNTIME}} agents apply` or `npx mgr-method@<version> update` without asking, install anything, or touch any file other than the config, except agent files changed by `agents apply` after asking;
 - decide on the user's behalf when they have not chosen.

@@ -1,8 +1,8 @@
 // Config do projeto MGR, em `.mgr-core/` (leve, sem skills — só metadados):
 //   manifest.json  fonte de verdade do que foi instalado (motores, skills, linguagem, arquitetura)
 //   .env           MGR_PROJECT_ID=<id>, usado pela memória estendida (mgr-code)
-// O campo `model` no manifesto distingue instalações novas ("self-contained") das antigas
-// ("runtime-launcher"), habilitando a migração.
+// O campo `model` no manifesto distingue instalações novas ("self-contained-runtime") das antigas
+// ("self-contained" e "runtime-launcher"), habilitando a migração.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { INSTALL_DIR_RE } from "./lockfile.js";
@@ -10,11 +10,13 @@ import { INSTALL_DIR_RE } from "./lockfile.js";
 export const MANIFEST_NAME = "manifest.json";
 export const ENV_NAME = ".env";
 
+export const MODEL_RUNTIME = "self-contained-runtime";
+
 export const manifestPath = (dir) => path.join(dir, MANIFEST_NAME);
 
 export function writeManifest(dir, data) {
   const manifest = {
-    model: "self-contained",
+    model: MODEL_RUNTIME,
     installedAt: new Date().toISOString(),
     ...data,
   };

@@ -6,6 +6,7 @@ Deciders: Mauri Reis
 ## Status
 
 Accepted
+Decisao 8 revista pelo ADR-0023 (Proposed): sem o runtime, a skill para em vez de seguir pelo fallback.
 
 ## Context
 

@@ -7,6 +7,7 @@ const globaisNode = {
   console: "readonly",
   process: "readonly",
   URL: "readonly",
+  __MGR_BUILD_VERSION__: "readonly",
 };
 
 export default [
@@ -38,6 +39,40 @@ export default [
               group: ["**/bin/**", "../bin/*"],
               message:
                 "INV-2 (ADR-0001): src/ NUNCA importa bin/. A dependencia e top-down: bin/ -> src/.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  // Runtime do projeto (ADR-0023): copiado para dentro de cada projeto, so pode depender de
+  // node: e de modulos relativos. Dependencia de pacote externo quebraria o runtime sem o npm.
+  {
+    files: ["bin/mgr-runtime.js", "bin/hook-io.js"],
+    languageOptions: {
+      ecmaVersion: 2024,
+      sourceType: "module",
+      globals: globaisNode,
+    },
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@clack/prompts",
+              message: "o runtime do projeto so usa node: e modulos relativos (ADR-0023)",
+            },
+            {
+              name: "picocolors",
+              message: "o runtime do projeto so usa node: e modulos relativos (ADR-0023)",
+            },
+          ],
+          patterns: [
+            {
+              group: ["@clack/*"],
+              message: "o runtime do projeto so usa node: e modulos relativos (ADR-0023)",
             },
           ],
         },

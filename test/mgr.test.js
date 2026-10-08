@@ -12,8 +12,7 @@ import * as bundle from "../src/bundle.js";
 import { CHECKS } from "../src/doctor.js";
 import {
   AGENT_MARKER, agentDeclares, agentFrontmatter, buildRuntime, inheritingModel, buildSkill, gateSummary, installAgents,
-  installEngine, isOurAgent, resolveCharter, resolveLaws, resolveUserLanguage, routeReviewSkill,
-} from "../src/builder.js";
+  installEngine, isOurAgent, resolveCharter, resolveLaws, resolveUserLanguage, routeReviewSkill, resolveRuntime } from "../src/builder.js";
 import * as installer from "../src/installer.js";
 import * as catalog from "../src/catalog.js";
 import { get as engineDescriptor, ids as engineIds } from "../src/engines/index.js";
@@ -128,7 +127,7 @@ test("install autossuficiente: só o subconjunto na pasta do motor, sem .mgr-cor
   assert.ok(archMd.includes("_shared/arch/cross-cutting-rules.md"), "deve apontar para a fonte co-locada");
 
   const man = JSON.parse(readFileSync(path.join(core, "manifest.json"), "utf8"));
-  assert.equal(man.model, "self-contained");
+  assert.equal(man.model, "self-contained-runtime");
   assert.equal(man.architecture, "hexagonal");
   assert.equal(man.language, "java");
   assert.ok(man.projectId, "deve gravar projectId");
@@ -160,7 +159,7 @@ test("migra instalação antiga (runtime-launcher) para o novo layout", () => {
   assert.ok(res.migrated, "deve reportar migração");
   assert.ok(!existsSync(path.join(core, "skills")), "conteúdo antigo (.mgr-core/skills) deve sumir");
   assert.ok(existsSync(path.join(core, "manifest.json")), ".mgr-core permanece como config");
-  assert.equal(JSON.parse(readFileSync(path.join(core, "manifest.json"), "utf8")).model, "self-contained");
+  assert.equal(JSON.parse(readFileSync(path.join(core, "manifest.json"), "utf8")).model, "self-contained-runtime");
   const md = readFileSync(path.join(repo, ".claude/skills/spec-init/SKILL.md"), "utf8");
   assert.ok(md.includes("name: spec-init") && !md.includes("launcher antigo"));
 });
@@ -243,7 +242,7 @@ test("detect, installs e detectPrior enxergam a instalação", () => {
 
   assert.ok(installer.detect(repo).some((f) => f.path.endsWith(path.join(".claude", "skills")) && f.count >= 1));
   const prior = installer.detectPrior("project", repo);
-  assert.ok(prior && prior.model === "self-contained");
+  assert.ok(prior && prior.model === "self-contained-runtime");
   assert.equal(installer.installs("project", repo).length, 1);
 });
 
@@ -270,7 +269,13 @@ test("SHARED_SOURCES e instalador leem as mesmas fontes compartilhadas", () => {
 
   const emDisco = arquivosSob(path.join(sk, catalog.SHARED_DIR))
     .map((abs) => path.relative(sk, abs)).sort();
-  const naTabela = required.map((source) => path.join(...source.installed)).sort();
+  const runtimeDir = catalog.RUNTIME_DIR;
+  const runtimeNaTabela = catalog.RUNTIME_FILES.map((arquivo) => path.join(...runtimeDir, arquivo));
+  const naTabela = [
+    ...required.map((source) => path.join(...source.installed)),
+    ...runtimeNaTabela,
+    path.join(...runtimeDir, "package.json"),
+  ].sort();
   assert.deepEqual(emDisco, naTabela,
     "a direcao inversa importa igual: fonte escrita pelo instalador e ausente da tabela nao seria conferida pelo doctor");
 });
@@ -1438,11 +1443,11 @@ test("com o gate desligado a code-analyzer instalada só sofre as resoluções d
   const instaladaSemGate = readFileSync(path.join(semGate, "code-analyzer", "SKILL.md"), "utf8");
   const instaladaComGate = readFileSync(path.join(comGate, "code-analyzer", "SKILL.md"), "utf8");
 
-  // A instalação resolve DOIS tokens: idioma e leis de execução. O que o gate desligado tem de
+  // A instalação resolve TRÊS tokens: idioma, leis de execução e o runtime do projeto (ADR-0023). O que o gate desligado tem de
   // garantir é que nenhuma injeção de ROTEAMENTO acontece — não que o arquivo saia intocado.
   assert.equal(
     instaladaSemGate,
-    resolveLaws(resolveUserLanguage(fonte, undefined), path.join("_shared", "laws", "execution-laws.md")),
+    resolveRuntime(resolveLaws(resolveUserLanguage(fonte, undefined), path.join("_shared", "laws", "execution-laws.md")), undefined),
     "gate desligado: só as resoluções de token, nenhuma injeção de roteamento (CONSTITUTION §2.7)",
   );
   assert.ok(!instaladaSemGate.includes("context: fork"), "gate desligado não injeta fork");
@@ -2211,7 +2216,7 @@ test("mgr agents: o que o autor escreveu sai como configurado", () => {
 
 test("mgr agents: avisa que mudar o effort exige update", () => {
   const { stdout } = rodarAgents(repoComConfig({}), []);
-  assert.match(stdout, /Mudar o `effort` só passa a valer depois de `mgr update`/,
+  assert.match(stdout, /Mudar o `effort` só passa a valer depois de `mgr agents apply`/,
     "sem isto o autor ajusta o esforço e conclui que a configuração não funciona");
 });
 
@@ -2619,7 +2624,7 @@ test("mgr agents set: uma frase por campo escrito, e só pelos escritos", () => 
 
   const osDois = rodarAgents(repo, ["set", "review", "--model", "opus", "--effort", "max"]);
   assert.match(osDois.stdout, /`model` passa a valer na próxima invocação/);
-  assert.match(osDois.stdout, /`effort` só passa a valer depois de `mgr update`/,
+  assert.match(osDois.stdout, /`effort` só passa a valer depois de `mgr agents apply`/,
     "os dois campos passam a valer em momentos diferentes, e dizer só \"pronto\" esconde isso");
 });
 

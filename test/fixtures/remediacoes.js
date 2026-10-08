@@ -31,6 +31,8 @@ import {
   apagarFonteCompartilhada,
   plantarTokenEmShared,
   alterarCorpoEmShared,
+  apagarRuntime,
+  alterarVersaoDoRuntime,
 } from "./instalacao.js";
 import { diagnose } from "../../src/doctor.js";
 import * as catalog from "../../src/catalog.js";
@@ -349,7 +351,7 @@ export async function rodaTodosCasos(casos, checks = CHECKS, executa = executaCo
 /**
  * O relatorio que separa o CONFERIDO do NAO CONFERIDO.
  *
- * Sem ele, "16 casos verdes" pode ser lido como "toda remediacao esta provada" — e nao esta: a
+ * Sem ele, "18 casos verdes" pode ser lido como "toda remediacao esta provada" — e nao esta: a
  * condicao `PROVA_NAO_MEDIDA` nao tem caso de proposito, porque forcar um seria FABRICAR prova para
  * algo que nao se conseguiu medir. Mesma disciplina do `check-checks`, que conta os documentos que
  * conferiu e nao os que registrou.
@@ -367,10 +369,11 @@ export function relatorioDeCobertura(checks = CHECKS) {
 }
 
 /**
- * Tabela de 16 casos — um por condicao medida.
+ * Tabela de 18 casos — um por condicao medida.
  *
  * Exclui PROVA_NAO_MEDIDA (lockfile-drift/travado-ausente).
- * 14 casos rodam comando, 2 sao SEM_REMEDIACAO, 1 eh especial (ja na limpa).
+ * 13 casos rodam comando, 2 sao SEM_REMEDIACAO, 2 sao PROVA_NAO_FUNCIONA (o comando nao alcanca
+ * skill orfa) e 1 eh especial (ja na limpa) — contados em 2026-10-08 contra CHECKS.
  */
 export const casosDeTeste = [
   {
@@ -601,5 +604,25 @@ export const casosDeTeste = [
     identifica: (achado) =>
       achado.check === "missing-shared" &&
       achado.severity === "unavailable",
+  },
+  {
+    id: "runtime-version",
+    condicao: "runtime-ausente",
+    planta: (repo) => {
+      apagarRuntime(repo);
+    },
+    identifica: (achado) =>
+      achado.check === "runtime-version" &&
+      achado.severity === "defect",
+  },
+  {
+    id: "runtime-version",
+    condicao: "versao-divergente",
+    planta: (repo) => {
+      alterarVersaoDoRuntime(repo, VERSAO_VELHA);
+    },
+    identifica: (achado) =>
+      achado.check === "runtime-version" &&
+      achado.severity === "warning",
   },
 ];

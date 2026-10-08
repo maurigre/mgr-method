@@ -4,6 +4,14 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 
 ## [Não lançado]
 ### Adicionado
+- **O runtime do MGR passa a morar dentro do projeto.** Cada motor instalado ganha
+  `<motor>/skills/_shared/mgr/` (ex.: `.claude/skills/_shared/mgr/`): código legível, só Node, sem
+  dependência externa, chamado pelas skills por caminho explícito. Nada é instalado no sistema
+  operacional (ADR-0023). O runtime traz dois comandos novos: `agents apply`, que reaplica a política de
+  modelo e esforço do `.mgr-core/config.json` aos agentes instalados sem precisar de rede, e
+  `sdd-check`, que confere se `docs/sdd/` está inicializado. A verificação `runtime-version` do
+  `mgr doctor` confere o runtime do projeto contra o manifesto.
+
 - **A disciplina soberana do método passou a ser citável pelo revisor, e três letras do SOLID ficaram
   declaradas como lacuna.** O `spec-execute` abre as premissas dizendo que padrão, camada e abstração
   entram **só com evidência de necessidade** — acima das quatro premissas. Medido em 2026-10-02: isso
@@ -340,6 +348,20 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   fala. Esta correção havia sido **declarada** na release anterior e não estava aplicada.
 
 ### Modificado
+- **As skills chamam o runtime por caminho explícito e param quando ele falta.** O plano B, em que a
+  skill seguia sem a CLI, acaba: sem o runtime a skill para e diz como restaurá-lo:
+  `npx mgr-method@<versão do manifesto> update`, ou `npx mgr-method@latest install` quando nem o
+  manifesto existe. Revisa a decisão 8 do ADR-0015 e
+  a última frase da decisão 3 do ADR-0017 (ADR-0023, proposto).
+- **Raiz do projeto achada subindo a partir do diretório atual até `.mgr-core/manifest.json`.** O
+  hook de sessão grava o caminho do runtime do próprio projeto, dentro da raiz.
+- **Quebra de contrato:** `manifest.model` vale `self-contained-runtime` em instalação nova e migrada.
+- **Quebra de contrato:** sem o runtime, as skills param, em vez de seguir pelo plano B.
+- **Quebra de contrato:** `shared/scripts/sdd-check.sh` deixa de existir no pacote; a verificação passa
+  a ser `node <runtime> sdd-check`.
+- **Quebra de contrato:** `version` de um `dist/` defasado em relação ao `package.json` sai com 1, em
+  vez de exibir uma versão que o bundle não era.
+
 - A contagem de verificações saiu das afirmações em prosa que a traziam desatualizada. O número vive
   no registro; documento que enumera traz uma linha por entrada.
 

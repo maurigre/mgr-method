@@ -85,7 +85,7 @@ test("as clausulas novas da L0.1 chegam a arvore INSTALADA, e nenhum token sobra
 
     const diagnostico = spawnSync(process.execPath, [BIN, "doctor", repo], { encoding: "utf8" });
     assert.equal(diagnostico.status, 0, "a CA-15 exige que o doctor nao reporte defeito nesta arvore");
-    assert.match(`${diagnostico.stdout}`, /10 checks/, "sem confirmar que o doctor RODOU, a ausencia de defeito passaria vazia");
+    assert.match(`${diagnostico.stdout}`, /11 checks/, "sem confirmar que o doctor RODOU, a ausencia de defeito passaria vazia");
   } finally {
     rmSync(repo, { recursive: true, force: true });
   }

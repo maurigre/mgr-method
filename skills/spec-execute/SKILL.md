@@ -15,10 +15,9 @@ confirmation, at closing).
 
 ## Initial load (hand-off via disk — never via conversation memory)
 
-0. **Resolve the paths, do not assume them.** `mgr spec status <slug> --json` returns `specRoot`,
-   the resolved `path` of each artifact and `handoff`. **Fallback — when the `mgr` CLI is NOT
-   installed:** use the literal layout below (`/specs/<slug>/04-plan.md`, `/specs/<slug>/.handoff.md`).
-   The method MUST keep working with the skills alone; say in the log which of the two you used.
+0. **Resolve the paths, do not assume them.** `node {{MGR_RUNTIME}} spec status <slug> --json`
+   returns `specRoot`, the resolved `path` of each artifact and `handoff`. If the runtime is
+   missing, STOP as described in "MGR runtime (mandatory)" below.
    The payload's `basis` is `file-existence`: an artifact on disk is not an approved artifact.
 1. **Resumption first:** if `/specs/<slug>/.handoff.md` exists, load ONLY the saved
    state, skip completed tasks and warn: "Resuming <slug> from task <id>."
@@ -30,6 +29,20 @@ confirmation, at closing).
    checkpoint 3). No approved plan → STOP and hand back to `spec-create`.
 4. **mgr-code:** probe the `mgr-mcp`. ON → retrieve repo patterns and similar
    implementations; record decisions when finishing. OFF → warn visibly and proceed.
+
+## MGR runtime (mandatory)
+
+`<project-root>` is the nearest directory, from the working directory upward, that contains
+`.mgr-core/manifest.json`; run every command below from it.
+
+Every call is `node {{MGR_RUNTIME}} <command>`, run from `<project-root>`.
+
+**Stop trigger:** the file `{{MGR_RUNTIME}}` does not exist under `<project-root>`, or a call exits
+with a module-not-found error.
+
+> **STOP — the MGR runtime is missing.** `{{MGR_RUNTIME}}` was not found under `<project-root>`. Do **not** continue this flow by hand: do not write the document, implement the task or edit `.mgr-core/` yourself. To restore it, run at `<project-root>`: `npx mgr-method@<version> update`, where `<version>` is the `version` field of `.mgr-core/manifest.json`. If that file does not exist either, this project is not installed: run `npx mgr-method@latest install`. Then invoke this skill again.
+
+Reproduce the text above in the output language.
 
 ## Development premises (applied in EVERY task)
 
@@ -90,17 +103,17 @@ Implementing one approved task is closed work: the plan already declares its exa
 asks nobody. That makes it an agent's job. **The block checkpoints stay here**, because an agent
 cannot ask a human.
 
-`mgr agents execution --json` returns the model and the effort declared for execution. Commission
+`node {{MGR_RUNTIME}} agents execution --json` returns the model and the effort declared for execution. Commission
 `mgr-task` with that model, hand it the task **by path** — the plan file and the task id — and take
 what it reports back into the log yourself.
 
-**Fallback, two cases, both supported:**
-- **The `mgr` CLI is NOT installed** — implement the task yourself, in this conversation. The method
-  MUST keep working with the skills alone.
+**Runtime missing:** STOP as described in "MGR runtime (mandatory)" above.
+
+**Fallback:**
 - **The delegation comes back saying the agent does not exist** — a freshly installed agent can take
   a moment to become available. Do not retry in a loop: implement it yourself and say so.
 
-Say in the log which of the three paths you used. **The agent cannot see this conversation**, so a
+Say in the log which of the two paths you used. **The agent cannot see this conversation**, so a
 decision taken out loud and never written to disk does not reach it. This is the same rule L2.1
 already states; here it has teeth.
 
@@ -125,7 +138,7 @@ worst auditor of it. Cost never decides whether the gate runs.
 
 - Respect the DAG: a task only starts with its `depends_on` completed; order P0 → P1 → P2.
 - **Record the state as you go.** When a task is finished, set `- **status:** done` on it in
-  `04-plan.md`. It is the only mechanical record that the task closed: without it `mgr spec next`
+  `04-plan.md`. It is the only mechanical record that the task closed: without it `node {{MGR_RUNTIME}} spec next`
   can only offer the first task that *can* start, and says so. The vocabulary is closed — `todo`
   or `done`, in English — and anything else is reported as `PLAN-6`.
 - Per task: implement → run tests → **review** (fidelity to the planned artifact; premises

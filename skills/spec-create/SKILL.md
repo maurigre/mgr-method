@@ -21,11 +21,25 @@ and proceed with the on-disk artifacts only. Never silence it; never block becau
 
 ## Dependencies (mandatory check at the start)
 
-Check `/docs/sdd/CONSTITUTION.md` and at least one file in `/docs/sdd/` (the script
-`.mgr-core/shared/scripts/sdd-check.sh` does this). If missing, STOP:
+Check `/docs/sdd/CONSTITUTION.md` and at least one file in `/docs/sdd/` (`node {{MGR_RUNTIME}} sdd-check`
+does this: exit 0 = ready; exit 1 = missing, with the reason). If missing, STOP:
 "This project has not been initialized for SDD. Run the `spec-init` skill first."
 NEVER infer a constitution or SDD at run time — the constitution is the product of deep
 analysis + human review, not improvisation.
+
+## MGR runtime (mandatory)
+
+`<project-root>` is the nearest directory, from the working directory upward, that contains
+`.mgr-core/manifest.json`; run every command below from it.
+
+Every call to the MGR is `node {{MGR_RUNTIME}} <command>`, run from `<project-root>`.
+
+**STOP — the MGR runtime is missing.** `{{MGR_RUNTIME}}` was not found under `<project-root>`. Do **not** continue this flow by hand: do not write the document, implement the task or edit `.mgr-core/` yourself. To restore it, run at `<project-root>`: `npx mgr-method@<version> update`, where `<version>` is the `version` field of `.mgr-core/manifest.json`. If that file does not exist either, this project is not installed: run `npx mgr-method@latest install`. Then invoke this skill again.
+
+Reproduce the text above in the output language.
+
+Trigger: the file `{{MGR_RUNTIME}}` does not exist under `<project-root>`, or a call exits with a
+module-not-found error.
 
 ## Initial interaction (mandatory)
 
@@ -52,14 +66,10 @@ Feature slug: kebab-case of the brief, no accents, ≤ 50 chars — confirm with
 
 ## Resolving artifact paths — ask, do not assume
 
-`mgr spec status <slug> --json` returns `specRoot` and the resolved `path` of every artifact that
-exists, plus `handoff` and `nextReady`. **Prefer it over building paths from the convention
-above** — assuming structure is a class of hallucination, and the resolved path is a fact.
-
-**Fallback — when the `mgr` CLI is NOT installed:** use the layout above literally
-(`/specs/<slug>/01-brief.md` and the rest, `/specs/<slug>/.handoff.md`,
-`/specs/<slug>/.context.json`). The method MUST keep working with the skills alone, so this is a
-supported path, not a failure. Say in the log which of the two you used.
+`node {{MGR_RUNTIME}} spec status <slug> --json` returns `specRoot` and the resolved `path` of every
+artifact that exists, plus `handoff` and `nextReady`. **Prefer it over building paths from the
+convention above** — assuming structure is a class of hallucination, and the resolved path is a fact.
+If the runtime is missing, STOP as described in `## MGR runtime (mandatory)`.
 
 The payload's `basis` is `file-existence`: an artifact on disk is **not** an approved artifact, and
 this command never says a phase is done or a checkpoint was approved.
@@ -92,17 +102,16 @@ Writing the PRD and the spec is closed work: it reads disk and returns text, and
 That makes it an agent's job, and the agent is the only thing that holds a model for a whole
 execution. **The checkpoints stay here**, because an agent cannot ask a human.
 
-`mgr agents drafting --json` returns the model and the effort declared for drafting, and where each
-value came from. Commission `mgr-draft` with that model, hand it the brief and the tiers it needs
-**by path**, and take what it returns to the checkpoint yourself.
+`node {{MGR_RUNTIME}} agents drafting --json` returns the model and the effort declared for drafting,
+and where each value came from. Commission `mgr-draft` with that model, hand it the brief and the
+tiers it needs **by path**, and take what it returns to the checkpoint yourself. If the runtime is
+missing, STOP as described in `## MGR runtime (mandatory)`.
 
-**Fallback, two cases, both supported:**
-- **The `mgr` CLI is NOT installed** — write the document yourself, in this conversation. The method
-  MUST keep working with the skills alone.
+**Fallback:**
 - **The delegation comes back saying the agent does not exist** — a freshly installed agent can take
   a moment to become available. Do not retry in a loop: write the document yourself and say so.
 
-Say in the log which of the three paths you used. **The agent cannot see this conversation**, so
+Say in the log which of the two paths you used. **The agent cannot see this conversation**, so
 anything decided here that it needs must be on disk before you commission it — a decision taken out
 loud and never written does not reach it.
 
@@ -121,7 +130,7 @@ changes.
 
 **Format:** the spec opens with `<!-- mgr-spec-format: 1 -->` and each acceptance criterion is
 identified as `CA-<n>` — the identity is what a reproval cites (L1.1); the text is written in the
-user's language. Run `mgr spec validate` before the checkpoint; it checks structure only, never
+user's language. Run `node {{MGR_RUNTIME}} spec validate` before the checkpoint; it checks structure only, never
 whether a criterion is good.
 
 **Architectural change detection (mandatory):** if the spec introduces a new communication
@@ -139,10 +148,10 @@ NEVER by fixed architectural layers. The order within each priority comes from t
 split BEFORE the checkpoint.
 **Format:** the plan opens with `<!-- mgr-plan-format: 1 -->` and each task declares its fields
 with English keys — `priority`, `depends_on`, `files`, `artifact`, `done_when`, `helper_skill`
-and the optional `status` (`todo` or `done`), which `mgr spec next` reads.
+and the optional `status` (`todo` or `done`), which `node {{MGR_RUNTIME}} spec next` reads.
 The keys are the parseable identity; the values are written in the user's language. `artifact`
-is the rail of L4.3: name, shape, signature and QUANTITY. Run `mgr spec validate` on the plan
-before the checkpoint when the CLI is installed — it checks structure only, never judgement.
+is the rail of L4.3: name, shape, signature and QUANTITY. Run `node {{MGR_RUNTIME}} spec validate` on the plan
+before the checkpoint — it checks structure only, never judgement.
 Each task lists: goal, files, dependencies, suggested helper
 skill (`junit-clean` for Java test tasks, `code-analyzer` for review), and a done
 criterion.

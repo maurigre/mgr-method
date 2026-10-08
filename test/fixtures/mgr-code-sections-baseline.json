@@ -1,0 +1,16 @@
+{
+  "spec-create": [
+    "## mgr-code integration (mandatory at the start of each phase)\n\nProbe the `mgr-mcp`. **ON** → retrieve similar specs/features, decisions and patterns\nalready recorded (\"we already decided this in X\"); when phases complete, record the\nPRD/spec/decisions in memory. **OFF** → warn visibly (degraded mode, no long-term memory)\nand proceed with the on-disk artifacts only. Never silence it; never block because of it."
+  ],
+  "spec-execute": [
+    "4. **mgr-code:** probe the `mgr-mcp`. ON → retrieve repo patterns and similar\n   implementations; record decisions when finishing. OFF → warn visibly and proceed.",
+    "All tasks completed → hand back to `spec-create` (or inform the user) for the Completion\nphase: summary, SDD diff, ADRs, and the suggestion to run the `code-analyzer` over the\ntouched files. If mgr-code is ON, record the execution's patterns and decisions in\nmemory."
+  ],
+  "code-analyzer": [
+    "3. If the `mgr-mcp` is available, retrieve previous review reprovals/decisions for this\n   project for consistency; at the end, record the review result. Unavailable → warn and\n   proceed with the on-disk guide only."
+  ],
+  "spec-init": [
+    "## mgr-code integration (mandatory at the start)\n\nProbe the `mgr-mcp` with a light call. **ON** → retrieve previous analyses, constitutions and\ndecisions for this project/domain and use them as context; when finishing, record the SDD\nsummary and the constitution in memory. **OFF** → emit visibly:\n\n> **WARNING — mgr-code unavailable.** Operating without long-term memory. Proceeding with the\n> repository state only.\n\nNever silence the absence; never block because of it."
+  ],
+  "configure-agents": []
+}

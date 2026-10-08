@@ -1,7 +1,7 @@
 <!-- mgr-spec-format: 1 -->
 # Technical spec — <feature>
 
-<!-- The marker above declares the format: with it, `mgr spec validate` checks the acceptance
+<!-- The marker above declares the format: with it, the MGR runtime's `spec validate` (see the `spec-create` skill) checks the acceptance
      criteria. Criteria are identified by `CA-<n>`, which is what a reproval cites; the text is
      written in the user's language. -->
 

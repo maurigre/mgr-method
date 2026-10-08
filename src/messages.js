@@ -7,7 +7,7 @@ import * as catalog from "./catalog.js";
 // experiência original. O núcleo não decide idioma: a borda resolve a precedência
 // (flag > manifesto > locale) e passa a tabela pronta via getMessages().
 
-const en = {
+const en = ({ invocation, lifecycle }) => ({
   unknownFlag: (flag) => `unknown flag: ${flag}`,
   unknownCommand: (command) => `unknown command: ${command}\n`,
   errorPrefix: (message) => `error: ${message}`,
@@ -39,14 +39,14 @@ const en = {
   removedSkills: (paths) => `Removed ${paths.length} skill(s): ${paths.join(" · ")}`,
   keptByChoice: (names) => `Nothing was removed: ${names.join(", ")} stayed on disk and stay declared, so nothing was orphaned.`,
   keptNoConsent: (names) => `Nothing was removed: there was no terminal to ask. ${names.join(", ")} stayed on disk and stay declared; \`-y\` authorizes the removal.`,
-  keptNoSource: (names) => `This version no longer ships ${names.join(", ")}: they stay on disk, out of the manifest, and \`mgr doctor\` will report them as orphans.`,
+  keptNoSource: (names) => `This version no longer ships ${names.join(", ")}: they stay on disk, out of the manifest, and \`${invocation} doctor\` will report them as orphans.`,
   confirmInstall: "Confirm installation?",
   installing: "Installing skills into the engines",
   installedAt: (dirs) => `Skills installed at ${dirs}.`,
   migrationInfo: (count) => `Migration: old model removed (${count} item(s), including .mgr-core).`,
   done: "Done! Start with /spec-init, then /spec-create per feature.",
 
-  statusOldModel: "runtime-launcher (OLD — run `mgr update` to migrate)",
+  statusOldModel: `runtime-launcher (OLD — run \`${lifecycle} update\` to migrate)`,
   statusProject: (id) => `  project: ${id}`,
   statusConfig: (dir) => `  config:  ${dir}`,
   statusStack: (language, architecture) => `  stack:   language=${language} architecture=${architecture}`,
@@ -97,7 +97,7 @@ const en = {
   pluginProposalExtends: (base) => `extends:     ${base} (installed together; the extending skill takes precedence)`,
   pluginNoPermissions: "none declared",
   pluginConfirm: "Install this skill?",
-  pluginNeedsTty: "`mgr add` requires an interactive terminal: every install is confirmed by a human and there is no bypass flag.",
+  pluginNeedsTty: `\`${lifecycle} add\` requires an interactive terminal: every install is confirmed by a human and there is no bypass flag.`,
   pluginInstalling: "Downloading and verifying",
   pluginInstalled: (name, dir) => `${name} installed at ${dir}.`,
   pluginWarning: (engine, warning) => `  warning (${engine}): ${warning}`,
@@ -109,15 +109,15 @@ const en = {
   pluginCollisionAlongsideHint: (dir) => `plugin goes to ${dir}; the method skill stays`,
   pluginCollisionReplace: "Replace the method skill",
   pluginCollisionReplaceHint: (skill) => `plugin takes the ${skill} folder; recorded in the lockfile`,
-  pluginRemoveReturns: (skill) => `  the method skill ${skill} comes back on the next \`mgr install\` or \`mgr update\``,
+  pluginRemoveReturns: (skill) => `  the method skill ${skill} comes back on the next \`${lifecycle} install\` or \`${lifecycle} update\``,
   statusPluginItemReplacing: (name, version, registry, skill) => `    ${name}@${version} (${registry}) — replaces the method skill ${skill}`,
   statusDivergenceTitle: "  divergences (lockfile vs disk):",
   statusDivergenceItem: (name) => `    ${name}: locked, but missing or different on disk`,
-  statusDivergenceHint: "    run `mgr install` to restore the locked set",
+  statusDivergenceHint: `    run \`${lifecycle} install\` to restore the locked set`,
   pluginRemoveSkipped: (dir, name) => `  kept ${dir}: it does not carry ${name}'s manifest, so another skill owns that folder`,
   pluginRemoved: (name) => `${name} removed.`,
-  pluginUsageAdd: "usage: mgr add <@registry/skill>",
-  pluginUsageRemove: "usage: mgr remove <@registry/skill>",
+  pluginUsageAdd: `usage: ${lifecycle} add <@registry/skill>`,
+  pluginUsageRemove: `usage: ${lifecycle} remove <@registry/skill>`,
 
   registryAdding: (name) => `Adding registry "${name}" to .mgr-core/config.json`,
   registryAdded: (name, url) => `registry "${name}" added: ${url}`,
@@ -125,8 +125,8 @@ const en = {
   registryRemoved: (name) => `registry "${name}" removed.`,
   registryListTitle: "Configured registries",
   registryListItem: (name, url, trusted) => `  ${name}${trusted ? " (trusted)" : ""}  ${url}`,
-  registryListEmpty: "No registry configured — run `mgr registry add <name> <index-url>`.",
-  registryUsage: "usage: mgr registry add <name> <index-url> [--trusted] | mgr registry remove <name> | mgr registry list",
+  registryListEmpty: `No registry configured — run \`${lifecycle} registry add <name> <index-url>\`.`,
+  registryUsage: `usage: ${lifecycle} registry add <name> <index-url> [--trusted] | ${lifecycle} registry remove <name> | ${lifecycle} registry list`,
 
   pluginsInstalledTitle: "Installed plugin skills",
   pluginsInstalledItem: (name, version, registry, dir) => `  ${name}@${version}  (registry: ${registry}, folder: ${dir})`,
@@ -147,11 +147,14 @@ const en = {
   suggestItem: (name, version, ecosystem, evidence) => `  ${name}@${version}  — ${ecosystem}, from ${evidence}`,
   suggestNone: "No skill in the configured registries matches what was detected.",
   suggestConfirm: (name) => `Install ${name}?`,
-  suggestNonInteractive: "Not asking without an interactive terminal; install with `mgr add <name>`.",
+  suggestNonInteractive: `Not asking without an interactive terminal; install with \`${lifecycle} add <name>\`.`,
   suggestSkipped: "No skill installed from the suggestion.",
   planHooks: (files) => `hooks    →   ${files}`,
   planHooksHint: "(session detection and hand-off before compaction, per engine)",
   hookWritten: (file, events) => `  hooks written to ${file}: ${events}`,
+  planRuntime: (dirs, n) => `MGR runtime → ${dirs}  (${n} files, readable, Node only)`,
+  runtimeWritten: (dir, n) => `MGR runtime written to ${dir} (${n} files)`,
+  runtimeMigrated: (version, dirs) => `Installation in the previous layout (v${version}, no runtime in the project) — the MGR runtime will be copied to ${dirs} and the skills will call it by explicit path.`,
   // Nomeia os eventos, e não "o hook": desde o ADR-0018 o arquivo carrega dois, e anunciar um só
   // esconderia do usuário metade do que o método tirou do arquivo dele.
   hookRemoved: (file, events) => `  hooks removed from ${file}: ${events}`,
@@ -178,7 +181,7 @@ const en = {
   specValidateFix: (text) => `      fix: ${text}`,
   specValidateExample: (text) => `      like: ${text}`,
   specValidateSummary: (errors, warnings) => `${errors} error(s), ${warnings} warning(s).`,
-  specValidateNextSteps: "Next steps: fix the errors above and run `mgr spec validate` again.",
+  specValidateNextSteps: `Next steps: fix the errors above and run \`${invocation} spec validate\` again.`,
   specValidateScopeNote:
     "This check is STRUCTURAL. It does not judge whether the plan is right, whether the tasks are the right ones, whether a done criterion is good, nor whether an acceptance criterion is testable or covers the spec.",
   specValidateNoSpecs: (dir) => `no spec found in ${dir}`,
@@ -191,7 +194,7 @@ const en = {
   specNextAllDone: (count) => `Nothing to do: all ${count} task(s) are marked done.`,
   specNextNothingReady: "Nothing is ready to start. Every pending task waits on something.",
   specNextBlocked: (id, waiting) => `  ${id} waits on ${waiting}`,
-  specNextRunValidate: "In a valid plan this cannot happen: some task has no dependency and is ready. Run `mgr spec validate`.",
+  specNextRunValidate: `In a valid plan this cannot happen: some task has no dependency and is ready. Run \`${invocation} spec validate\`.`,
   specNextNoTasks: "The plan declares the format but has no task.",
   specNextFormatNotDeclared:
     "This plan does not declare the format, so there is nothing to answer from. Add the marker on the first line and the fields the tasks already have become readable.",
@@ -223,7 +226,7 @@ const en = {
     + `models belongs to your account, not to this tool. Declare one per intent in `
     + `\`.mgr-core/config.json\` to get the benefit.`,
   agentsEffortNote:
-    "Changing `effort` only takes effect after `mgr update`: it lives in the agent file, and the "
+    `Changing \`effort\` only takes effect after \`${invocation} agents apply\`: it lives in the agent file, and the `
     + "invocation cannot override it. Changing `model` takes effect on the next invocation.",
   agentsAliasNote:
     "`reviewGate` and `agents.review` are both set: `agents.review` wins. Remove `reviewGate` to "
@@ -270,7 +273,7 @@ const en = {
   precompactLogStampAfter: "refusal stamp written",
   agentsSetNothing: "nothing to write: pass `--model`, `--effort`, or both",
   originWriting: (dir) => `Writing the project origin to ${dir}/config.json`,
-  originSetNeedsValue: (validos) => `mgr origin set needs a value (${validos})`,
+  originSetNeedsValue: (validos) => `${invocation} origin set needs a value (${validos})`,
   originUnknown: (valor, validos) => `unknown project origin: ${valor} (expected ${validos})`,
   originWritten: (antes, depois) => `project origin: ${antes} -> ${depois}`,
   originNoInstall: (dir) => `no MGR installation found at ${dir}; writing the origin anyway (this is the global-scope case).`,
@@ -279,13 +282,32 @@ const en = {
     + (installed ? ` (installed: ${installed})` : ""),
   // Sem motor instalado, `--engine` não é saída: o laço acima recusa qualquer motor que não esteja
   // no manifesto. Aconselhar um caminho que não leva a lugar nenhum é pior que não aconselhar.
-  agentsSetNoEngines: "no engine installed in this project: run `mgr install` first",
+  agentsSetNoEngines: `no engine installed in this project: run \`${lifecycle} install\` first`,
   agentsSetWritten: (intent, agent) => `written to \`agents.${intent}\` — ${agent}`,
   agentsSetModelEffect: "`model` takes effect on the next invocation.",
   agentsSetEffortEffect:
-    "`effort` only takes effect after `mgr update`: it lives in the agent file, and the "
+    `\`effort\` only takes effect after \`${invocation} agents apply\`: it lives in the agent file, and the `
     + "invocation cannot override it.",
-  specNextAllRefused: "`mgr spec next` does not accept `--all`: the next action is about ONE feature — name one, or run it from inside `specs/<slug>/`",
+  specNextAllRefused: `\`${invocation} spec next\` does not accept \`--all\`: the next action is about ONE feature — name one, or run it from inside \`specs/<slug>/\``,
+  runtimeLifecycleRefused: (cmd) => `${cmd} is a lifecycle command and does not run in the project runtime: run ${lifecycle} ${cmd}`,
+  runtimeUnknownCommand: (cmd) => `unknown command: ${cmd}`,
+  runtimeUnknownSpecSub: (sub) => `unknown command: spec ${sub}`.trim(),
+  runtimeDetectNeedsHook: () => "detect requires --hook <engine>",
+  runtimeHelp: [
+    "mgr-method project runtime",
+    "",
+    "  spec status|validate|next",
+    "  agents [<intent>|set|apply]",
+    "  origin set <value>",
+    "  doctor",
+    "  sdd-check",
+    "  detect --hook <engine>",
+    "  precompact --hook <engine>",
+    "  version",
+    "",
+    `Lifecycle commands (install, update, add...) run through ${lifecycle}.`,
+    "",
+  ].join("\n"),
   specNextNeedsSlug: (count) => `${count} feature(s) in specs/ and none was named — name one, or run this from inside \`specs/<slug>/\``,
   specStatusRoot: (root) => `${root}`,
   specStatusArtifacts: (linha) => `  artifacts: ${linha}`,
@@ -306,6 +328,15 @@ const en = {
   statusGateOff: "off (every intent disabled in `agents`)",
   statusGateEngine: (engine, model, effort) => `    ${engine}: model=${model} effort=${effort}`,
   statusGateSource: (source) => `    from: ${source}`,
+  sddCheckNoDir: () => "SDD INCOMPLETE: docs/sdd/ does not exist — run the spec-init skill first",
+  sddCheckNoConstitution: () => "SDD INCOMPLETE: docs/sdd/CONSTITUTION.md missing — run spec-init and review the constitution",
+  sddCheckEmpty: () => "SDD INCOMPLETE: docs/sdd/ is empty",
+  sddCheckNoReviewRules: () => "warning: docs/sdd/09-review-rules.md missing — code-analyzer will operate without the project guide",
+  sddCheckOk: (dir) => `SDD OK: project initialized (${dir})`,
+  agentsApplyMissing: (file, version) => `${file} does not exist: run npx mgr-method@${version} update`,
+  agentsApplyNotOwned: (file) => `${file} was not written by MGR (no mgr-managed-agent marker): left untouched`,
+  agentsApplyWriting: (file) => `Rewriting the agent frontmatter in ${file}`,
+  agentsApplyWritten: (file) => `Agent frontmatter rewritten: ${file}`,
 
   help: `MGR — Método Governado por Rastreabilidade (Traceability-Governed Method)
 
@@ -321,6 +352,7 @@ Usage: mgr <command> [options]
   validate         validates the SKILL.md files (skill authoring)
   audit            infers each skill's dangerous capabilities and compares with what it declares
   doctor           checks whether the installation is intact, and never writes anything
+  sdd-check        confirms the project was initialized for SDD (docs/sdd/)
   spec validate    validates this project's plan and spec artifacts
                    ([<slug>], --all, --strict, --json)
   spec next        the next action from the plan ([<slug>], --json)
@@ -328,9 +360,10 @@ Usage: mgr <command> [options]
   agents           which model and effort each intent uses, and where each
                    value came from ([<intent>], --json)
   agents set       writes one intent's policy (<intent>, --model, --effort,
-                   --engine); it does not run mgr update
+                   --engine); it does not run ${lifecycle} update
+  agents apply     rewrites each agent's model and effort from the config, offline
   origin set       records whether the project was born from the method or is
-                   legacy (<greenfield|brownfield>); it does not run mgr update
+                   legacy (<greenfield|brownfield>); it does not run ${lifecycle} update
   precompact       writes the hand-off before the engine compacts the context
                    (--hook <engine>); called by the hook, not by hand
   tokens           how much the flow consumed: pass the conversation
@@ -347,9 +380,9 @@ Plugin skills (https://github.com/maurigre/mgr-method/blob/main/docs/plugins.md)
   detect [repo]               shows what the project needs and what the registries offer
                               (--hook <engine> emits the session-hook report)
 `,
-};
+});
 
-const ptBR = {
+const ptBR = ({ invocation, lifecycle }) => ({
   unknownFlag: (flag) => `flag desconhecida: ${flag}`,
   unknownCommand: (command) => `comando desconhecido: ${command}\n`,
   errorPrefix: (message) => `erro: ${message}`,
@@ -381,14 +414,14 @@ const ptBR = {
   removedSkills: (paths) => `Removida(s) ${paths.length} skill(s): ${paths.join(" · ")}`,
   keptByChoice: (names) => `Nada foi removido: ${names.join(", ")} ficou(aram) em disco e segue(m) declarada(s), então nada virou órfã.`,
   keptNoConsent: (names) => `Nada foi removido: não havia terminal para perguntar. ${names.join(", ")} ficou(aram) em disco e segue(m) declarada(s); o \`-y\` autoriza a remoção.`,
-  keptNoSource: (names) => `Esta versão já não distribui ${names.join(", ")}: ficou(aram) em disco, fora do manifesto, e o \`mgr doctor\` vai reportá-la(s) como órfã(s).`,
+  keptNoSource: (names) => `Esta versão já não distribui ${names.join(", ")}: ficou(aram) em disco, fora do manifesto, e o \`${invocation} doctor\` vai reportá-la(s) como órfã(s).`,
   confirmInstall: "Confirmar instalação?",
   installing: "Instalando skills nos motores",
   installedAt: (dirs) => `Skills instaladas em ${dirs}.`,
   migrationInfo: (count) => `Migração: modelo antigo removido (${count} item(ns), incluindo .mgr-core).`,
   done: "Pronto! Comece com /spec-init e depois /spec-create por feature.",
 
-  statusOldModel: "runtime-launcher (ANTIGO — rode `mgr update` para migrar)",
+  statusOldModel: `runtime-launcher (ANTIGO — rode \`${lifecycle} update\` para migrar)`,
   statusProject: (id) => `  projeto: ${id}`,
   statusConfig: (dir) => `  config:  ${dir}`,
   statusStack: (language, architecture) => `  stack:   linguagem=${language} arquitetura=${architecture}`,
@@ -439,7 +472,7 @@ const ptBR = {
   pluginProposalExtends: (base) => `estende:     ${base} (instalada junto; a skill que estende tem precedência)`,
   pluginNoPermissions: "nenhuma declarada",
   pluginConfirm: "Instalar esta skill?",
-  pluginNeedsTty: "`mgr add` exige terminal interativo: toda instalação é confirmada por uma pessoa e não há flag de bypass.",
+  pluginNeedsTty: `\`${lifecycle} add\` exige terminal interativo: toda instalação é confirmada por uma pessoa e não há flag de bypass.`,
   pluginInstalling: "Baixando e verificando",
   pluginInstalled: (name, dir) => `${name} instalada em ${dir}.`,
   pluginWarning: (engine, warning) => `  aviso (${engine}): ${warning}`,
@@ -451,15 +484,15 @@ const ptBR = {
   pluginCollisionAlongsideHint: (dir) => `o plugin vai para ${dir}; a skill do método fica`,
   pluginCollisionReplace: "Substituir a skill do método",
   pluginCollisionReplaceHint: (skill) => `o plugin ocupa a pasta ${skill}; fica registrado no lockfile`,
-  pluginRemoveReturns: (skill) => `  a skill ${skill} do método volta no próximo \`mgr install\` ou \`mgr update\``,
+  pluginRemoveReturns: (skill) => `  a skill ${skill} do método volta no próximo \`${lifecycle} install\` ou \`${lifecycle} update\``,
   statusPluginItemReplacing: (name, version, registry, skill) => `    ${name}@${version} (${registry}) — substitui a skill ${skill} do método`,
   statusDivergenceTitle: "  divergências (lockfile x disco):",
   statusDivergenceItem: (name) => `    ${name}: travada no lockfile, ausente ou diferente no disco`,
-  statusDivergenceHint: "    rode `mgr install` para restaurar o conjunto travado",
+  statusDivergenceHint: `    rode \`${lifecycle} install\` para restaurar o conjunto travado`,
   pluginRemoveSkipped: (dir, name) => `  preservado ${dir}: não tem o manifest de ${name}, então a pasta é de outra skill`,
   pluginRemoved: (name) => `${name} removida.`,
-  pluginUsageAdd: "uso: mgr add <@registry/skill>",
-  pluginUsageRemove: "uso: mgr remove <@registry/skill>",
+  pluginUsageAdd: `uso: ${lifecycle} add <@registry/skill>`,
+  pluginUsageRemove: `uso: ${lifecycle} remove <@registry/skill>`,
 
   registryAdding: (name) => `Adicionando o registry "${name}" ao .mgr-core/config.json`,
   registryAdded: (name, url) => `registry "${name}" adicionado: ${url}`,
@@ -467,8 +500,8 @@ const ptBR = {
   registryRemoved: (name) => `registry "${name}" removido.`,
   registryListTitle: "Registries configurados",
   registryListItem: (name, url, trusted) => `  ${name}${trusted ? " (confiável)" : ""}  ${url}`,
-  registryListEmpty: "Nenhum registry configurado — rode `mgr registry add <nome> <url-do-index>`.",
-  registryUsage: "uso: mgr registry add <nome> <url-do-index> [--trusted] | mgr registry remove <nome> | mgr registry list",
+  registryListEmpty: `Nenhum registry configurado — rode \`${lifecycle} registry add <nome> <url-do-index>\`.`,
+  registryUsage: `uso: ${lifecycle} registry add <nome> <url-do-index> [--trusted] | ${lifecycle} registry remove <nome> | ${lifecycle} registry list`,
 
   pluginsInstalledTitle: "Skills plugáveis instaladas",
   pluginsInstalledItem: (name, version, registry, dir) => `  ${name}@${version}  (registry: ${registry}, pasta: ${dir})`,
@@ -489,11 +522,14 @@ const ptBR = {
   suggestItem: (name, version, ecosystem, evidence) => `  ${name}@${version}  — ${ecosystem}, por ${evidence}`,
   suggestNone: "Nenhuma skill dos registries configurados corresponde ao que foi detectado.",
   suggestConfirm: (name) => `Instalar ${name}?`,
-  suggestNonInteractive: "Sem terminal interativo não há pergunta; instale com `mgr add <nome>`.",
+  suggestNonInteractive: `Sem terminal interativo não há pergunta; instale com \`${lifecycle} add <nome>\`.`,
   suggestSkipped: "Nenhuma skill instalada a partir da sugestão.",
   planHooks: (files) => `hooks    →   ${files}`,
   planHooksHint: "(detecção por sessão e hand-off antes da compactação, por motor)",
   hookWritten: (file, events) => `  hooks gravados em ${file}: ${events}`,
+  planRuntime: (dirs, n) => `Runtime do MGR → ${dirs}  (${n} arquivos, legível, só Node)`,
+  runtimeWritten: (dir, n) => `runtime do MGR gravado em ${dir} (${n} arquivos)`,
+  runtimeMigrated: (version, dirs) => `Instalação no layout anterior (v${version}, sem runtime no projeto) — o runtime do MGR será copiado para ${dirs} e as skills passarão a chamá-lo por caminho explícito.`,
   // Nomeia os eventos, e não "o hook": desde o ADR-0018 o arquivo carrega dois, e anunciar um só
   // esconderia do usuário metade do que o método tirou do arquivo dele.
   hookRemoved: (file, events) => `  hooks removidos de ${file}: ${events}`,
@@ -520,7 +556,7 @@ const ptBR = {
   specValidateFix: (text) => `      corrija: ${text}`,
   specValidateExample: (text) => `      assim: ${text}`,
   specValidateSummary: (errors, warnings) => `${errors} erro(s), ${warnings} aviso(s).`,
-  specValidateNextSteps: "Próximos passos: corrija os erros acima e rode `mgr spec validate` de novo.",
+  specValidateNextSteps: `Próximos passos: corrija os erros acima e rode \`${invocation} spec validate\` de novo.`,
   specValidateScopeNote:
     "Esta verificação é ESTRUTURAL. Ela não julga se o plano está certo, se as tasks são as certas, se um critério de done é bom, nem se um critério de aceitação é testável ou cobre a spec.",
   specValidateNoSpecs: (dir) => `nenhuma spec encontrada em ${dir}`,
@@ -533,7 +569,7 @@ const ptBR = {
   specNextAllDone: (count) => `Nada a fazer: as ${count} task(s) estão marcadas como concluídas.`,
   specNextNothingReady: "Nada pronto para começar. Toda task pendente espera por algo.",
   specNextBlocked: (id, waiting) => `  ${id} espera por ${waiting}`,
-  specNextRunValidate: "Num plano válido isto não acontece: alguma task não depende de nada e está pronta. Rode `mgr spec validate`.",
+  specNextRunValidate: `Num plano válido isto não acontece: alguma task não depende de nada e está pronta. Rode \`${invocation} spec validate\`.`,
   specNextNoTasks: "O plano declara o formato mas não tem nenhuma task.",
   specNextFormatNotDeclared:
     "Este plano não declara o formato, então não há de onde responder. Acrescente o marcador na primeira linha e os campos que as tasks já têm passam a ser lidos.",
@@ -565,7 +601,7 @@ const ptBR = {
     + `modelos é da sua conta, não desta ferramenta. Declare um por intenção em `
     + `\`.mgr-core/config.json\` para ter o benefício.`,
   agentsEffortNote:
-    "Mudar o `effort` só passa a valer depois de `mgr update`: ele vive no arquivo do agente, e a "
+    `Mudar o \`effort\` só passa a valer depois de \`${invocation} agents apply\`: ele vive no arquivo do agente, e a `
     + "invocação não tem como sobrepô-lo. Mudar o `model` vale já na próxima invocação.",
   agentsAliasNote:
     "`reviewGate` e `agents.review` estão os dois escritos: `agents.review` vence. Apague o "
@@ -611,20 +647,39 @@ const ptBR = {
   precompactLogStampAfter: "carimbo da recusa gravado",
   agentsSetNothing: "nada a escrever: passe `--model`, `--effort`, ou os dois",
   originWriting: (dir) => `Gravando a origem do projeto em ${dir}/config.json`,
-  originSetNeedsValue: (validos) => `mgr origin set precisa de um valor (${validos})`,
+  originSetNeedsValue: (validos) => `${invocation} origin set precisa de um valor (${validos})`,
   originUnknown: (valor, validos) => `origem de projeto desconhecida: ${valor} (esperado ${validos})`,
   originWritten: (antes, depois) => `origem do projeto: ${antes} -> ${depois}`,
   originNoInstall: (dir) => `nenhuma instalação MGR encontrada em ${dir}; gravando a origem mesmo assim (é o caso do escopo global).`,
   agentsSetEngineNotInstalled: (engine, instalados) =>
     `motor \`${engine}\` não está instalado neste projeto`
     + (instalados ? ` (instalados: ${instalados})` : ""),
-  agentsSetNoEngines: "nenhum motor instalado neste projeto: rode `mgr install` primeiro",
+  agentsSetNoEngines: `nenhum motor instalado neste projeto: rode \`${lifecycle} install\` primeiro`,
   agentsSetWritten: (intent, agent) => `escrito em \`agents.${intent}\` — ${agent}`,
   agentsSetModelEffect: "`model` passa a valer na próxima invocação.",
   agentsSetEffortEffect:
-    "`effort` só passa a valer depois de `mgr update`: ele mora no arquivo do agente, e a "
+    `\`effort\` só passa a valer depois de \`${invocation} agents apply\`: ele mora no arquivo do agente, e a `
     + "invocação não o sobrescreve.",
-  specNextAllRefused: "`mgr spec next` não aceita `--all`: a próxima ação é sobre UMA feature — nomeie uma, ou rode de dentro de `specs/<slug>/`",
+  specNextAllRefused: `\`${invocation} spec next\` não aceita \`--all\`: a próxima ação é sobre UMA feature — nomeie uma, ou rode de dentro de \`specs/<slug>/\``,
+  runtimeLifecycleRefused: (cmd) => `${cmd} é ciclo de vida e não roda no runtime do projeto: rode ${lifecycle} ${cmd}`,
+  runtimeUnknownCommand: (cmd) => `comando desconhecido: ${cmd}`,
+  runtimeUnknownSpecSub: (sub) => `comando desconhecido: spec ${sub}`.trim(),
+  runtimeDetectNeedsHook: () => "detect exige --hook <motor>",
+  runtimeHelp: [
+    "runtime do projeto mgr-method",
+    "",
+    "  spec status|validate|next",
+    "  agents [<intencao>|set|apply]",
+    "  origin set <valor>",
+    "  doctor",
+    "  sdd-check",
+    "  detect --hook <motor>",
+    "  precompact --hook <motor>",
+    "  version",
+    "",
+    `Comandos de ciclo de vida (install, update, add...) rodam por ${lifecycle}.`,
+    "",
+  ].join("\n"),
   specNextNeedsSlug: (count) => `${count} feature(s) em specs/ e nenhuma foi nomeada — nomeie uma, ou rode isto de dentro de \`specs/<slug>/\``,
   specStatusRoot: (root) => `${root}`,
   specStatusArtifacts: (linha) => `  artefatos: ${linha}`,
@@ -645,6 +700,15 @@ const ptBR = {
   statusGateOff: "desligado (todas as intenções desligadas em `agents`)",
   statusGateEngine: (engine, model, effort) => `    ${engine}: modelo=${model} esforço=${effort}`,
   statusGateSource: (source) => `    origem: ${source}`,
+  sddCheckNoDir: () => "SDD INCOMPLETO: docs/sdd/ não existe — rode a skill spec-init primeiro",
+  sddCheckNoConstitution: () => "SDD INCOMPLETO: docs/sdd/CONSTITUTION.md ausente — rode o spec-init e revise a constituição",
+  sddCheckEmpty: () => "SDD INCOMPLETO: docs/sdd/ está vazio",
+  sddCheckNoReviewRules: () => "aviso: docs/sdd/09-review-rules.md ausente — o code-analyzer vai operar sem o guia do projeto",
+  sddCheckOk: (dir) => `SDD OK: projeto inicializado (${dir})`,
+  agentsApplyMissing: (file, version) => `${file} não existe: rode npx mgr-method@${version} update`,
+  agentsApplyNotOwned: (file) => `${file} não foi escrito pelo MGR (sem o marcador mgr-managed-agent): mantido como está`,
+  agentsApplyWriting: (file) => `Reescrevendo o frontmatter do agente em ${file}`,
+  agentsApplyWritten: (file) => `Frontmatter do agente reescrito: ${file}`,
 
   help: `MGR — Método Governado por Rastreabilidade
 
@@ -660,6 +724,7 @@ Uso: mgr <comando> [opções]
   validate         valida as SKILL.md (autoria de skill)
   audit            infere as capacidades perigosas de cada skill e compara com o declarado
   doctor           confere se a instalacao esta integra, e nunca escreve nada
+  sdd-check        confere se o projeto foi inicializado para SDD (docs/sdd/)
   spec validate    valida o plano e a spec deste projeto
                    ([<slug>], --all, --strict, --json)
   spec next        a próxima ação a partir do plano ([<slug>], --json)
@@ -667,9 +732,10 @@ Uso: mgr <comando> [opções]
   agents           qual modelo e esforço cada intenção usa, e de onde veio
                    cada valor ([<intenção>], --json)
   agents set       escreve a política de uma intenção (<intenção>, --model,
-                   --effort, --engine); não roda o mgr update
+                   --effort, --engine); não roda o ${lifecycle} update
+  agents apply     reescreve model e esforço de cada agente a partir do config, sem rede
   origin set       registra se o projeto nasceu do método ou é legado
-                   (<greenfield|brownfield>); não roda o mgr update
+                   (<greenfield|brownfield>); não roda o ${lifecycle} update
   precompact       grava o hand-off antes de o motor compactar o contexto
                    (--hook <motor>); chamado pelo hook, não à mão
   tokens           quanto o fluxo consumiu: passe o transcript da conversa e,
@@ -686,9 +752,12 @@ Skills plugáveis (ver https://github.com/maurigre/mgr-method/blob/main/docs/plu
   detect [repo]               mostra o que o projeto pede e o que os registries oferecem
                               (--hook <motor> emite o relatório do hook de sessão)
 `,
-};
+});
 
 // Seleciona a tabela pelo userLanguage: qualquer variante pt-* cai na pt-BR; o resto, en.
-export function getMessages(lang) {
-  return lang && String(lang).toLowerCase().startsWith("pt") ? ptBR : en;
+// `invocation` nomeia os comandos que o runtime atende; `lifecycle`, os de ciclo de vida. Com os
+// defaults, a saída é a de sempre (`mgr ...`); o runtime passa os seus próprios prefixos (DT-15).
+export function getMessages(lang, { invocation = "mgr", lifecycle = "mgr" } = {}) {
+  const opts = { invocation, lifecycle };
+  return lang && String(lang).toLowerCase().startsWith("pt") ? ptBR(opts) : en(opts);
 }

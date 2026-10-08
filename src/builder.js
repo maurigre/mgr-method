@@ -44,6 +44,10 @@ export function resolveLaws(text, lawsRef) {
   return text.replaceAll(catalog.LAWS_TOKEN, lawsRef || catalog.LAWS_SHARED);
 }
 
+export function resolveRuntime(text, runtimeRef) {
+  return text.replaceAll(catalog.RUNTIME_TOKEN, runtimeRef || [...catalog.RUNTIME_DIR, ...catalog.RUNTIME_ENTRY].join("/"));
+}
+
 // Resolve o ponteiro da carta DENTRO do texto das leis, e não numa SKILL.md: a `L0.1` é quem
 // aponta para a carta, então quem carrega as leis alcança a carta por ela.
 export function resolveCharter(text, charterRef) {
@@ -59,7 +63,7 @@ export function resolveUserLanguage(text, userLanguage) {
 // Copia a fonte transversal (_shared/arch) quando há skill de arquitetura, resolve o token
 // {{MGR_ARCH_RULES}} para o caminho passado em archRulesRef e o {{MGR_USER_LANGUAGE}} de
 // todas as skills para userLanguage.
-export function installEngine(engineSkillsDir, skills, { archRulesRef, lawsRulesRef, charterRulesRef, userLanguage, engineId, reviewGate } = {}) {
+export function installEngine(engineSkillsDir, skills, { archRulesRef, lawsRulesRef, charterRulesRef, runtimeRef, userLanguage, engineId, reviewGate } = {}) {
   mkdirSync(engineSkillsDir, { recursive: true });
   const dirs = skills.map((name) => buildSkill(name, engineSkillsDir));
 
@@ -119,6 +123,12 @@ export function installEngine(engineSkillsDir, skills, { archRulesRef, lawsRules
     if (text.includes(catalog.LAWS_TOKEN)) writeFileSync(md, resolveLaws(text, lawsRef), "utf8");
   }
 
+  for (const name of skills) {
+    const md = path.join(engineSkillsDir, name, "SKILL.md");
+    const text = readFileSync(md, "utf8");
+    if (text.includes(catalog.RUNTIME_TOKEN)) writeFileSync(md, resolveRuntime(text, runtimeRef), "utf8");
+  }
+
   // Fonte de qualidade (co-locada) — usada pelo spec-init ao montar o guia de review.
   if (catalog.needsQualityShared(skills)) {
     const destino = path.join(engineSkillsDir, ...catalog.QUALITY_INSTALLED);
@@ -126,6 +136,22 @@ export function installEngine(engineSkillsDir, skills, { archRulesRef, lawsRules
     cpSync(path.join(bundle.pkgDir("shared"), "quality", "quality-rules.md"), destino);
   }
   return dirs;
+}
+
+// Copia o runtime legível para dentro do motor (DT-5/DT-6): árvore espelhada em
+// `_shared/mgr/` com um package.json gerado, sem `name`. A raiz do pacote vem de `bundle.pkgDir`.
+export function installRuntime(engineSkillsDir, { version }) {
+  const pkgRoot = path.dirname(bundle.pkgDir("src"));
+  const dir = path.join(engineSkillsDir, ...catalog.RUNTIME_DIR);
+  rmSync(dir, { recursive: true, force: true });
+  for (const rel of catalog.RUNTIME_FILES) {
+    const dest = path.join(dir, ...rel.split("/"));
+    mkdirSync(path.dirname(dest), { recursive: true });
+    cpSync(path.join(pkgRoot, ...rel.split("/")), dest);
+  }
+  const manifest = { private: true, type: "module", version };
+  writeFileSync(path.join(dir, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  return { dir, files: catalog.RUNTIME_FILES.length + 1 };
 }
 
 // Marcador de posse no arquivo do agente. `.claude/agents/` e `.github/agents/` são diretórios
@@ -192,9 +218,29 @@ export function agentFrontmatter(engineId, intent, policy) {
 // aqui, e não na borda, porque ler e interpretar arquivo instalado é persistência, não formatação.
 export function agentDeclares(file) {
   if (!existsSync(file)) return null;
-  const frontmatter = readFileSync(file, "utf8").split("---")[1] ?? "";
-  const campo = (nome) => frontmatter.match(new RegExp(`^${nome}:\\s*(.+)$`, "m"))?.[1]?.trim() ?? null;
-  return { model: campo("model"), effort: campo("effort") };
+  const bloco = readFileSync(file, "utf8").match(FRONTMATTER_BLOCK)?.[0] ?? "";
+  return { model: frontmatterField(bloco, "model"), effort: frontmatterField(bloco, "effort") };
+}
+
+const FRONTMATTER_BLOCK = /^---\r?\n[\s\S]*?\r?\n---/;
+
+function frontmatterField(bloco, nome) {
+  return bloco.match(new RegExp(`^${nome}:\\s*(.+)$`, "m"))?.[1]?.trim() ?? null;
+}
+
+// Troca SÓ o frontmatter de um arquivo de agente já instalado, preservando o corpo byte a byte.
+// Devolve o texto novo e, por campo (`model`, `effort`), o que mudou. Sem frontmatter no começo
+// do arquivo não há o que trocar: erro explícito, e não texto devolvido como se tivesse sido aplicado.
+export function replaceAgentFrontmatter(text, frontmatter) {
+  const atual = text.match(FRONTMATTER_BLOCK);
+  if (!atual) throw new Error("agent file has no frontmatter to replace");
+  const changes = [];
+  for (const nome of ["model", "effort"]) {
+    const before = frontmatterField(atual[0], nome);
+    const after = frontmatterField(frontmatter, nome);
+    if (before !== after) changes.push({ field: nome, before, after });
+  }
+  return { text: frontmatter + text.slice(atual[0].length), changes };
 }
 
 // Instala UM agente. Intenção desligada não escreve nada.

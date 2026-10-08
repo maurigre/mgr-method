@@ -32,7 +32,15 @@ export function skillNames() {
     .sort();
 }
 
-export function readVersion() {
+// Versao embutida pelo build (scripts/build.mjs, define `__MGR_BUILD_VERSION__`). Fora do bundle
+// a constante nao existe e o retorno e null.
+export function buildVersion() {
+  return typeof __MGR_BUILD_VERSION__ !== "undefined" ? __MGR_BUILD_VERSION__ : null;
+}
+
+export function packageVersion() {
   const pj = path.join(PKG_ROOT, "package.json");
   return JSON.parse(readFileSync(pj, "utf8")).version;
 }
+
+export const readVersion = () => buildVersion() ?? packageVersion();

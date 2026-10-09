@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, existsSync, writeFileSync, cpSync, rmSync } from "node:fs";
 import {
   DEFECT, FIX_RESTORE, FIX_UPDATE, NO_FIX, UNAVAILABLE, WARNING,
-  SKILL_DECLARADA, SKILL_ORFA, FONTE_COMPARTILHADA,
+  SKILL_DECLARADA, SKILL_ORFA, SKILL_ORFA_SEM_PROVA, FONTE_COMPARTILHADA,
   PROVA_FUNCIONA, PROVA_NAO_FUNCIONA, PROVA_NAO_MEDIDA, SEM_REMEDIACAO,
   architectureSkill, bodyCheckAvailability, brokenHooks, divergentBody, lockfileDrift, missingAgents, missingShared, missingSkills,
   orphanSkills, runtimeBodies, sharedCheckAvailability, staleInstall, unresolvedTokens,
@@ -36,6 +36,34 @@ test("orfa NAO tem correcao automatica", () => {
   const [achado] = orphanSkills({ declared: [], onDisk: ["junit-clean"], skillsDir: DIR });
   assert.equal(achado.fix, NO_FIX,
     "na 0.6.0-beta.1 o remove apagou a skill do proprio metodo; no momento do diagnostico a origem de uma orfa e desconhecida");
+});
+
+test("should name mgr update for orphans classified marked or distributed", () => {
+  for (const classe of ["marked", "distributed"]) {
+    const [achado] = orphanSkills({ declared: [], onDisk: ["x"], skillsDir: DIR, classOf: () => classe });
+    assert.equal(achado.fix, FIX_UPDATE, `classe ${classe} e candidata do update`);
+  }
+});
+
+test("should keep orphans classified unknown without remediation", () => {
+  const [achado] = orphanSkills({ declared: [], onDisk: ["x"], skillsDir: DIR, classOf: () => "unknown" });
+  assert.equal(achado.fix, NO_FIX);
+});
+
+test("should classify each orphan by its own name", () => {
+  const achados = orphanSkills({
+    declared: [], onDisk: ["a", "b"], skillsDir: DIR, classOf: (nome) => (nome === "a" ? "marked" : "unknown"),
+  });
+  assert.deepEqual(achados.map((a) => [a.file, a.fix]), [[`${DIR}/a`, FIX_UPDATE], [`${DIR}/b`, NO_FIX]]);
+});
+
+test("should declare consentimento only on the four PROVA_FUNCIONA entries new or changed by the F2", () => {
+  const comConsentimento = CHECKS.flatMap(({ id, remediacoes }) => remediacoes
+    .filter((r) => r.consentimento !== undefined).map((r) => [id, r.condicao, r.consentimento]));
+  assert.deepEqual(comConsentimento, [
+    ["orphan-skill", "marcada", "-y"], ["orphan-skill", "distribuida-sem-marca", "-y"],
+    ["divergent-body", "skill-orfa", "-y"], ["unresolved-token", "skill-orfa", "-y"],
+  ]);
 });
 
 test("skill declarada e ausente e achado, e tem correcao", () => {
@@ -388,9 +416,12 @@ test("toda verificacao declara remediacao ou a razao de nao haver", () => {
     assert.ok(temRemediacao || achado.fix === null,
       `${achado.check}: fica sem as duas coisas, e o CA-8 exige uma`);
   }
-  const semCorrecao = findings.filter(({ fix }) => fix === null).map(({ check }) => check);
-  assert.ok(semCorrecao.includes("orphan-skill"),
-    "a orfa nao tem correcao segura: na 0.6.0-beta.1 o remove apagou a skill do proprio metodo");
+  // Revisto pela D-5b (ADR-0024): a orfa plantada tem nome que o pacote distribui, entao e candidata e
+  // o fix nomeia o update, que pergunta item a item. Orfa de origem desconhecida segue sem correcao,
+  // afirmado nos testes de `orphanSkills` com `classOf` "unknown".
+  const orfa = findings.find(({ check }) => check === "orphan-skill");
+  assert.equal(orfa.fix, "mgr update",
+    "orfa de nome distribuido e candidata: o update a oferece com consentimento, item a item");
 });
 
 test("com um motor a saida do diagnose continua identica", () => {
@@ -468,14 +499,16 @@ test("CHECKS tem exatamente 11 entradas com id unico", () => {
 
 test("as 10 verificacoes antigas mantem remediacao e severidade de antes", () => {
   const antes = {
-    "orphan-skill": [["em-disco", null, SEM_REMEDIACAO]],
+    "orphan-skill": [["em-disco", null, SEM_REMEDIACAO], ["marcada", FIX_UPDATE, PROVA_FUNCIONA],
+      ["distribuida-sem-marca", FIX_UPDATE, PROVA_FUNCIONA]],
     "missing-skill": [["declarada-ausente", FIX_UPDATE, PROVA_FUNCIONA]],
     "missing-agent": [["declarado-ausente", FIX_UPDATE, PROVA_FUNCIONA]],
     "architecture-skill": [["skill-ausente", FIX_UPDATE, PROVA_FUNCIONA]],
-    "divergent-body": [["skill-declarada", FIX_UPDATE, PROVA_FUNCIONA], ["skill-orfa", null, PROVA_NAO_FUNCIONA],
+    "divergent-body": [["skill-declarada", FIX_UPDATE, PROVA_FUNCIONA], ["skill-orfa", FIX_UPDATE, PROVA_FUNCIONA],
+      ["skill-orfa-sem-prova", null, SEM_REMEDIACAO],
       ["fonte-compartilhada", FIX_UPDATE, PROVA_FUNCIONA], ["manifesto-atrasado", FIX_UPDATE, PROVA_FUNCIONA]],
-    "unresolved-token": [["skill-declarada", FIX_UPDATE, PROVA_FUNCIONA], ["skill-orfa", null, PROVA_NAO_FUNCIONA],
-      ["fonte-compartilhada", FIX_UPDATE, PROVA_FUNCIONA]],
+    "unresolved-token": [["skill-declarada", FIX_UPDATE, PROVA_FUNCIONA], ["skill-orfa", FIX_UPDATE, PROVA_FUNCIONA],
+      ["skill-orfa-sem-prova", null, SEM_REMEDIACAO], ["fonte-compartilhada", FIX_UPDATE, PROVA_FUNCIONA]],
     "stale-install": [["manifesto-atrasado", FIX_UPDATE, PROVA_FUNCIONA]],
     "broken-hook": [["binario-ausente", null, SEM_REMEDIACAO]],
     "lockfile-drift": [["sem-lockfile", null, SEM_REMEDIACAO], ["travado-ausente", "mgr install", PROVA_NAO_MEDIDA]],
@@ -688,10 +721,18 @@ test("a frase do divergent-body serve para skill e para fonte compartilhada", ()
     "chamar de skill um arquivo de _shared/ seria mentira na cara de quem le o relatorio");
 });
 
-test("corpo divergente com skill orfa nao tem remediacao", () => {
+test("corpo divergente com skill orfa candidata nomeia mgr update", () => {
   const [achado] = divergentBody({
     name: "orfa", source: "a\nb", installed: "a\nc", file: "f",
     condicao: SKILL_ORFA,
+  });
+  assert.equal(achado.fix, FIX_UPDATE, "o update oferece remover a orfa candidata, com consentimento");
+});
+
+test("corpo divergente com skill orfa sem prova nao tem remediacao", () => {
+  const [achado] = divergentBody({
+    name: "orfa", source: "a\nb", installed: "a\nc", file: "f",
+    condicao: SKILL_ORFA_SEM_PROVA,
   });
   assert.equal(achado.fix, NO_FIX, "mgr update nao alcanca o que nao esta no manifesto");
 });
@@ -712,10 +753,18 @@ test("corpo divergente com fonte compartilhada tem remediacao", () => {
   assert.equal(achado.fix, FIX_UPDATE, "mgr update alcanca fonte compartilhada");
 });
 
-test("token sobrando com skill orfa nao tem remediacao", () => {
+test("token sobrando com skill orfa candidata nomeia mgr update", () => {
   const [achado] = unresolvedTokens({
     installed: "x {{MGR_FIXTURE}}", file: "f",
     condicao: SKILL_ORFA,
+  });
+  assert.equal(achado.fix, FIX_UPDATE, "o update oferece remover a orfa candidata, com consentimento");
+});
+
+test("token sobrando com skill orfa sem prova nao tem remediacao", () => {
+  const [achado] = unresolvedTokens({
+    installed: "x {{MGR_FIXTURE}}", file: "f",
+    condicao: SKILL_ORFA_SEM_PROVA,
   });
   assert.equal(achado.fix, NO_FIX, "mgr update nao alcanca o que nao esta no manifesto");
 });
@@ -891,7 +940,7 @@ test("manifesto sem motor reconhecido cai para os skillsDirs em vez de não conf
   }
 });
 
-test("skill órfã com corpo divergente não tem remediação no diagnose", () => {
+test("skill órfã candidata com corpo divergente nomeia o mgr update no diagnose", () => {
   const repo = instalacaoLimpa();
   try {
     const skills = path.join(repo, ".claude", "skills");
@@ -906,9 +955,9 @@ test("skill órfã com corpo divergente não tem remediação no diagnose", () =
       "a instalacao e limpa e o manifesto esta na versao do pacote, entao a comparacao de corpo roda "
       + "e o achado sai por skill; com manifesto atrasado ela sairia indisponivel e este caso nao "
       + "afirmaria nada");
-    assert.equal(corpo[0].fix, null,
-      "o mgr update so re-sincroniza o que o manifesto declara, entao nomear o comando aqui mandaria "
-      + "a pessoa gastar uma acao que nao resolve");
+    assert.equal(corpo[0].fix, "mgr update",
+      "D-5b (ADR-0024): a orfa tem nome que o pacote distribui, e o update converge oferecendo a "
+      + "remocao item a item; antes da F2 o update so alcancava o declarado e o fix era null");
   } finally {
     descartar(repo);
   }
@@ -946,10 +995,11 @@ test("toda entrada de CHECKS tem remediacoes com pelo menos um item", () => {
   }
 });
 
-test("soma de todas as condicoes em remediacoes e exatamente dezenove", () => {
+test("soma de todas as condicoes em remediacoes e exatamente vinte e tres", () => {
   const totalCondicoes = CHECKS.reduce((soma, entrada) => soma + entrada.remediacoes.length, 0);
-  assert.equal(totalCondicoes, 19,
-    "dezessete da tabela D-2 mais as duas de runtime-version");
+  assert.equal(totalCondicoes, 23,
+    "dezessete da tabela D-2, duas de runtime-version e as quatro da DT-14 da F2 (marcada, "
+    + "distribuida-sem-marca e as duas skill-orfa-sem-prova)");
 });
 
 test("todo item de remediacao tem condicao, fix e prova obrigatorios", () => {

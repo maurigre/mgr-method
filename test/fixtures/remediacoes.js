@@ -62,7 +62,7 @@ export function problemasDeCobertura(checks, casos) {
     }
 
     for (const remediacao of remediacoes) {
-      const { condicao, prova, fix, razao, candidato } = remediacao;
+      const { condicao, prova, fix, razao, candidato, consentimento } = remediacao;
 
       if (!condicao) {
         continue;
@@ -97,6 +97,12 @@ export function problemasDeCobertura(checks, casos) {
       if (prova === PROVA_FUNCIONA && fix === null) {
         problemas.push(
           `REM-5 ${id}/${condicao}: fix e prova incoerentes`
+        );
+      }
+
+      if (consentimento !== undefined && fix === null) {
+        problemas.push(
+          `REM-6 ${id}/${condicao}: consentimento declarado sem fix`
         );
       }
     }
@@ -180,14 +186,16 @@ function dirSkillsRelativo(repo) {
   return (manifesto.skillsDirs ?? [".claude/skills"])[0];
 }
 
-// Executa string do tipo "mgr update" e devolve {sucesso, razao?}
-function executaComando(stringDoComando, repo) {
+// Executa string do tipo "mgr update" e devolve {sucesso, razao?}.
+// `consentimento` e o substituto nao interativo DOCUMENTADO da resposta humana (DT-14): entra na linha
+// de comando antes do repo, e nunca no `fix` que o doctor imprime. Ausente, o comando roda sem ele.
+function executaComando(stringDoComando, repo, consentimento) {
   const partes = stringDoComando.trim().split(/\s+/);
   if (partes[0] !== "mgr") {
     return { sucesso: false, razao: "comando deve comecar com 'mgr'" };
   }
 
-  const args = [...partes.slice(1), repo];
+  const args = [...partes.slice(1), ...(consentimento ? [consentimento] : []), repo];
 
   try {
     execFileSync(BIN, args, {
@@ -282,10 +290,10 @@ export async function rodaUmCaso(caso, checks = CHECKS, executa = executaComando
     }
 
     // Passo 5: executar conforme prova
-    const { prova, fix, candidato } = remediacao;
+    const { prova, fix, candidato, consentimento } = remediacao;
 
     if (prova === PROVA_FUNCIONA) {
-      const resultado = executa(fix, repo);
+      const resultado = executa(fix, repo, consentimento);
       if (!resultado.sucesso) {
         problemas.push(
           `caso ${caso.id}/${caso.condicao}: execucao de "${fix}" falhou: ${resultado.razao}`
@@ -302,7 +310,7 @@ export async function rodaUmCaso(caso, checks = CHECKS, executa = executaComando
         );
       }
     } else if (prova === PROVA_NAO_FUNCIONA) {
-      const resultado = executa(candidato, repo);
+      const resultado = executa(candidato, repo, consentimento);
       if (!resultado.sucesso) {
         problemas.push(
           `caso ${caso.id}/${caso.condicao}: execucao de "${candidato}" falhou: ${resultado.razao}`
@@ -351,7 +359,7 @@ export async function rodaTodosCasos(casos, checks = CHECKS, executa = executaCo
 /**
  * O relatorio que separa o CONFERIDO do NAO CONFERIDO.
  *
- * Sem ele, "18 casos verdes" pode ser lido como "toda remediacao esta provada" — e nao esta: a
+ * Sem ele, "22 casos verdes" pode ser lido como "toda remediacao esta provada" — e nao esta: a
  * condicao `PROVA_NAO_MEDIDA` nao tem caso de proposito, porque forcar um seria FABRICAR prova para
  * algo que nao se conseguiu medir. Mesma disciplina do `check-checks`, que conta os documentos que
  * conferiu e nao os que registrou.
@@ -368,12 +376,37 @@ export function relatorioDeCobertura(checks = CHECKS) {
   return { conferidas, naoConferidas };
 }
 
+// Nomes que o pacote NAO distribui: orfa com um deles tem origem desconhecida (`unknown`).
+const POSTA_A_MAO = "skill-posta-a-mao";
+const MARCADA_DO_METODO = "skill-marcada-do-metodo";
+
+// Copia a primeira skill declarada (ja instalada, tokens resolvidos) para `nome` e devolve o destino.
+function copiaComoOrfa(repo, nome) {
+  const destino = skillPath(repo, nome);
+  cpSync(skillPath(repo, primeiraSkillDeclarada(repo)), destino, { recursive: true });
+  return destino;
+}
+
+// Poe `# mgr-managed-skill: <nome>` como ultima linha do frontmatter, em texto literal (nao importa o
+// `markSkill` do src: planta que usa o codigo sob prova confirma o codigo com ele mesmo).
+function marcaLiteral(arquivo, nome) {
+  const texto = readFileSync(arquivo, "utf8")
+    .split("\n")
+    .filter((linha) => !linha.startsWith("# mgr-managed-skill:"))
+    .join("\n");
+  const fim = texto.indexOf("\n---", 3);
+  if (!texto.startsWith("---") || fim === -1) throw new Error(`fixture quebrada: ${arquivo} sem frontmatter`);
+  writeFileSync(arquivo, `${texto.slice(0, fim)}\n# mgr-managed-skill: ${nome}${texto.slice(fim)}`, "utf8");
+}
+
 /**
- * Tabela de 18 casos — um por condicao medida.
+ * Tabela de 22 casos — um por condicao medida.
  *
  * Exclui PROVA_NAO_MEDIDA (lockfile-drift/travado-ausente).
- * 13 casos rodam comando, 2 sao SEM_REMEDIACAO, 2 sao PROVA_NAO_FUNCIONA (o comando nao alcanca
- * skill orfa) e 1 eh especial (ja na limpa) — contados em 2026-10-08 contra CHECKS.
+ * 17 casos rodam comando (4 deles com `consentimento: "-y"`: as orfas candidatas), 5 sao
+ * SEM_REMEDIACAO (em-disco, os 2 `skill-orfa-sem-prova`, broken-hook e sem-lockfile), 0 sao
+ * PROVA_NAO_FUNCIONA, e 1 eh especial (ja na limpa: sem-lockfile) — contados lendo CHECKS em
+ * 2026-10-08 (sem shell, nao executado).
  */
 export const casosDeTeste = [
   {
@@ -381,9 +414,26 @@ export const casosDeTeste = [
     condicao: "em-disco",
     planta: (repo) => {
       const skill = primeiraSkillDeclarada(repo);
-      cpSync(skillPath(repo, skill), skillPath(repo, ORFA), { recursive: true });
+      cpSync(skillPath(repo, skill), skillPath(repo, POSTA_A_MAO), { recursive: true });
     },
     identifica: (achado) => achado.check === "orphan-skill",
+  },
+  {
+    id: "orphan-skill",
+    condicao: "marcada",
+    planta: (repo) => {
+      const destino = copiaComoOrfa(repo, MARCADA_DO_METODO);
+      marcaLiteral(path.join(destino, "SKILL.md"), MARCADA_DO_METODO);
+    },
+    identifica: (achado) => achado.check === "orphan-skill" && achado.file.endsWith(`/${MARCADA_DO_METODO}`),
+  },
+  {
+    id: "orphan-skill",
+    condicao: "distribuida-sem-marca",
+    planta: (repo) => {
+      copiaComoOrfa(repo, ORFA);
+    },
+    identifica: (achado) => achado.check === "orphan-skill" && achado.file.endsWith(`/${ORFA}`),
   },
   {
     id: "missing-skill",
@@ -457,6 +507,21 @@ export const casosDeTeste = [
   },
   {
     id: "divergent-body",
+    condicao: "skill-orfa-sem-prova",
+    planta: (repo) => {
+      // O divergentBody so roda com fonte correspondente no pacote, entao o nome tem de ser distribuido
+      // (`ORFA`). Para a origem ser DESCONHECIDA mesmo assim, a pasta carrega `mgr-manifest.json`
+      // (plugin): `orphanClass` o classifica `unknown` antes de olhar marca ou catalogo.
+      const destino = copiaComoOrfa(repo, ORFA);
+      writeFileSync(path.join(destino, "mgr-manifest.json"), "{}\n", "utf8");
+      const arquivo = path.join(destino, "SKILL.md");
+      writeFileSync(arquivo, `${readFileSync(arquivo, "utf8")}\nLINHA PLANTADA\n`, "utf8");
+    },
+    identifica: (achado) =>
+      achado.check === "divergent-body" && achado.file.includes(ORFA),
+  },
+  {
+    id: "divergent-body",
     condicao: "fonte-compartilhada",
     planta: (repo) => {
       alterarCorpoEmShared(repo, dirSkillsRelativo(repo), catalog.QUALITY_INSTALLED);
@@ -508,6 +573,17 @@ export const casosDeTeste = [
     },
     identifica: (achado) =>
       achado.check === "unresolved-token" && achado.file.includes(ORFA),
+  },
+  {
+    id: "unresolved-token",
+    condicao: "skill-orfa-sem-prova",
+    planta: (repo) => {
+      // Nome que o pacote nao distribui e marca que nao e do nome da pasta: origem desconhecida.
+      const arquivo = path.join(copiaComoOrfa(repo, POSTA_A_MAO), "SKILL.md");
+      writeFileSync(arquivo, `${readFileSync(arquivo, "utf8")}\n{{MGR_PLANTADO}}\n`, "utf8");
+    },
+    identifica: (achado) =>
+      achado.check === "unresolved-token" && achado.file.includes(POSTA_A_MAO),
   },
   {
     id: "unresolved-token",

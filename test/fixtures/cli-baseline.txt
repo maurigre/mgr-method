@@ -14,9 +14,11 @@ $ mgr install --engine claude-code --arch hexagonal --project-id x -y <REPO>
 agentes de código) Instalador v<VERSION> Criado por Mauri Reis ·
 maurigre@gmail.com mgr install Plano de instalação (autossuficiente por motor)
 projeto: x escopo: project motor(es): claude-code linguagem: — arquitetura:
-hexagonal idioma: pt-BR (saída das skills: conversa e artefatos) config →
-<REPO>/.mgr-core (manifest.json + .env) skills → <REPO>/.claude/skills skills
-(8): spec-init, spec-create, spec-execute, adr-create, code-analyzer,
+hexagonal idioma: pt-BR (saída das skills: conversa e artefatos) origem → sem
+registro config → <REPO>/.mgr-core (time: manifest.json + config.json ·
+pessoal: config.local.json + .env) .gitignore → bloco gerenciado com
+.mgr-core/config.local.json e .mgr-core/.env skills → <REPO>/.claude/skills
+skills (8): spec-init, spec-create, spec-execute, adr-create, code-analyzer,
 diagnosing-bugs, configure-agents, arch-hexagonal hooks →
 .claude/settings.local.json (detecção por sessão e hand-off antes da
 compactação, por motor) Runtime do MGR → .claude/skills/_shared/mgr (46
@@ -34,17 +36,22 @@ entram antes da primeira mensagem) Skills instaladas em <REPO>/.claude/skills.
 runtime do MGR gravado em .claude/skills/_shared/mgr (46 arquivos) agente
 mgr-draft gravado em .claude/agents/mgr-draft.md agente mgr-task gravado em
 .claude/agents/mgr-task.md agente mgr-review gravado em
-.claude/agents/mgr-review.md hooks gravados em .claude/settings.local.json:
-SessionStart · PreCompact Pronto! Comece com /spec-init e depois /spec-create
-por feature.
+.claude/agents/mgr-review.md Nenhum modelo gravado para: drafting, execution,
+review. Esses agentes herdam o modelo da sessão. Para declarar: `mgr agents
+set <intenção> --model <id>` (ou a skill configure-agents). Origem do projeto
+não gravada: o revisor a trata como desconhecida. Para gravar: `mgr origin set
+greenfield|brownfield` (o spec-init também pergunta). hooks gravados em
+.claude/settings.local.json: SessionStart · PreCompact arquivos pessoais do
+MGR ignorados em .gitignore (bloco gerenciado) Pronto! Comece com /spec-init e
+depois /spec-create por feature.
 
 $ mgr status <REPO>
-[project] MGR v<VERSION> — claude-code — self-contained-runtime projeto: x
-config: <REPO>/.mgr-core stack: linguagem=— arquitetura=hexagonal idioma:
-pt-BR skills: .claude/skills skills: spec-init, spec-create, spec-execute,
-adr-create, code-analyzer, diagnosing-bugs, configure-agents, arch-hexagonal
-gate: .claude/agents/mgr-draft.md · .claude/agents/mgr-task.md ·
-.claude/agents/mgr-review.md drafting: mgr-draft claude-code: modelo=herda o
+[project] MGR v<VERSION> — claude-code — self-contained-layered-config
+projeto: x config: <REPO>/.mgr-core stack: linguagem=— arquitetura=hexagonal
+idioma: pt-BR skills: .claude/skills skills: spec-init, spec-create,
+spec-execute, adr-create, code-analyzer, diagnosing-bugs, configure-agents,
+arch-hexagonal gate: .claude/agents/mgr-draft.md · .claude/agents/mgr-task.md
+· .claude/agents/mgr-review.md drafting: mgr-draft claude-code: modelo=herda o
 modelo da sessão esforço=high execution: mgr-task claude-code: modelo=herda o
 modelo da sessão esforço=low review: mgr-review claude-code: modelo=herda o
 modelo da sessão esforço=max leis: preâmbulo de sessão: ligado (as leis

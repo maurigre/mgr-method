@@ -286,3 +286,27 @@ export const SHARED_SOURCES = [
 export function requiredShared(skills) {
   return SHARED_SOURCES.filter((source) => source.required(skills));
 }
+
+// Tudo que o pacote distribui como skill: a união sem repetição do núcleo, das ferramentas, das
+// arquiteturas, das linguagens e das opcionais. É o conjunto contra o qual a órfã é classificada
+// (ADR-0024): uma pasta com nome daqui, sem marca de posse, é oferecida ao update com consentimento.
+export const DISTRIBUTED_SKILLS = Object.freeze([
+  ...new Set([
+    ...CORE,
+    ...TOOLING,
+    ...Object.values(ARCHITECTURES),
+    ...Object.values(LANGUAGE).flat(),
+    ...OPTIONAL,
+  ]),
+]);
+
+// Nomes que o pacote já distribuiu e deixou de distribuir. Vazio em 2026-10-08: medido com
+// `git log --all --diff-filter=D --name-only -- 'skills/*/SKILL.md'` e o mesmo com
+// `--diff-filter=R`, ambos sem saída. Um nome entra aqui quando uma skill é removida ou renomeada.
+export const LEGACY_SKILL_NAMES = Object.freeze([]);
+
+// Um nome que o pacote distribui hoje OU já distribuiu (DT-6): as duas listas são a evidência da D-5b.
+// As listas entram injetáveis só para o teste provar o ramo legado enquanto ele estiver vazio.
+export function distributesSkill(name, { distributed = DISTRIBUTED_SKILLS, legacy = LEGACY_SKILL_NAMES } = {}) {
+  return distributed.includes(name) || legacy.includes(name);
+}

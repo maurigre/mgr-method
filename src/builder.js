@@ -135,6 +135,14 @@ export function installEngine(engineSkillsDir, skills, { archRulesRef, lawsRules
     mkdirSync(path.dirname(destino), { recursive: true });
     cpSync(path.join(bundle.pkgDir("shared"), "quality", "quality-rules.md"), destino);
   }
+
+  // Marca de posse (DT-5, CA-15): ÚLTIMA escrita de cada SKILL.md, depois do roteamento da review e
+  // de toda resolução de token. Se fosse antes, o `injectFrontmatter` do roteamento acrescentaria o
+  // campo de roteamento DEPOIS da marca, e a marca deixaria de ser a última linha do frontmatter.
+  for (const name of skills) {
+    const md = path.join(engineSkillsDir, name, "SKILL.md");
+    writeFileSync(md, markSkill(readFileSync(md, "utf8"), name), "utf8");
+  }
   return dirs;
 }
 
@@ -160,6 +168,44 @@ export function installRuntime(engineSkillsDir, { version }) {
 export const AGENT_MARKER = "mgr-managed-agent";
 
 export const isOurAgent = (text) => text.includes(AGENT_MARKER);
+
+// Marca de posse da skill instalada (DT-5). Linha de comentário YAML, a última do frontmatter.
+// Posse = a linha está DENTRO do frontmatter E o nome dela é o da pasta. Corpo nunca conta.
+export const SKILL_MARKER = "mgr-managed-skill";
+
+// Frontmatter com a mesma forma de FRONTMATTER_BLOCK (`\r?\n`), aceitando também o bloco vazio.
+// Grupo 1: as linhas internas (undefined no bloco vazio). O `??` tenta PRIMEIRO o bloco vazio: com `?`
+// guloso, um `---\n---` seguido de uma régua `---` no corpo engolia o corpo como frontmatter (review P0, E-2).
+const SKILL_FRONTMATTER = /^---\r?\n(?:([\s\S]*?)\r?\n)??---/;
+const isSkillMarkLine = (line) => line.startsWith(`# ${SKILL_MARKER}:`);
+
+// Põe a marca como última linha do frontmatter. Idempotente: marca antiga sai antes da nova.
+export function markSkill(text, name) {
+  const match = text.match(SKILL_FRONTMATTER);
+  if (!match) throw new Error(`SKILL.md of ${name} has no YAML frontmatter to mark`);
+  const eol = match[0].includes("\r\n") ? "\r\n" : "\n";
+  const linhas = match[1] === undefined ? [] : match[1].split(/\r?\n/).filter((line) => !isSkillMarkLine(line));
+  linhas.push(`# ${SKILL_MARKER}: ${name}`);
+  return `---${eol}${linhas.join(eol)}${eol}---${text.slice(match[0].length)}`;
+}
+
+export function isOurSkill(text, name) {
+  const match = text.match(SKILL_FRONTMATTER);
+  if (!match || match[1] === undefined) return false;
+  return match[1].split(/\r?\n/).some((line) => line === `# ${SKILL_MARKER}: ${name}`);
+}
+
+// Diretórios de plugin do lockfile (objeto já lido, ou null): regra única de `orphanClass` e de quem a chama.
+export const lockedDirsOf = (lockfile) => new Set(Object.values(lockfile?.skills ?? {}).map((entrada) => entrada?.dir).filter(Boolean));
+
+// Classe de uma pasta em disco fora do manifesto (DT-6). Pura; a ordem é a da tabela e não muda.
+// `lockedDirs` é um Set com os diretórios do lockfile.
+export function orphanClass({ name, skillText, hasPluginManifest, lockedDirs }) {
+  if (lockedDirs.has(name) || hasPluginManifest) return "unknown";
+  if (isOurSkill(skillText, name)) return "marked";
+  if (catalog.distributesSkill(name)) return "distributed";
+  return "unknown";
+}
 
 // Resumo do gate para um motor: o que ele DE FATO vai valer ali. A decisão de capacidade
 // mora aqui, no núcleo, e não na borda — que só formata (INV-5/INV-6). `model`/`effort` vêm

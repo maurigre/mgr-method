@@ -24,7 +24,7 @@ const en = ({ invocation, lifecycle }) => ({
   planOutput: (lang) => `output:      ${lang}`,
   planOutputHint: "(skills output: conversation and artifacts)",
   planConfig: (dir) => `config   →   ${dir}`,
-  planConfigHint: "(manifest.json + .env)",
+  planConfigHint: "(team: manifest.json + config.json · personal: config.local.json + .env)",
   planSkillsDir: (dir) => `skills   →   ${dir}`,
   planSkills: (count, list) => `skills (${count}): ${list}`,
   dryRun: "(dry-run: nothing was written.)",
@@ -299,6 +299,7 @@ const en = ({ invocation, lifecycle }) => ({
     "  spec status|validate|next",
     "  agents [<intent>|set|apply]",
     "  origin set <value>",
+    "  origin [--json]",
     "  doctor",
     "  sdd-check",
     "  detect --hook <engine>",
@@ -338,6 +339,52 @@ const en = ({ invocation, lifecycle }) => ({
   agentsApplyWriting: (file) => `Rewriting the agent frontmatter in ${file}`,
   agentsApplyWritten: (file) => `Agent frontmatter rewritten: ${file}`,
 
+  // §4.2 da spec F2: config em duas camadas, update que converge e marca de posse.
+  installModelSkipped: (intents) => `No model recorded for: ${intents}. These agents inherit the session model. To declare one: \`${invocation} agents set <intent> --model <id>\` (or the configure-agents skill).`,
+  installOriginAbsent: `Project origin not recorded: the reviewer treats it as unknown. To record it: \`${invocation} origin set greenfield|brownfield\` (spec-init also asks).`,
+  updateSkillEntering: (name) => `skill entering: ${name}`,
+  updateSkillLeaving: (line) => `skill leaving: ${line}`,
+  updateOrphanOffered: (rel, ev) => `orphan offered for removal: ${rel} (${ev})`,
+  orphanEvidenceMarked: "carries the MGR ownership mark",
+  orphanEvidenceDistributed: "a name mgr-method ships, absent from the manifest and from mgr-skills.lock",
+  updateOutOfReach: (list) => `out of reach, origin unknown (not offered): ${list}`,
+  confirmRemoveOne: (rel) => `Remove ${rel}?`,
+  hookEventAdded: (file, event) => `hook event added to ${file}: ${event}`,
+  updateDivergent: (version, names) => `Still diverging from what v${version} decides: ${names}. Run \`${lifecycle} update\` in a terminal to decide item by item.`,
+  configMigrated: (version, file) => `Installation in the previous layout (v${version}, single-layer config) — projectId leaves the versioned manifest and moves to ${file}, which is personal; the skills now carry the ownership mark.`,
+  personalKeysIgnored: (file, keys) => `${file}: ${keys} belong to the team config (.mgr-core/config.json) and were ignored.`,
+  gitignoreWritten: (file) => `personal MGR files ignored in ${file} (managed block)`,
+  gitignoreDeclined: (lines) => `.gitignore left unchanged. Keep these out of version control: ${lines}`,
+  gitignoreTeamIgnored: (line) => `.gitignore line "${line}" ignores the team config (.mgr-core/config.json): the model policy and the origin will not travel with the repository.`,
+  gitignoreRemoved: (file) => `managed block removed from ${file}`,
+
+  // Textos fixados no CHECKPOINT 3 da P0.7 (lacunas L-1 a L-6).
+  projectIdPersonal: ".mgr-core/config.json: projectId is personal and belongs in .mgr-core/config.local.json; it was ignored.",
+  qModel: (intent, engine) => `Model for ${intent} (${engine})`,
+  modelOtherLabel: "other (type the identifier)",
+  modelSkipLabel: "skip — agents inherit the session model",
+  qModelIdentifier: (intent, engine) => `Model identifier for ${intent} (${engine}), empty to skip`,
+  qOrigin: "Project origin (sets the weight of review findings)",
+  originGreenfieldOption: "greenfield — new project",
+  originBrownfieldOption: "brownfield — existing code",
+  originSkipOption: "skip — not recorded",
+  planOrigin: (value) => `origin → ${value}`,
+  planOriginNotRecorded: "origin → not recorded",
+  planGitignore: ".gitignore → managed block with .mgr-core/config.local.json and .mgr-core/.env",
+  qGitignoreBlock: "Add the managed block to .gitignore (personal config stays out of version control)?",
+  originRecorded: (value) => `project origin: ${value} (.mgr-core/config.json)`,
+  originNotRecorded: `project origin: not recorded — run ${invocation} origin set greenfield|brownfield`,
+  originInvalid: (value) => `project origin: invalid value ${value} in .mgr-core/config.json`,
+  hookEventToAdd: (file, event) => `hook event to add in ${file}: ${event}`,
+  hookCommandToRewrite: (file, event) => `hook command to rewrite in ${file}: ${event}`,
+  enteringBlockedByPlugin: (rel, name) => `kept ${rel}: a plugin owns that folder, so ${name} was not installed`,
+  modelFlagNeedsEngineValues: (intent) => `--model-${intent} needs one value per engine when more than one engine takes a model: --model-${intent} claude-code=<id>,copilot=<id>`,
+  modelFlagMalformed: (intent, value) => `--model-${intent}: "${value}" is neither one model id nor a list of engine=id pairs`,
+  modelFlagNoModelEngine: (intent, list) => `--model-${intent}: none of the chosen engines (${list}) takes a model`,
+  personalKeysUnknown: (file, keys) => `${file}: ${keys} is not a recognized key and was ignored.`,
+  confirmReplaceOne: (rel, name) => `Replace ${rel} (not installed by mgr-method) with the shipped ${name}?`,
+  modelFlagEngineNotChosen: (intent, engine, chosen) => `--model-${intent}: engine ${engine} was not chosen for this install (chosen: ${chosen})`,
+
   help: `MGR — Método Governado por Rastreabilidade (Traceability-Governed Method)
 
 Usage: mgr <command> [options]
@@ -364,6 +411,7 @@ Usage: mgr <command> [options]
   agents apply     rewrites each agent's model and effort from the config, offline
   origin set       records whether the project was born from the method or is
                    legacy (<greenfield|brownfield>); it does not run ${lifecycle} update
+  origin [--json]  reads the recorded origin: recorded, absent or invalid (exit 1)
   precompact       writes the hand-off before the engine compacts the context
                    (--hook <engine>); called by the hook, not by hand
   tokens           how much the flow consumed: pass the conversation
@@ -399,7 +447,7 @@ const ptBR = ({ invocation, lifecycle }) => ({
   planOutput: (lang) => `idioma:      ${lang}`,
   planOutputHint: "(saída das skills: conversa e artefatos)",
   planConfig: (dir) => `config   →   ${dir}`,
-  planConfigHint: "(manifest.json + .env)",
+  planConfigHint: "(time: manifest.json + config.json · pessoal: config.local.json + .env)",
   planSkillsDir: (dir) => `skills   →   ${dir}`,
   planSkills: (count, list) => `skills (${count}): ${list}`,
   dryRun: "(dry-run: nada foi escrito.)",
@@ -671,6 +719,7 @@ const ptBR = ({ invocation, lifecycle }) => ({
     "  spec status|validate|next",
     "  agents [<intencao>|set|apply]",
     "  origin set <valor>",
+    "  origin [--json]",
     "  doctor",
     "  sdd-check",
     "  detect --hook <motor>",
@@ -710,6 +759,52 @@ const ptBR = ({ invocation, lifecycle }) => ({
   agentsApplyWriting: (file) => `Reescrevendo o frontmatter do agente em ${file}`,
   agentsApplyWritten: (file) => `Frontmatter do agente reescrito: ${file}`,
 
+  // §4.2 da spec F2: config em duas camadas, update que converge e marca de posse.
+  installModelSkipped: (intents) => `Nenhum modelo gravado para: ${intents}. Esses agentes herdam o modelo da sessão. Para declarar: \`${invocation} agents set <intenção> --model <id>\` (ou a skill configure-agents).`,
+  installOriginAbsent: `Origem do projeto não gravada: o revisor a trata como desconhecida. Para gravar: \`${invocation} origin set greenfield|brownfield\` (o spec-init também pergunta).`,
+  updateSkillEntering: (name) => `skill entra: ${name}`,
+  updateSkillLeaving: (line) => `skill sai: ${line}`,
+  updateOrphanOffered: (rel, ev) => `órfã oferecida para remoção: ${rel} (${ev})`,
+  orphanEvidenceMarked: "leva a marca de posse do MGR",
+  orphanEvidenceDistributed: "nome que o mgr-method distribui, ausente do manifesto e do mgr-skills.lock",
+  updateOutOfReach: (list) => `fora do alcance, origem desconhecida (não oferecida): ${list}`,
+  confirmRemoveOne: (rel) => `Remover ${rel}?`,
+  hookEventAdded: (file, event) => `evento de hook gravado em ${file}: ${event}`,
+  updateDivergent: (version, names) => `Ainda diverge do que a v${version} decide: ${names}. Rode \`${lifecycle} update\` num terminal para decidir item a item.`,
+  configMigrated: (version, file) => `Instalação no layout anterior (v${version}, config em uma camada só) — o projectId sai do manifesto versionado e passa a morar em ${file}, que é pessoal; as skills passam a levar a marca de posse.`,
+  personalKeysIgnored: (file, keys) => `${file}: ${keys} pertence(m) à config do time (.mgr-core/config.json) e foi(ram) ignorada(s).`,
+  gitignoreWritten: (file) => `arquivos pessoais do MGR ignorados em ${file} (bloco gerenciado)`,
+  gitignoreDeclined: (lines) => `.gitignore não alterado. Mantenha fora do versionamento: ${lines}`,
+  gitignoreTeamIgnored: (line) => `A linha "${line}" do .gitignore ignora a config do time (.mgr-core/config.json): a política de modelo e a origem não vão viajar com o repositório.`,
+  gitignoreRemoved: (file) => `bloco gerenciado removido de ${file}`,
+
+  // Textos fixados no CHECKPOINT 3 da P0.7 (lacunas L-1 a L-6).
+  projectIdPersonal: ".mgr-core/config.json: projectId é pessoal e mora em .mgr-core/config.local.json; foi ignorado.",
+  qModel: (intent, engine) => `Modelo para ${intent} (${engine})`,
+  modelOtherLabel: "outro (digitar o identificador)",
+  modelSkipLabel: "pular — os agentes herdam o modelo da sessão",
+  qModelIdentifier: (intent, engine) => `Identificador do modelo para ${intent} (${engine}), vazio para pular`,
+  qOrigin: "Origem do projeto (define o peso dos achados da review)",
+  originGreenfieldOption: "greenfield — projeto novo",
+  originBrownfieldOption: "brownfield — código existente",
+  originSkipOption: "pular — fica sem registro",
+  planOrigin: (value) => `origem → ${value}`,
+  planOriginNotRecorded: "origem → sem registro",
+  planGitignore: ".gitignore → bloco gerenciado com .mgr-core/config.local.json e .mgr-core/.env",
+  qGitignoreBlock: "Gravar o bloco gerenciado no .gitignore (a config pessoal fica fora do versionamento)?",
+  originRecorded: (value) => `origem do projeto: ${value} (.mgr-core/config.json)`,
+  originNotRecorded: `origem do projeto: sem registro — rode ${invocation} origin set greenfield|brownfield`,
+  originInvalid: (value) => `origem do projeto: valor inválido ${value} em .mgr-core/config.json`,
+  hookEventToAdd: (file, event) => `evento de hook a gravar em ${file}: ${event}`,
+  hookCommandToRewrite: (file, event) => `comando de hook a reescrever em ${file}: ${event}`,
+  enteringBlockedByPlugin: (rel, name) => `mantida ${rel}: um plugin é dono dessa pasta, então ${name} não foi instalada`,
+  modelFlagNeedsEngineValues: (intent) => `--model-${intent} exige um valor por motor quando mais de um motor aceita modelo: --model-${intent} claude-code=<id>,copilot=<id>`,
+  modelFlagMalformed: (intent, value) => `--model-${intent}: "${value}" não é um id de modelo nem uma lista de pares motor=id`,
+  modelFlagNoModelEngine: (intent, list) => `--model-${intent}: nenhum dos motores escolhidos (${list}) aceita modelo`,
+  personalKeysUnknown: (file, keys) => `${file}: ${keys} não é chave reconhecida e foi ignorada.`,
+  confirmReplaceOne: (rel, name) => `Substituir ${rel} (não instalada pelo mgr-method) pela ${name} do pacote?`,
+  modelFlagEngineNotChosen: (intent, engine, chosen) => `--model-${intent}: o motor ${engine} não foi escolhido nesta instalação (escolhidos: ${chosen})`,
+
   help: `MGR — Método Governado por Rastreabilidade
 
 Uso: mgr <comando> [opções]
@@ -736,6 +831,7 @@ Uso: mgr <comando> [opções]
   agents apply     reescreve model e esforço de cada agente a partir do config, sem rede
   origin set       registra se o projeto nasceu do método ou é legado
                    (<greenfield|brownfield>); não roda o ${lifecycle} update
+  origin [--json]  lê a origem gravada: recorded, absent ou invalid (sai 1)
   precompact       grava o hand-off antes de o motor compactar o contexto
                    (--hook <motor>); chamado pelo hook, não à mão
   tokens           quanto o fluxo consumiu: passe o transcript da conversa e,

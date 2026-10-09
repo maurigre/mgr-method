@@ -127,10 +127,12 @@ test("install autossuficiente: só o subconjunto na pasta do motor, sem .mgr-cor
   assert.ok(archMd.includes("_shared/arch/cross-cutting-rules.md"), "deve apontar para a fonte co-locada");
 
   const man = JSON.parse(readFileSync(path.join(core, "manifest.json"), "utf8"));
-  assert.equal(man.model, "self-contained-runtime");
+  assert.equal(man.model, "self-contained-layered-config");
   assert.equal(man.architecture, "hexagonal");
   assert.equal(man.language, "java");
-  assert.ok(man.projectId, "deve gravar projectId");
+  const local = JSON.parse(readFileSync(path.join(core, "config.local.json"), "utf8"));
+  assert.ok(local.projectId, "deve gravar projectId na camada pessoal");
+  assert.equal(man.projectId, undefined, "o manifesto não grava mais projectId");
 });
 
 test("dois motores: cada um autossuficiente e independente", () => {
@@ -159,7 +161,7 @@ test("migra instalação antiga (runtime-launcher) para o novo layout", () => {
   assert.ok(res.migrated, "deve reportar migração");
   assert.ok(!existsSync(path.join(core, "skills")), "conteúdo antigo (.mgr-core/skills) deve sumir");
   assert.ok(existsSync(path.join(core, "manifest.json")), ".mgr-core permanece como config");
-  assert.equal(JSON.parse(readFileSync(path.join(core, "manifest.json"), "utf8")).model, "self-contained-runtime");
+  assert.equal(JSON.parse(readFileSync(path.join(core, "manifest.json"), "utf8")).model, "self-contained-layered-config");
   const md = readFileSync(path.join(repo, ".claude/skills/spec-init/SKILL.md"), "utf8");
   assert.ok(md.includes("name: spec-init") && !md.includes("launcher antigo"));
 });
@@ -178,11 +180,12 @@ test("uninstall remove skills e preserva docs/specs", () => {
   assert.ok(existsSync(path.join(repo, "specs", "keep")));
 });
 
-test("projectId explícito vai para o manifest e o .env", () => {
+test("projectId explícito vai para config.local.json e o .env, não para o manifest", () => {
   const repo = diretorioTemporario();
   installer.execute(installer.planInstall(["claude-code"], "project", repo, { architecture: "hexagonal", projectId: "nestapp-workspace" }));
   const man = JSON.parse(readFileSync(path.join(repo, ".mgr-core", "manifest.json"), "utf8"));
-  assert.equal(man.projectId, "nestapp-workspace");
+  assert.equal(man.projectId, undefined);
+  assert.equal(JSON.parse(readFileSync(path.join(repo, ".mgr-core", "config.local.json"), "utf8")).projectId, "nestapp-workspace");
   assert.match(readFileSync(path.join(repo, ".mgr-core", ".env"), "utf8"), /MGR_PROJECT_ID=nestapp-workspace/);
 });
 
@@ -242,7 +245,7 @@ test("detect, installs e detectPrior enxergam a instalação", () => {
 
   assert.ok(installer.detect(repo).some((f) => f.path.endsWith(path.join(".claude", "skills")) && f.count >= 1));
   const prior = installer.detectPrior("project", repo);
-  assert.ok(prior && prior.model === "self-contained-runtime");
+  assert.ok(prior && prior.model === "self-contained-layered-config");
   assert.equal(installer.installs("project", repo).length, 1);
 });
 
@@ -422,7 +425,8 @@ test("collectInstallAnswers: não pergunta o que já veio por flag (--all-skills
   const out = await collectInstallAnswers(
     naoPergunta,
     { engines: ["copilot"], scope: "global", projectId: "x", userLanguage: "en" },
-    { repo, allSkills: true }
+    // As perguntas de modelo e origem da F2 ficam fora deste caso: ele guarda o que veio por flag.
+    { repo, allSkills: true, engineDescriptors: {}, originRecorded: true }
   );
   assert.deepEqual(out.engines, ["copilot"]);
   assert.equal(out.scope, "global");
@@ -1432,7 +1436,7 @@ test("no copilot o desvio é instrução no corpo, sem tocar no frontmatter", ()
   assert.match(roteada, /`task`/);
 });
 
-test("com o gate desligado a code-analyzer instalada só sofre as resoluções de token", () => {
+test("com o gate desligado a code-analyzer instalada só sofre as resoluções de token e a marca de posse", () => {
   const comGate = path.join(diretorioTemporario(), "skills");
   const semGate = path.join(diretorioTemporario(), "skills");
   const gate = gateDefaults();
@@ -1447,8 +1451,9 @@ test("com o gate desligado a code-analyzer instalada só sofre as resoluções d
   // garantir é que nenhuma injeção de ROTEAMENTO acontece — não que o arquivo saia intocado.
   assert.equal(
     instaladaSemGate,
-    resolveRuntime(resolveLaws(resolveUserLanguage(fonte, undefined), path.join("_shared", "laws", "execution-laws.md")), undefined),
-    "gate desligado: só as resoluções de token, nenhuma injeção de roteamento (CONSTITUTION §2.7)",
+    resolveRuntime(resolveLaws(resolveUserLanguage(fonte, undefined), path.join("_shared", "laws", "execution-laws.md")), undefined)
+      .replace("\n---", "\n# mgr-managed-skill: code-analyzer\n---"),
+    "gate desligado: só as resoluções de token e a marca de posse, nenhuma injeção de roteamento (CONSTITUTION §2.7)",
   );
   assert.ok(!instaladaSemGate.includes("context: fork"), "gate desligado não injeta fork");
   assert.ok(!instaladaSemGate.includes("Delegation (copilot)"), "gate desligado não injeta delegação");

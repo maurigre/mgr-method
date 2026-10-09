@@ -10,6 +10,7 @@ import { AGENTS, INHERIT, INTENTS, LAWS_SHARED } from "./catalog.js";
 import * as engines from "./engines/index.js";
 
 export const CONFIG_NAME = "config.json";
+export const LOCAL_CONFIG_NAME = "config.local.json";
 
 const KEBAB_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const CHECKSUM_RE = /^sha256-[0-9a-f]{64}$/;
@@ -250,6 +251,13 @@ export function writeAgentPolicy(coreDir, intent, { model, effort } = {}) {
 // escrito convidaria a grava-lo como default, e default silencioso e exatamente o que a fatia proibe.
 export const ORIGINS = ["greenfield", "brownfield"];
 
+// Leitura da origem em três estados (DT-15). `invalid` carrega o valor cru para quem o mostrar.
+export function readOrigin(coreDir) {
+  const value = readConfig(coreDir).origin;
+  if (value === undefined) return { state: "absent" };
+  return ORIGINS.includes(value) ? { state: "recorded", origin: value } : { state: "invalid", value };
+}
+
 export function writeOrigin(coreDir, valor) {
   if (!ORIGINS.includes(valor)) {
     throw new Error(`unknown project origin: ${JSON.stringify(valor)} (expected ${ORIGINS.join(" | ")})`);
@@ -312,7 +320,36 @@ function resolveBudget(configured) {
 }
 
 export function readAgents(coreDir) {
+  return agentsFromConfig(readConfig(coreDir));
+}
+
+// O que o install VAI gravar, calculado sem gravar (P1.2): `models` (`{ [intent]: { [engine]: id } }`)
+// sobreposto em memória ao config lido, com o mesmo merge de dois níveis do `writeAgentPolicy` e a
+// MESMA leitura/validação do `readAgents` (`agentsFromConfig`), para o plano que a pessoa confirma
+// ser a política que será escrita. Intenção desconhecida em `models` falha como no escritor.
+export function previewAgents(coreDir, models = {}) {
   const config = readConfig(coreDir);
+  const answered = Object.entries(models ?? {}).filter(([, byEngine]) => isPlainObject(byEngine) && Object.keys(byEngine).length > 0);
+  for (const [intent] of answered) {
+    if (!INTENTS.includes(intent)) {
+      throw new Error(`unknown agent intent: ${JSON.stringify(intent)} (expected ${INTENTS.join(" | ")})`);
+    }
+  }
+  // `agents` que não é objeto não recebe sobreposição: segue intacto para a validação recusá-lo.
+  if (!answered.length || (config.agents !== undefined && !isPlainObject(config.agents))) {
+    return agentsFromConfig(config);
+  }
+  const agents = { ...(config.agents ?? {}) };
+  for (const [intent, byEngine] of answered) {
+    const atual = agents[intent] ?? {};
+    // Valor de `agents.<intent>` que não é objeto também segue intacto, para a validação recusar.
+    if (!isPlainObject(atual)) continue;
+    agents[intent] = { ...atual, model: { ...(isPlainObject(atual.model) ? atual.model : {}), ...byEngine } };
+  }
+  return agentsFromConfig({ ...config, agents });
+}
+
+function agentsFromConfig(config) {
   const configured = config.agents;
   if (configured !== undefined && !isPlainObject(configured)) {
     throw new Error(`invalid agents: ${JSON.stringify(configured)} (expected an object)`);
@@ -362,6 +399,67 @@ export function readLawsPreamble(coreDir) {
     throw new Error(`invalid lawsPreamble.enabled: ${JSON.stringify(preamble.enabled)} (expected true | false)`);
   }
   return preamble;
+}
+
+// Camada PESSOAL (DT-1, DT-2): `.mgr-core/config.local.json`, fora do versionamento (bloco do
+// `.gitignore`, DT-4). As chaves são disjuntas da camada do time: chave do time escrita aqui é
+// ignorada e avisada, e nenhum leitor de política lê este arquivo — `readAgents`, `readDetectionMode`
+// e `readLawsPreamble` continuam lendo só `config.json`. A precedência é por construção.
+export const PERSONAL_KEYS = Object.freeze(["projectId"]);
+export const TEAM_KEYS = Object.freeze([
+  "agents", "reviewGate", "origin", "registries", "detectionMode", "lawsPreamble", "architecture", "language", "userLanguage",
+]);
+
+const localConfigPath = (coreDir) => path.join(coreDir, LOCAL_CONFIG_NAME);
+
+// Lê o arquivo pessoal como objeto. Ausente = objeto vazio. JSON inválido nomeia o ARQUIVO, porque o
+// autor edita esse arquivo à mão e "not valid JSON" sem caminho não diz onde procurar.
+function readLocalObject(coreDir) {
+  const file = localConfigPath(coreDir);
+  if (!existsSync(file)) return {};
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(file, "utf8"));
+  } catch (error) {
+    throw new Error(`${file} is not valid JSON: ${error.message}`, { cause: error });
+  }
+  if (!isPlainObject(parsed)) throw new Error(`${file} must contain a JSON object`);
+  return parsed;
+}
+
+// Devolve o projectId da camada pessoal e o que foi IGNORADO nela, discriminado em duas listas para o
+// chamador avisar com o nome do arquivo e da chave. `projectId` ausente não aparece na forma.
+export function readPersonal(coreDir) {
+  const local = readLocalObject(coreDir);
+  const chaves = Object.keys(local);
+  const ignoredTeam = chaves.filter((chave) => TEAM_KEYS.includes(chave));
+  const ignoredUnknown = chaves.filter((chave) => !PERSONAL_KEYS.includes(chave) && !TEAM_KEYS.includes(chave));
+  if (local.projectId === undefined) return { ignoredTeam, ignoredUnknown };
+  if (typeof local.projectId !== "string" || local.projectId === "") {
+    throw new Error(`invalid projectId in ${localConfigPath(coreDir)}: ${JSON.stringify(local.projectId)} (expected a non-empty string)`);
+  }
+  return { projectId: local.projectId, ignoredTeam, ignoredUnknown };
+}
+
+// Escritor único de `config.local.json`. Read-modify-write, como `writeOrigin`: as outras chaves do
+// arquivo (inclusive as de time que ele já tinha, que continuam sendo avisadas) sobrevivem à escrita.
+// Se o arquivo existente for inválido, lança ANTES de gravar, para não apagar o que o autor escreveu.
+export function writePersonal(coreDir, { projectId } = {}) {
+  if (typeof projectId !== "string" || projectId === "") {
+    throw new Error(`invalid projectId: ${JSON.stringify(projectId)} (expected a non-empty string)`);
+  }
+  const local = readLocalObject(coreDir);
+  mkdirSync(coreDir, { recursive: true });
+  const dest = localConfigPath(coreDir);
+  writeFileSync(dest, JSON.stringify({ ...local, projectId }, null, 2) + "\n", "utf8");
+  return dest;
+}
+
+// Lado "simetria" da DT-2: `projectId` escrito no config do TIME é ignorado pelo método, e este
+// leitor diz quais chaves pessoais estão no lugar errado para o `install`/`update`/`status` avisarem.
+export function misplacedTeamKeys(coreDir) {
+  const config = readConfig(coreDir);
+  return PERSONAL_KEYS.filter((chave) => config[chave] !== undefined);
 }
 
 // Caminho da fonte de leis anunciado no preâmbulo quando não há referência resolvida.

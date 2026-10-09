@@ -3,7 +3,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import * as bundle from "./bundle.js";
 import * as catalog from "./catalog.js";
 import * as engineDescriptors from "./engines/index.js";
-import { routeReviewSkill } from "./builder.js";
+import { lockedDirsOf, orphanClass, routeReviewSkill } from "./builder.js";
 import { diff } from "./lockfile.js";
 
 // Verificacoes de integridade da instalacao (U2 do programa de superioridade).
@@ -47,6 +47,13 @@ export const SEM_REMEDIACAO = "sem-remediacao";
 export const SKILL_DECLARADA = "skill-declarada";
 export const SKILL_ORFA = "skill-orfa";
 export const FONTE_COMPARTILHADA = "fonte-compartilhada";
+// Orfa de origem DESCONHECIDA (classe `unknown`): herda o "sem remediacao" que toda orfa tinha antes.
+// `SKILL_ORFA` passou a significar orfa CANDIDATA (`marked`/`distributed`), que o `mgr update` oferece
+// remover com consentimento (DT-14).
+export const SKILL_ORFA_SEM_PROVA = "skill-orfa-sem-prova";
+
+// Classes de `orphanClass` (src/builder.js) para as quais o `update` tem o que oferecer.
+const CLASSES_CANDIDATAS = ["marked", "distributed"];
 
 const achado = ({ check, severity, file, expected, found, fix }) => ({
   check, severity, file, expected, found, fix,
@@ -62,8 +69,12 @@ const achado = ({ check, severity, file, expected, found, fix }) => ({
  * iguais. A classe cuja origem o metodo CONHECIA — skill que ele mesmo instalou e deixou de declarar
  * — passou a ser tratada na origem, pelo `install`, com consentimento e antes de o manifesto ser
  * reescrito; por isso ela ja nao chega ate aqui.
+ *
+ * `classOf(name)` e injetado (a leitura de disco e do `diagnose`): `marked` e `distributed` sao
+ * candidatas e nomeiam `mgr update`, que pergunta item a item; qualquer outro valor, inclusive o
+ * default `unknown`, segue sem remediacao.
  */
-export function orphanSkills({ declared, onDisk, skillsDir }) {
+export function orphanSkills({ declared, onDisk, skillsDir, classOf = () => "unknown" }) {
   return onDisk
     .filter((name) => !declared.includes(name))
     .map((name) => achado({
@@ -72,7 +83,7 @@ export function orphanSkills({ declared, onDisk, skillsDir }) {
       file: `${skillsDir}/${name}`,
       expected: "declarada no manifesto, ou ausente do disco",
       found: "em disco e fora do manifesto",
-      fix: NO_FIX,
+      fix: CLASSES_CANDIDATAS.includes(classOf(name)) ? FIX_UPDATE : NO_FIX,
     }));
 }
 
@@ -177,12 +188,12 @@ const corpoDe = (texto) => {
 // ela teria de mudar nos dois ao mesmo tempo — a duplicacao que a `QUAL-6` reprova, e o mesmo
 // formato de risco que esta fatia existe para eliminar.
 function remediacaoDaCondicao(condicao) {
-  const validas = [SKILL_DECLARADA, SKILL_ORFA, FONTE_COMPARTILHADA];
+  const validas = [SKILL_DECLARADA, SKILL_ORFA, SKILL_ORFA_SEM_PROVA, FONTE_COMPARTILHADA];
   if (!condicao || !validas.includes(condicao)) {
     throw new Error(`condicao invalida: "${condicao}"; valores validos sao ${validas.join(", ")}`);
   }
-  // Skill orfa nao tem remediacao: o `mgr update` so re-sincroniza o que o manifesto declara.
-  return condicao === SKILL_ORFA ? NO_FIX : FIX_UPDATE;
+  // So a orfa de origem desconhecida fica sem remediacao: a candidata o `mgr update` oferece remover.
+  return condicao === SKILL_ORFA_SEM_PROVA ? NO_FIX : FIX_UPDATE;
 }
 
 /**
@@ -374,7 +385,19 @@ export const CHECKS = [
         condicao: "em-disco",
         fix: NO_FIX,
         prova: SEM_REMEDIACAO,
-        razao: "no momento do diagnóstico ninguém sabe de onde uma órfã veio — o manifesto guarda o conjunto declarado, nunca o histórico; a classe de origem conhecida passou a ser tratada no `install`",
+        razao: "origem desconhecida: nome que o pacote não distribui, ou travado no lockfile, ou com `mgr-manifest.json`; o manifesto guarda o conjunto declarado, nunca o histórico",
+      },
+      {
+        condicao: "marcada",
+        fix: FIX_UPDATE,
+        prova: PROVA_FUNCIONA,
+        consentimento: "-y",
+      },
+      {
+        condicao: "distribuida-sem-marca",
+        fix: FIX_UPDATE,
+        prova: PROVA_FUNCIONA,
+        consentimento: "-y",
       },
     ],
   },
@@ -422,10 +445,15 @@ export const CHECKS = [
       },
       {
         condicao: "skill-orfa",
+        fix: FIX_UPDATE,
+        prova: PROVA_FUNCIONA,
+        consentimento: "-y",
+      },
+      {
+        condicao: "skill-orfa-sem-prova",
         fix: NO_FIX,
-        prova: PROVA_NAO_FUNCIONA,
-        candidato: FIX_UPDATE,
-        razao: "mgr update só re-sincroniza as skills declaradas no manifesto, então não alcança órfã; medido em 2026-09-24, rodando o comando e conferindo que o achado permanece",
+        prova: SEM_REMEDIACAO,
+        razao: "órfã de origem desconhecida (`unknown`): o `mgr update` não a oferece para remoção, então não há comando candidato",
       },
       {
         condicao: "fonte-compartilhada",
@@ -450,10 +478,15 @@ export const CHECKS = [
       },
       {
         condicao: "skill-orfa",
+        fix: FIX_UPDATE,
+        prova: PROVA_FUNCIONA,
+        consentimento: "-y",
+      },
+      {
+        condicao: "skill-orfa-sem-prova",
         fix: NO_FIX,
-        prova: PROVA_NAO_FUNCIONA,
-        candidato: FIX_UPDATE,
-        razao: "mgr update só re-sincroniza as skills declaradas no manifesto, então não alcança órfã; medido em 2026-09-24, rodando o comando e conferindo que o achado permanece",
+        prova: SEM_REMEDIACAO,
+        razao: "órfã de origem desconhecida (`unknown`): o `mgr update` não a oferece para remoção, então não há comando candidato",
       },
       {
         condicao: "fonte-compartilhada",
@@ -747,8 +780,35 @@ export function diagnose(repo, { packageVersion, sources } = {}) {
     ? routeReviewSkill(engine, fonte)
     : fonte);
 
+  // Lido uma vez: classifica as orfas aqui e alimenta o `lockfileDrift` mais abaixo.
+  const travado = leJson(path.join(repo, "mgr-skills.lock"));
+  const lockedDirs = lockedDirsOf(travado);
+
+  // Classe de cada orfa, lida do disco (DT-6) e SEM `bundle`: roda no runtime do projeto. Em mais de
+  // um motor a classe mais cautelosa vence — qualquer arvore dizendo `unknown` torna a orfa `unknown`,
+  // porque oferecer remover o que alguma copia nao prova ser do metodo repete o defeito da 0.6.0-beta.1.
+  const classeDaOrfa = (nome) => {
+    const classes = arvores
+      .map(({ dir }) => path.join(dir, nome))
+      .filter((pasta) => existsSync(path.join(pasta, "SKILL.md")))
+      .map((pasta) => orphanClass({
+        name: nome,
+        skillText: readFileSync(path.join(pasta, "SKILL.md"), "utf8"),
+        hasPluginManifest: existsSync(path.join(pasta, "mgr-manifest.json")),
+        lockedDirs,
+      }));
+    return classes.length && !classes.includes("unknown") ? classes[0] : "unknown";
+  };
+  const classesDasOrfas = new Map(emDisco.filter((n) => !declaradas.includes(n)).map((n) => [n, classeDaOrfa(n)]));
+  const candidata = (nome) => CLASSES_CANDIDATAS.includes(classesDasOrfas.get(nome));
+
   const achados = [
-    ...orphanSkills({ declared: declaradas, onDisk: emDisco, skillsDir: relativoDoDir }),
+    ...orphanSkills({
+      declared: declaradas,
+      onDisk: emDisco,
+      skillsDir: relativoDoDir,
+      classOf: (nome) => classesDasOrfas.get(nome) ?? "unknown",
+    }),
     ...missingSkills({ declared: declaradas, onDisk: emDisco, skillsDir: relativoDoDir }),
     ...missingAgents({
       declared: manifesto.agents ?? [],
@@ -794,7 +854,9 @@ export function diagnose(repo, { packageVersion, sources } = {}) {
       const relativo = path.relative(repo, instalado);
       // Derivacao do discriminador e literal: mesma variavel que o `mgr update` consome em `src/installer.js`
       // para decidir o que re-sincronizar. Nao e palpite — e campo do manifesto.
-      const condicaoDaSkill = declaradas.includes(nome) ? SKILL_DECLARADA : SKILL_ORFA;
+      const condicaoDaSkill = declaradas.includes(nome)
+        ? SKILL_DECLARADA
+        : (candidata(nome) ? SKILL_ORFA : SKILL_ORFA_SEM_PROVA);
       achados.push(...unresolvedTokens({ installed: conteudo, file: relativo, condicao: condicaoDaSkill }));
       // Lazy de proposito: com `sources: null` esta linha nao pode tocar `bundle.skillsDir()`.
       const daFonte = corpoIndisponivel.length ? null : path.join(bundle.skillsDir(), nome, "SKILL.md");
@@ -894,7 +956,6 @@ export function diagnose(repo, { packageVersion, sources } = {}) {
 
   // Os plugins REALMENTE em disco. Com a lista fixa em `[]`, todo plugin travado virava "ausente" e
   // o projeto com lockfile legitimo saia com defeito por plugin — alarme falso em caso normal.
-  const travado = leJson(path.join(repo, "mgr-skills.lock"));
   achados.push(...lockfileDrift({
     lockfile: travado,
     installedPlugins: pluginsEmDisco(travado, dirDasSkills),

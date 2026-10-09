@@ -92,7 +92,7 @@ const BASELINE = JSON.parse(
   readFileSync(new URL("./fixtures/messages-baseline.json", import.meta.url), "utf8"),
 );
 const BASELINE_ARGS = [["a", "b", "c", "d"], [["x"], ["y"], 2, 3]];
-const DELIBERADAS = ["agentsEffortNote", "agentsSetEffortEffect", "help"];
+const DELIBERADAS = ["agentsEffortNote", "agentsSetEffortEffect", "help", "planConfigHint"];
 const EFFORT_KEYS = ["agentsEffortNote", "agentsSetEffortEffect"];
 
 function snapshotWithBaselineArgs(table) {

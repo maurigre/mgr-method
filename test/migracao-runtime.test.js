@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { detectPrior, execute, needsRuntimeMigration, planInstall } from "../src/installer.js";
-import { MODEL_RUNTIME } from "../src/manifest.js";
+import { MODEL_RUNTIME, MODEL_LAYERED } from "../src/manifest.js";
 import { rewriteOwnedHooks } from "../src/hooks.js";
 import { spawnSync } from "node:child_process";
 
@@ -48,10 +48,10 @@ function writeForeignOnlySettings(repo) {
 
 const readModel = (repo) => JSON.parse(readFileSync(path.join(repo, ".mgr-core", "manifest.json"), "utf8")).model;
 
-test("should write the self-contained-runtime model on a fresh install", () => {
+test("should write the layered-config model on a fresh install", () => {
   withRepo((repo) => {
     execute(planInstall(["claude-code"], "project", repo, { all: true }));
-    assert.equal(readModel(repo), MODEL_RUNTIME);
+    assert.equal(readModel(repo), MODEL_LAYERED);
     assert.equal(MODEL_RUNTIME, "self-contained-runtime");
   });
 });
@@ -62,7 +62,7 @@ test("should add the runtime and upgrade the model when installing over a self-c
     assert.equal(existsSync(path.join(repo, SKILLS_DIR, ...RUNTIME_ENTRY)), false);
     execute(planInstall(["claude-code"], "project", repo, { all: true }));
     assert.ok(existsSync(path.join(repo, SKILLS_DIR, ...RUNTIME_ENTRY)));
-    assert.equal(readModel(repo), MODEL_RUNTIME);
+    assert.equal(readModel(repo), MODEL_LAYERED);
   });
 });
 
@@ -94,7 +94,7 @@ test("should still migrate a runtime-launcher install and finish with the runtim
     assert.equal(existsSync(path.join(core, "skills")), false);
     assert.equal(existsSync(path.join(core, "shared")), false);
     assert.ok(existsSync(path.join(repo, SKILLS_DIR, ...RUNTIME_ENTRY)));
-    assert.equal(readModel(repo), MODEL_RUNTIME);
+    assert.equal(readModel(repo), MODEL_LAYERED);
   });
 });
 
@@ -105,7 +105,7 @@ test("should return null and create nothing when rewriting hooks of a missing fi
   });
 });
 
-test("should rewrite only the existing MGR hook on update, keep foreign entries and create no new event", () => {
+test("should rewrite the existing MGR hook on update, add the missing PreCompact event and keep foreign entries", () => {
   withRepo((repo) => {
     writeOldManifest(repo, "self-contained");
     const alheia = { matcher: "startup", hooks: [{ type: "command", command: "echo alheio", timeout: 3 }] };
@@ -118,10 +118,12 @@ test("should rewrite only the existing MGR hook on update, keep foreign entries 
     assert.equal(updateRun.status, 0, updateRun.stderr);
 
     assert.ok(existsSync(path.join(repo, SKILLS_DIR, ...RUNTIME_ENTRY)));
-    assert.equal(readModel(repo), MODEL_RUNTIME);
+    assert.equal(readModel(repo), MODEL_LAYERED);
     const settings = JSON.parse(readFileSync(file, "utf8"));
-    assert.equal(settings.hooks.PreCompact, undefined);
-    assert.deepEqual(Object.keys(settings.hooks), ["SessionStart"]);
+    assert.deepEqual(Object.keys(settings.hooks).sort(), ["PreCompact", "SessionStart"]);
+    const precompact = settings.hooks.PreCompact[0].hooks[0];
+    assert.ok(precompact.command.includes("mgr-session-hook"));
+    assert.ok(precompact.command.includes(path.join(repo, SKILLS_DIR, ...RUNTIME_ENTRY)));
     assert.equal(JSON.stringify(settings.hooks.SessionStart[0]), JSON.stringify(alheia));
     const novo = settings.hooks.SessionStart[1].hooks[0];
     assert.ok(novo.command.includes(path.join(repo, SKILLS_DIR, ...RUNTIME_ENTRY)));
@@ -130,7 +132,7 @@ test("should rewrite only the existing MGR hook on update, keep foreign entries 
     assert.equal(novo.timeout, 5);
     assert.match(updateRun.stdout, /previous layout/);
     assert.match(stripVTControlCharacters(updateRun.stdout), /hooks written to \.claude\/settings\.local\.json: SessionStart\n/);
-    assert.doesNotMatch(updateRun.stdout, /PreCompact/);
+    assert.match(stripVTControlCharacters(updateRun.stdout), /hook event added to \.claude\/settings\.local\.json: PreCompact\n/);
   });
 });
 
@@ -163,7 +165,7 @@ test("should migrate on update without reporting a hook write when the settings 
 
     assert.equal(updateRun.status, 0, updateRun.stderr);
     assert.ok(existsSync(path.join(repo, SKILLS_DIR, ...RUNTIME_ENTRY)));
-    assert.equal(readModel(repo), MODEL_RUNTIME);
+    assert.equal(readModel(repo), MODEL_LAYERED);
     assert.doesNotMatch(updateRun.stdout, /hooks written to/);
     assert.deepEqual(readFileSync(file), before);
   });
@@ -183,7 +185,7 @@ test("should announce the migration before the runtime plan line and finish migr
     assert.ok(planLine > announcement, output);
     const runtimeFile = path.join(repo, SKILLS_DIR, ...RUNTIME_ENTRY);
     assert.ok(existsSync(runtimeFile));
-    assert.equal(readModel(repo), MODEL_RUNTIME);
+    assert.equal(readModel(repo), MODEL_LAYERED);
     const settings = JSON.parse(readFileSync(path.join(repo, ".claude", "settings.local.json"), "utf8"));
     const sessionStart = JSON.stringify(settings.hooks.SessionStart);
     assert.ok(sessionStart.includes(runtimeFile));
@@ -208,7 +210,7 @@ test("should migrate the CA-16 starting point on install, announce before the pl
     assert.ok(output.indexOf("MGR runtime →") > announcement, output);
 
     const manifest = JSON.parse(readFileSync(path.join(repo, ".mgr-core", "manifest.json"), "utf8"));
-    assert.equal(manifest.model, MODEL_RUNTIME);
+    assert.equal(manifest.model, MODEL_LAYERED);
     for (const engineDir of [".claude", ".github"]) {
       const runtimeDir = path.join(repo, engineDir, "skills", "_shared", "mgr");
       assert.ok(existsSync(path.join(runtimeDir, "bin", "mgr-runtime.js")), engineDir);

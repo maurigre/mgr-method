@@ -6,6 +6,7 @@ Deciders: Mauri Reis
 ## Status
 
 Proposed. Revisa a decisao 8 do ADR-0015 e a ultima frase da decisao 3 do ADR-0017.
+O gatilho de revisao "a F2 decidir camadas de config versionadas" foi atendido pelo ADR-0024 (Proposed).
 
 ## Context
 

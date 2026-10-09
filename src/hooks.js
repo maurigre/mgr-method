@@ -112,6 +112,16 @@ export function writeHook(engine, repo, { command }) {
   return writeSettings(file, atualizado);
 }
 
+// Substitui por `novo` toda string que carrega o marcador do MGR, em qualquer profundidade da entrada.
+function trocar(valor, novo) {
+  if (typeof valor === "string") return valor.includes(HOOK_MARKER) ? novo : valor;
+  if (Array.isArray(valor)) return valor.map((item) => trocar(item, novo));
+  if (valor && typeof valor === "object") {
+    return Object.fromEntries(Object.entries(valor).map(([k, v]) => [k, trocar(v, novo)]));
+  }
+  return valor;
+}
+
 // Troca o comando das entradas do MGR que JÁ existem, e só dele (DT-13): matcher, timeout e
 // envelope da própria entrada ficam, entrada alheia fica byte a byte, e evento ausente NÃO é criado
 // (gravar evento novo é F2). A posse é provada pelo marcador, como no `removeHook`. Devolve o arquivo
@@ -121,15 +131,6 @@ export function rewriteOwnedHooks(engine, repo, { command }) {
   if (!existsSync(file)) return null;
 
   const settings = readSettings(file);
-  const trocar = (valor, novo) => {
-    if (typeof valor === "string") return valor.includes(HOOK_MARKER) ? novo : valor;
-    if (Array.isArray(valor)) return valor.map((item) => trocar(item, novo));
-    if (valor && typeof valor === "object") {
-      return Object.fromEntries(Object.entries(valor).map(([k, v]) => [k, trocar(v, novo)]));
-    }
-    return valor;
-  };
-
   const hooks = { ...settings.hooks };
   const events = [];
   for (const { event, command: comando } of eventosDe(engine, command)) {
@@ -139,6 +140,59 @@ export function rewriteOwnedHooks(engine, repo, { command }) {
   }
   if (!events.length) return null;
   return { file: writeSettings(file, { ...settings, hooks }), events };
+}
+
+// Eventos que o MGR grava neste motor e em que o arquivo JÁ tem entrada do MGR. É a prova de posse do
+// `update` (DT-12): vazio significa "o MGR não instalou hook aqui" (p.ex. `--no-hooks`).
+const eventosComEntradaNossa = (engine, settings) =>
+  eventosDe(engine, "").map(({ event }) => event)
+    .filter((event) => Array.isArray(settings.hooks?.[event]) && settings.hooks[event].some(isOurs));
+
+// CÁLCULO PURO (L-5, X-25): o que o `syncOwnedHooks` faria, sem escrever nada, para o plano do `update`
+// anunciar ANTES de gravar. `added` são os eventos que seriam acrescentados; `rewrite`, os eventos com
+// entrada do MGR cujo comando vai MUDAR para `command` (vazio se `command` faltar). Sem arquivo ou sem
+// entrada do MGR, nada a fazer.
+export function planOwnedHooks(engine, repo, { command } = {}) {
+  const file = hookFilePath(engine, repo);
+  if (!existsSync(file)) return { added: [], rewrite: [] };
+  const settings = readSettings(file);
+  const donos = eventosComEntradaNossa(engine, settings);
+  if (!donos.length) return { added: [], rewrite: [] };
+  const rewrite = command === undefined ? [] : eventosDe(engine, command)
+    .filter(({ event }) => donos.includes(event))
+    .filter(({ event, command: comando }) => settings.hooks[event]
+      .some((entry) => isOurs(entry) && JSON.stringify(trocar(entry, comando)) !== JSON.stringify(entry)))
+    .map(({ event }) => event);
+  return { added: writtenEvents(engine).filter((event) => !donos.includes(event)), rewrite };
+}
+
+// Converge os hooks do `update` (DT-12): só mexe em arquivo onde o MGR já tem entrada. Reescreve o
+// comando das entradas dele (via `rewriteOwnedHooks`) e acrescenta o evento que falta. Não usa
+// `writeHook`, que recriaria hook numa instalação feita com `--no-hooks`.
+export function syncOwnedHooks(engine, repo, { command }) {
+  const motor = descritor(engine);
+  const file = hookFilePath(engine, repo);
+  if (!existsSync(file) || !eventosComEntradaNossa(engine, readSettings(file)).length) {
+    return { outcome: "no-owned-entry", file };
+  }
+
+  // `rewritten` lista só o evento cujo comando MUDOU (X-23): numa instalação já convergida a reescrita
+  // é idêntica, e anunciá-la seria uma linha de diferença que não existe. Se nada muda (X-25), o arquivo
+  // NÃO é regravado: a formatação de quem o editou fica como está.
+  const { added, rewrite: rewritten } = planOwnedHooks(engine, repo, { command });
+  if (!added.length && !rewritten.length) return { outcome: "synced", file, added, rewritten };
+
+  if (rewritten.length) rewriteOwnedHooks(engine, repo, { command });
+  const settings = readSettings(file);
+  if (added.length) {
+    const hooks = { ...settings.hooks };
+    for (const { event, matcher, timeout, command: comando } of eventosDe(engine, command)) {
+      if (!added.includes(event)) continue;
+      hooks[event] = [...(hooks[event] || []), motor.hookEntry(comando, matcher, timeout)];
+    }
+    writeSettings(file, { ...settings, hooks });
+  }
+  return { outcome: "synced", file, added, rewritten };
 }
 
 // Remove a entrada do MGR e devolve o arquivo ao que era. Contêiner que ficou vazio some;

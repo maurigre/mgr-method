@@ -367,8 +367,10 @@ describe("runner", () => {
 
   test("shouldProveThatRunnerExecutesTheStringDeclaredInTheRegistry", async () => {
   const recebidos = [];
-  const espiao = (stringDoComando) => {
+  const consentimentos = [];
+  const espiao = (stringDoComando, _repo, consentimento) => {
     recebidos.push(stringDoComando);
+    consentimentos.push(consentimento);
     return { sucesso: true };
   };
 
@@ -390,6 +392,10 @@ describe("runner", () => {
       const skills = path.join(repo, ".claude", "skills");
       const declaradas = JSON.parse(readFileSync(path.join(repo, ".mgr-core", "manifest.json"), "utf8")).skills;
       cpSync(path.join(skills, declaradas[0]), path.join(skills, ORFA), { recursive: true });
+      // Origem desconhecida (DT-14): desde a F2 a orfa de nome distribuido ganha `mgr update`, e o
+      // achado deixaria de casar com o `fix: null` do registro sintetico. O `mgr-manifest.json` faz a
+      // classe ser `unknown`, e o guarda continua provando o que provava: o runner executa a string.
+      writeFileSync(path.join(skills, ORFA, "mgr-manifest.json"), "{}\n", "utf8");
       const arquivo = path.join(skills, ORFA, "SKILL.md");
       writeFileSync(arquivo, `${readFileSync(arquivo, "utf8")}\nlinha plantada\n`, "utf8");
     },
@@ -403,12 +409,63 @@ describe("runner", () => {
     + "trocar a execucao por `mgr update` fixo, o espiao recebe outra coisa e esta assercao fica "
     + "vermelha. Medido em 2026-09-24: sem esta prova, um teste que para no passo 4 passa igual com "
     + "o runner executando comando fixo, e portanto nao guarda nada");
+  assert.deepEqual(consentimentos, [undefined],
+    "o registro sintetico nao declara consentimento, entao o runner nao pode inventar um");
 });
+
+  test("should pass mgr update and -y to the runner for distribuida-sem-marca", async () => {
+    const recebidos = [];
+    const espiao = (stringDoComando, _repo, consentimento) => {
+      recebidos.push([stringDoComando, consentimento]);
+      return { sucesso: true };
+    };
+    const caso = casosDeTeste.find((c) => c.id === "orphan-skill" && c.condicao === "distribuida-sem-marca");
+
+    await rodaUmCaso(caso, CHECKS, espiao);
+
+    assert.deepEqual(recebidos, [["mgr update", "-y"]],
+      "o fix impresso fica `mgr update` e o consentimento e o que o registro declara: o runner "
+      + "executa as DUAS coisas, vindas do registro");
+  });
+
+  test("should fail at step 5 when distribuida-sem-marca loses its consent", async () => {
+    const real = CHECKS.find((c) => c.id === "orphan-skill");
+    const semConsentimento = { ...real.remediacoes.find((r) => r.condicao === "distribuida-sem-marca") };
+    delete semConsentimento.consentimento;
+    const registroSintetico = [{ ...real, remediacoes: [semConsentimento] }];
+    const caso = casosDeTeste.find((c) => c.id === "orphan-skill" && c.condicao === "distribuida-sem-marca");
+
+    const problemas = await rodaUmCaso(caso, registroSintetico);
+
+    assert.equal(problemas.length, 1, problemas.join("\n"));
+    assert.match(problemas[0], /^caso orphan-skill\/distribuida-sem-marca: .*"mgr update"/,
+      "sem o consentimento o `mgr update` roda sem terminal, mantem a orfa e sai 1 (ou deixa o achado): "
+      + "o caso tem de reprovar no passo 5, senao o consentimento nao estaria guardado por nada");
+  });
+
+  test("should report REM-6 for a consent without fix", () => {
+    const checks = [{
+      id: "check-consent",
+      remediacoes: [{
+        condicao: "condicao-c",
+        fix: NO_FIX,
+        prova: SEM_REMEDIACAO,
+        razao: "motivo",
+        consentimento: "-y",
+      }],
+    }];
+    const casos = [{ id: "check-consent", condicao: "condicao-c" }];
+
+    const problemas = problemasDeCobertura(checks, casos);
+
+    assert.deepEqual(problemas, ["REM-6 check-consent/condicao-c: consentimento declarado sem fix"],
+      "consentimento so faz sentido junto de um fix: sem fix nao ha comando a que ele se junte");
+  });
 
   test("shouldSeparateWhatWasCheckedFromWhatWasNot", () => {
     const { conferidas, naoConferidas } = relatorioDeCobertura(CHECKS);
-    assert.equal(conferidas.length, 18,
-      "sao 18 condicoes conferidas, e nao 19: dizer 19 seria contar como verificada uma que nao foi");
+    assert.equal(conferidas.length, 22,
+      "sao 22 condicoes conferidas, e nao 23: dizer 23 seria contar como verificada uma que nao foi");
     assert.deepEqual(naoConferidas.map((x) => `${x.id}/${x.condicao}`), ["lockfile-drift/travado-ausente"],
       "a nao medida aparece NOMEADA, senao 18 verdes seriam lidos como toda remediacao provada");
     assert.ok(naoConferidas[0].razao && naoConferidas[0].razao.length > 0,
@@ -432,7 +489,7 @@ describe("runner", () => {
 
     assert.ok(problemas.some((p) => p.includes("passo 2")),
       "o passo 2 existe para pegar predicado que ja casa antes do plantio, ou plantio que nao "
-      + "plantou: sem um caso que o exercite, removê-lo nao deixaria nada vermelho e os 18 casos "
+      + "plantou: sem um caso que o exercite, removê-lo nao deixaria nada vermelho e os 22 casos "
       + "continuariam passando sem essa garantia");
   });
 });

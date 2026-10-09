@@ -93,7 +93,7 @@ const isInside = (root, candidate) => {
 test("should install the runtime, a module package.json and the new manifest model in both engines (CA-1)", () => {
   const { project } = freshInstall("ca1");
   const manifest = readJson(path.join(project, ".mgr-core", "manifest.json"));
-  assert.equal(manifest.model, "self-contained-runtime");
+  assert.equal(manifest.model, "self-contained-layered-config");
   for (const engine of ENGINES) {
     const runtimeDir = path.join(project, engine, "skills", "_shared", "mgr");
     assert.ok(fs.existsSync(path.join(project, engine, ...RUNTIME_RELATIVE)), `${engine} runtime entry missing`);

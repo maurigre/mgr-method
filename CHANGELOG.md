@@ -295,6 +295,27 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   sem declarar remediação, e o **guarda do guarda**, que prova que o runner executa a string
   declarada e não um comando fixo.
 
+- **Config em duas camadas: o `projectId` passa a ser pessoal.** Decisão registrada no
+  `docs/adr/0024-config-em-duas-camadas-update-que-converge-e-marca-de-posse.md` (**Proposto**).
+  - O `projectId` sai do `manifest.json` e passa a morar em `.mgr-core/config.local.json`.
+  - Esse arquivo é pessoal e fica fora do versionamento.
+  - A migração é automática, e o comando a anuncia.
+  - O `manifest.model` passa a valer `self-contained-layered-config`.
+
+- **O `install` pergunta e grava.**
+  - A política de modelo por intenção e a origem do projeto são perguntadas.
+  - Quando há resposta, a escolha é gravada no `.mgr-core/config.json`.
+  - Flags novas: `--model-drafting`, `--model-execution`, `--model-review` e `--origin`.
+  - O bloco do `.gitignore` que protege `config.local.json` e `.env` é oferecido, com consentimento.
+
+- **Marca de posse nas skills instaladas.** Cada skill do método leva a linha
+  `# mgr-managed-skill: <nome>` no fim do frontmatter. Pasta com a marca é atualizada sem pergunta.
+  Pasta de mesmo nome sem a marca só é substituída com consentimento.
+
+- **O `doctor` aponta `mgr update` para a órfã candidata.** Uma skill órfã marcada, ou distribuída
+  sem marca, tem como remediação `mgr update`. Com `-y`, o `update` a remove sem perguntar.
+  A órfã de origem desconhecida continua sem remediação, porque nenhum comando a oferece.
+
 ### Corrigido
 - **A `L0.1` afirmava reproduzir a hierarquia do ADR-0007 "sem alteração", e não reproduzia.** O
   ADR-0007 nomeia um caminho no nível 2 das regras do projeto (`.mgr-core/`); a `L0.1` nomeava dois
@@ -348,6 +369,25 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   fala. Esta correção havia sido **declarada** na release anterior e não estava aplicada.
 
 ### Modificado
+- **Quebra de contrato:** `manifest.projectId` deixa de existir. O valor vai para `config.local.json`.
+- **Quebra de contrato:** `manifest.model` vale `self-contained-layered-config`.
+- **Quebra de contrato:** o `update` remove com consentimento, grava evento de hook e sai com 1
+  quando há divergência.
+- **Quebra de contrato:** o `update` de instalação `custom` deixa de migrar para `.claude/skills`.
+- **Quebra de contrato:** o `install` grava `config.json` quando há resposta.
+- **Quebra de contrato:** pasta de skill alheia só é substituída com consentimento.
+- **Quebra de contrato:** pasta de plugin, com `mgr-manifest.json`, nunca é sobrescrita. O `update`
+  a bloqueia e a anuncia.
+- **Quebra de contrato:** a mensagem de divergência do `update` sai no stdout.
+- **Quebra de contrato:** a linha `hooks written` sai só quando o comando muda o arquivo.
+- **Quebra de contrato:** com `--skills-dir`, a skill cedida a plugin (`replaces` no lockfile, de qualquer
+  motor) não é mais construída no diretório custom, como já acontecia nos motores reais (ADR-0008); o
+  `migrateOld` do layout `runtime-launcher` deixa de apagar pasta com `mgr-manifest.json`.
+- **Atenção (R-2):** CI que roda `mgr update` sem `-y` num projeto divergente passa a falhar com exit 1.
+  - `mgr update -y` aceita as remoções e as substituições oferecidas.
+  - Pasta de plugin com o nome de uma skill do método nunca é sobrescrita, nem com `-y`: essa
+    divergência só some resolvendo o conflito que a saída nomeia.
+
 - **As skills chamam o runtime por caminho explícito e param quando ele falta.** O plano B, em que a
   skill seguia sem a CLI, acaba: sem o runtime a skill para e diz como restaurá-lo:
   `npx mgr-method@<versão do manifesto> update`, ou `npx mgr-method@latest install` quando nem o

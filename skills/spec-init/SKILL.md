@@ -52,15 +52,11 @@ go.mod, *.csproj, requirements.txt...) or source code?
 The mode you just detected **is the project's origin**, and it decides how much every future finding
 weighs (**L6.6**). It is a fact about the project, so it is confirmed and recorded, never assumed.
 
-1. **State the origin you detected and confirm it with the user** — in BOTH modes. Greenfield is
-   already confirmed above; brownfield is detected from build manifests or source at the root, and
-   that detection is stated here and confirmed too. Detection can be wrong (an empty repository that
-   is really a rewrite of an old one; a scaffold that is not legacy), and a wrong origin silently
-   changes the weight of every reproval in that project.
-2. **Once confirmed, record it:** run `node {{MGR_RUNTIME}} origin set greenfield` or
-   `node {{MGR_RUNTIME}} origin set brownfield`.
-   The command writes the key `origin` in `.mgr-core/config.json`, preserving every other key, and
-   prints what the value was before and what it became.
+1. **Read the recorded origin:** run `node {{MGR_RUNTIME}} origin --json`.
+   - `state: recorded` and it **matches** the mode you detected → state it ("origin recorded at install: <value>") and do **not** ask again.
+   - `state: recorded` and it **contradicts** the detection → show **both** (the recorded value and what you detected, with the reason) and ask the user which one holds.
+   - `state: absent` or `invalid` → state the origin you detected and confirm it with the user, in BOTH modes. Detection can be wrong (an empty repository that is really a rewrite of an old one; a scaffold that is not legacy), and a wrong origin silently changes the weight of every reproval in that project.
+2. **Record it only when the user confirmed a value that is not the recorded one:** run `node {{MGR_RUNTIME}} origin set greenfield` or `node {{MGR_RUNTIME}} origin set brownfield`. The command writes the key `origin` in `.mgr-core/config.json`, preserving every other key, and prints what the value was before and what it became.
 3. **Runtime missing:** STOP as described in "MGR runtime (mandatory)". Do not write the key by hand.
 4. Record it **now**, not at the end: the brownfield analysis is long and resumable, and an
    interrupted run must still leave the origin recorded.

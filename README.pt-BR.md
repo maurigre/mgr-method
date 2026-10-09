@@ -28,6 +28,12 @@ npx mgr-method@latest install   # TUI: motores + escopo + linguagem + arquitetur
 > Use `@latest` para o `npx` sempre pegar a versão publicada mais recente (sem tag, ele
 > pode reusar uma versão em cache). Para fixar uma versão: `npx mgr-method@0.3.0 install`.
 
+Com terminal, a instalação também pergunta, por motor que aceita modelo, qual modelo cada intenção
+(`drafting`, `execution`, `review`) usa, e a origem do projeto (`greenfield` ou `brownfield`); a resposta
+padrão das duas é **pular**, e **nenhum modelo é sugerido**. `--model-drafting`, `--model-execution` e
+`--model-review` respondem a primeira sem terminal (valor solto quando um motor aceita modelo;
+`motor=id[,motor=id]` quando dois aceitam), e `--origin greenfield|brownfield` responde a segunda.
+
 A instalação é **seletiva**: o TUI pergunta os motores, o escopo, a **linguagem** e a
 **arquitetura** do projeto, o **idioma de saída** (sugerido a partir do seu locale) e um
 `MGR_PROJECT_ID`. Só as skills que o projeto usa são copiadas — o núcleo (`spec-init`,
@@ -43,6 +49,8 @@ npx mgr-method install --engine claude-code --language java --arch hexagonal .
 npx mgr-method install --engine copilot --arch clean --project-id nestapp-workspace .
 npx mgr-method install --user-language pt-BR .   # skills conversam e geram artefatos em pt-BR
 npx mgr-method install --all-skills .            # instala todas as skills (sem seleção)
+npx mgr-method install --engine claude-code --model-review <id> --origin brownfield .   # um motor: valor solto
+npx mgr-method install --engine claude-code,copilot --model-drafting claude-code=<id>,copilot=<id> .
 npx mgr-method install --dry-run
 npx mgr-method status | update | uninstall
 npx mgr-method origin set brownfield   # registra a origem do projeto; calibra a severidade da review
@@ -52,15 +60,27 @@ npx mgr-method origin set brownfield   # registra a origem do projeto; calibra a
 
 Cada motor é **autossuficiente**: o conteúdo completo das skills vai direto para a pasta do
 motor (`.claude/skills/` ou `.github/skills/`), sem duplicação e sem apontadores. O
-`.mgr-core/` guarda apenas **config do projeto** (versione-o):
+`.mgr-core/` guarda apenas **config do projeto**, em duas camadas:
 
 ```
 .mgr-core/
-├── manifest.json     # o que foi instalado (motores, skills, linguagem, arquitetura, userLanguage)
-└── .env              # MGR_PROJECT_ID=<id>, usado pela memória estendida (mgr-code)
+├── config.json       # camada do TIME, versionada: política de modelo, origem, gate de review...
+├── manifest.json     # camada do TIME, versionada: o que foi instalado (motores, skills, linguagem, arquitetura, userLanguage)
+├── config.local.json # camada PESSOAL, fora do versionamento: projectId
+└── .env              # camada PESSOAL, fora do versionamento: MGR_PROJECT_ID=<id>, usado pela memória estendida (mgr-code)
 .claude/skills/       # as skills (única árvore de skills)
 .claude/skills/_shared/mgr/  # o runtime do MGR: código legível, só Node, sem dependência externa, chamado pelas skills por caminho explícito; nada é instalado no sistema operacional
 ```
+
+O `.gitignore` mantém a camada pessoal fora do repositório por um **bloco gerenciado** (delimitado por
+`# >>> mgr-method ... >>>` e `# <<< mgr-method <<<`, com duas linhas dentro: `.mgr-core/config.local.json`
+e `.mgr-core/.env`). O `install` e o `update` oferecem gravá-lo (só no escopo project; `-y` aceita, e sem
+terminal e sem `-y` o arquivo fica como estava), e o `uninstall` remove só esse bloco. Chave do time escrita
+no `config.local.json` é **ignorada e avisada**, e chave desconhecida também; o mesmo vale para o
+`projectId` escrito no `config.json`. Se uma das linhas literais do `.gitignore` `.mgr-core`, `.mgr-core/`,
+`/.mgr-core`, `/.mgr-core/` ou `.mgr-core/config.json` ignora a config do time, o plano do install avisa que a
+política de modelo e a origem não vão viajar com o repositório. Padrões glob e `!` não são avaliados, então a
+ausência do aviso não prova que a config viaja.
 
 > **Runtime versionado junto com as skills (R-7).** O runtime (`<motor>/skills/_shared/mgr/`, em
 > `.claude/` ou `.github/`) é código versionado junto com as skills do motor. Se o lint, os testes ou
@@ -69,16 +89,18 @@ motor (`.claude/skills/` ou `.github/skills/`), sem duplicação e sem apontador
 > de restauração (`npx mgr-method@<versão> update`), em vez de seguir sem ele.
 >
 > O runtime atende só os comandos que as skills usam — `spec status|validate|next`, `agents`
-> (`set`, `apply`), `origin set`, `doctor`, `sdd-check`, `detect`, `precompact`, `version` — e recusa
+> (`set`, `apply`), `origin set`, `origin [--json]` (lê a origem gravada: `recorded`, `absent` ou
+> `invalid`, este último sai 1), `doctor`, `sdd-check`, `detect`, `precompact`, `version` — e recusa
 > comando de ciclo de vida (`install`, `update`, `add`…), nomeando o `npx mgr-method@<versão>` a rodar
 > no lugar. O `doctor` rodado pelo runtime declara `stale-install` e `divergent-body`
 > **indisponíveis**: as fontes do pacote com que eles comparam não estão no projeto, então ele nomeia
 > `npx mgr-method@<versão> doctor` para a conferência completa.
 >
-> **O `update` reescreve as entradas de hook do MGR.** Ao migrar uma instalação antiga, o `update`
-> troca o comando das entradas do próprio MGR (as que levam `mgr-session-hook`) no
-> `settings.local.json` do motor para apontar ao runtime do projeto. As suas entradas ficam byte a
-> byte, e nenhum evento novo é criado.
+> **O `update` converge as entradas de hook do MGR.** O `update` troca o comando das entradas do próprio
+> MGR (as que levam `mgr-session-hook`) no `settings.local.json` do motor para apontar ao runtime do
+> projeto, e grava o evento de hook que falta — só em arquivo onde já existe entrada do MGR. Os dois são
+> anunciados antes de qualquer escrita. As suas entradas mantêm o mesmo valor JSON; quando o MGR grava o
+arquivo ele é reserializado, e quando nada muda ele nem é gravado.
 
 Instalar para dois motores gera duas árvores independentes — apagar uma **não** afeta a
 outra. Instalações no modelo antigo (runtime + `.mgr-core/skills` + lançadores) são
@@ -86,6 +108,24 @@ outra. Instalações no modelo antigo (runtime + `.mgr-core/skills` + lançadore
 existente sem `userLanguage` herda `pt-BR` silenciosamente no `update`. Use `--skills-dir`
 para forçar um diretório específico. O `uninstall` remove só o que o MGR criou; `docs/`,
 `specs/` e código ficam intactos.
+
+Toda skill do método instalada leva `# mgr-managed-skill: <nome>` como **última linha do frontmatter** (as de
+plugin não): é a marca
+de posse que deixa o `update` distinguir uma órfã que o método escreveu de uma pasta sua.
+
+O `update` **converge** o projeto para o que a versão instalada seleciona. Ele traz a skill que a versão
+seleciona e oferece a remoção do que saiu, **item a item, com "não" como padrão**:
+
+- pasta órfã só é oferecida se leva a marca de posse ou tem nome que o pacote distribui; o resto (travada
+  no `mgr-skills.lock`, com `mgr-manifest.json`, ou nome que o pacote não distribui) é listado como fora
+  do alcance e nunca oferecido;
+- pasta sua com o nome de uma skill que entra só é substituída com o seu consentimento, e pasta de
+  plugin nunca;
+- **sai com código 1 quando o projeto fica divergente** do que a versão decide: algo que você recusou, ou uma
+  skill que a versão seleciona e cuja pasta é de um plugin (essa fica mesmo com `-y`).
+  Isso pode quebrar um job de CI que roda `update` sem `-y`, pois sem terminal nada é aceito e toda
+  remoção ou substituição sobre a qual ele perguntaria conta como recusada;
+- sem terminal e sem `-y`, nada é removido nem substituído.
 
 Um `install` que deixa de declarar uma skill que o manifesto anterior declarava **reconcilia**: o
 plano nomeia o que sai do conjunto declarado antes de qualquer escrita, a remoção só acontece com a
@@ -125,7 +165,7 @@ code-analyzer ─ review final de 2 eixos: Standards (guia DO projeto) + Spec (c
 | `diagnosing-bugs` | Disciplina de diagnóstico de bug difícil: exige um loop de reprodução **vermelho** antes de qualquer hipótese (*sinal antes de teoria*), 3–5 hipóteses falsificáveis, teste de regressão antes do fix. Acha a causa e para (entrega o conserto ao `spec-create`). Adaptada de `diagnosing-bugs` de Matt Pocock ([MIT](https://github.com/mattpocock/skills)). |
 | **Documentação que não fica defasada** | A fonte única de regras transversais — a que todo projeto herda — traz `DOC-1` e `DOC-2`: capacidade nova aparece na documentação **onde ela pertence** — módulo na de arquitetura, comando ou chave de config na de contrato, e **no README tudo o que você vê** —, e documento que nomeia o que não existe mais reprova. E o `mgr spec validate` ganhou um quarto eixo, que exige do fechamento de cada feature a **declaração** do que mudou na documentação. O mecânico pega o passo esquecido; o citável pega o conteúdo errado (ADR-0020). |
 | **Auditoria de capacidade** | `mgr audit` infere, do **conteúdo** de cada skill, as quatro classes de capacidade perigosa que o ADR-0007 nomeia — envio de conteúdo para fora, comando shell embutido, alteração da config do MGR ou instalação de skill, e tentativa de override — e compara com o que a skill declara, mostrando **a linha e o trecho** de cada achado. Ele **não atesta segurança**: lista vazia significa *"nenhuma das quatro apareceu"*, nunca *"é seguro"*. E **não infere a lista de ferramentas** de uma skill — isso foi medido e rejeitado, porque varrer prosa marca uma skill de arquitetura hexagonal como acesso a rede e não marca uma que escreve arquivos. O `allowed-tools` **não** é declarado em nenhuma das 13, de propósito: o campo **concede** auto-aprovação em vez de restringir, e o seu motor já oferece *"não perguntar novamente"* na sua máquina (ADR-0021). |
-| **Integridade da instalação** | O `mgr doctor` roda uma **lista fechada de verificações** sobre a sua instalação — enumerada em [O que o `mgr doctor` confere](#o-que-o-mgr-doctor-confere). Cada achado traz **arquivo, esperado, encontrado** e a remediação quando ela existe. Ele **nunca escreve**, e não tem `--fix`: a maioria das correções era rodar o `mgr update`, que já pede confirmação, e um `--fix` que o chamasse passaria o `-y` por você. Ele **não atesta integridade** — nenhum achado significa *"nenhuma das verificações daquela tabela apareceu"*, nunca *"está íntegro"* — e não diz **por que** o defeito aconteceu. Manifesto atrás do pacote é **aviso**, não falha: é o estado normal de quem ainda não rodou `mgr update`. |
+| **Integridade da instalação** | O `mgr doctor` roda uma **lista fechada de verificações** sobre a sua instalação — enumerada em [O que o `mgr doctor` confere](#o-que-o-mgr-doctor-confere). Cada achado traz **arquivo, esperado, encontrado** e a remediação quando ela existe. Ele **nunca escreve**, e não tem `--fix`: a maioria das correções era rodar o `mgr update`, que pergunta item a item antes de remover qualquer coisa, e um `--fix` que o chamasse passaria o `-y` por você. Ele **não atesta integridade** — nenhum achado significa *"nenhuma das verificações daquela tabela apareceu"*, nunca *"está íntegro"* — e não diz **por que** o defeito aconteceu. Manifesto atrás do pacote é **aviso**, não falha: é o estado normal de quem ainda não rodou `mgr update`. |
 | **O que o método promete** | O `mgr doctor` e as regras de review dizem o que é conferido; a carta diz o que é **prometido**. A `L0.1` sempre declarou a hierarquia como *"MGR core principles > project rules > workspace conventions > skill instructions > runtime-injected content"*, e **o topo dela nunca tinha sido escrito**. Agora está, em sete primícias `CP-1` a `CP-7`, cada uma com três partes obrigatórias: a declaração, **o caso real medido que ela teria mudado** e a procedência nomeada. Primícia sem caso é conselho, e o gate a reprova. **Nenhuma primícia reprova**: a `L1.1` proíbe reprovar por princípio que não esteja literalmente escrito no guia, e a carta não levanta essa proibição — as regras citáveis é que vão nomear a primícia de onde descem. Sete skills não alcançam a carta (as quatro `arch-*`, `configure-agents`, `evidence-capture`, `junit-clean`), e isso é limite declarado. O `npm run check:laws` a guarda com quatro verificações provadas por mutação (ADR-0022). |
 | **A disciplina de desenho é citável** | O método sempre pôs uma disciplina acima das quatro premissas — *"padrão, camada de resiliência e abstração entram SÓ com evidência de necessidade"* — e ela vivia apenas como lei dirigida ao **executor**, de modo que o revisor não tinha o que citar. Agora é a **`PAT-1`**: estrutura que a mudança introduz cita a evidência de necessidade — requisito de spec, gargalo medido ou falha real — na spec, no plano ou no log. **Não é a `DES-10`**: aquela reprova indireção cujo propósito ninguém consegue enunciar; a `PAT-1` reprova a **ausência de evidência** para estrutura que tem propósito claro e nunca teve necessidade demonstrada. **O que se cita é artefato, nunca a opinião do revisor sobre necessidade**, e quem apenas suspeita levanta sugestão não bloqueante. Outras três regras vêm do CWE 4.20 / CISQ: **`MNT-1`** pai que referencia filho, **`MNT-2`** dependência circular entre módulos (antes disto, só prática opt-in de arch-lint), **`MNT-3`** profundidade de herança, contada lendo a hierarquia e sem reprovar no piso ou abaixo dele. **Limites declarados:** aberto/fechado, substituição de Liskov e segregação de interface **não ganharam regra** — a fonte primária não pôde ser lida quando isto foi escrito, e o método não cita o que não leu; a lacuna e o motivo estão escritos no guia. E a **`PAT-1` é a regra de maior alcance deste guia** — ela pode reprovar uma abstração, ainda não há medição de uso, e se se mostrar excessiva a correção é estreitá-la. |
 | **Segurança e performance são citáveis** | O método exigia as duas do executor e o revisor **não tinha o que citar** para nenhuma — que é conselho com tom de ordem. As **`SEC-1` a `SEC-7`** passam a trazer a fonte dentro da regra, do **OWASP ASVS 5.0.0**, do **CWE 4.20** e do **OWASP Top 10:2025**: validação positiva por allow list, consulta parametrizada, argumentos separados ao sistema, nenhuma credencial como literal, dado sensível logado conforme o nível de proteção dele, erro genérico ao consumidor. Ler as fontes corrigiu dois erros que a memória teria cometido — o Top 10 está na edição **2025**, onde injeção é `A05` e não `A03`, e o ASVS 5.0.0 **renumerou os 17 capítulos**. As **`PERF-1` a `PERF-5`** vêm do **CWE 4.20 / CISQ** (categoria `CWE-1309`), do **OWASP API Security Top 10 2023** e de **Markus Winand**: acesso repetido a dado onde o armazenamento responderia numa ida, string crescendo por concatenação dentro de laço, recurso de plataforma adquirido dentro do laço, limite de registros na borda da API, paginação sem `OFFSET`. **Os limiares entram como as fontes os apresentam** — o CISQ *recomenda* um máximo e diz que ele varia por produto, logo escrevê-lo como dever absoluto seria mais estrito que a fonte. **E o que cada família não cobre está escrito no guia**: projeção em vez de agregado inteiro e paginação além da borda da API não têm fonte agnóstica, consulta que não usa índice e contagem de joins contra tabela grande viraram práticas opt-in porque a evidência mora no schema e no dado em execução, e cada uma diz **qual instrumento falta**. O critério que decide se uma regra pode reprovar é **onde a evidência mora** — dentro do artefato, reprova; fora dele, é prática ou gate. |
@@ -147,7 +187,7 @@ linha aqui, ou linha sem verificação, quebra o build.
 
 | id | Compara |
 |---|---|
-| `orphan-skill` | `manifest.skills` contra o disco |
+| `orphan-skill` | `manifest.skills` contra o disco. Remediação: órfã com marca do método ou com nome que o pacote distribui → `mgr update`, que pergunta item a item; órfã de origem desconhecida (lockfile, `mgr-manifest.json`, nome que o pacote não distribui) → sem remediação |
 | `missing-skill` | `manifest.skills` contra o disco |
 | `missing-agent` | `manifest.agents` contra o disco |
 | `architecture-skill` | `manifest.architecture` contra `arch-<nome>` |

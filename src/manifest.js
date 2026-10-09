@@ -1,8 +1,10 @@
 // Config do projeto MGR, em `.mgr-core/` (leve, sem skills — só metadados):
 //   manifest.json  fonte de verdade do que foi instalado (motores, skills, linguagem, arquitetura)
 //   .env           MGR_PROJECT_ID=<id>, usado pela memória estendida (mgr-code)
-// O campo `model` no manifesto distingue instalações novas ("self-contained-runtime") das antigas
-// ("self-contained" e "runtime-launcher"), habilitando a migração.
+// O campo `model` no manifesto distingue as gerações de instalação e habilita a migração:
+//   "self-contained-layered-config" — atual (DT-16 da F2): config em duas camadas, sem migração pendente;
+//   "self-contained-runtime"        — geração da F1: runtime dentro do motor, precisa só da migração de config;
+//   "self-contained" e "runtime-launcher" — antigas: precisam das duas migrações.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { INSTALL_DIR_RE } from "./lockfile.js";
@@ -11,12 +13,13 @@ export const MANIFEST_NAME = "manifest.json";
 export const ENV_NAME = ".env";
 
 export const MODEL_RUNTIME = "self-contained-runtime";
+export const MODEL_LAYERED = "self-contained-layered-config";
 
 export const manifestPath = (dir) => path.join(dir, MANIFEST_NAME);
 
 export function writeManifest(dir, data) {
   const manifest = {
-    model: MODEL_RUNTIME,
+    model: MODEL_LAYERED,
     installedAt: new Date().toISOString(),
     ...data,
   };
@@ -48,6 +51,18 @@ export function readManifest(dir) {
     }
   }
   return manifest;
+}
+
+// Lê `MGR_PROJECT_ID=` do `.env` derivado. Forma discriminada: ausência do arquivo, da chave ou valor
+// vazio é `absent`, sem `null` como sentinela. É a 4ª fonte da migração (DT-16).
+export function readEnvProjectId(dir) {
+  const arquivo = path.join(dir, ENV_NAME);
+  if (!existsSync(arquivo)) return { state: "absent" };
+  for (const line of readFileSync(arquivo, "utf8").split(/\r?\n/)) {
+    const casou = /^MGR_PROJECT_ID=(.*)$/.exec(line);
+    if (casou && casou[1].trim() !== "") return { state: "present", projectId: casou[1].trim() };
+  }
+  return { state: "absent" };
 }
 
 // Grava `.mgr-core/.env` com o identificador do projeto para o mgr-code.

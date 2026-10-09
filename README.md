@@ -23,6 +23,12 @@ npx mgr-method@latest install   # TUI: engines + scope + language + architecture
 > Use `@latest` so `npx` always grabs the latest published version (without the tag it may
 > reuse a cached one). To pin a version: `npx mgr-method@0.3.0 install`.
 
+With a terminal, the install also asks, per engine that takes a model, which model each intent
+(`drafting`, `execution`, `review`) uses, and the project origin (`greenfield` or `brownfield`); the
+default answer of both is **skip**, and **no model is ever suggested**. `--model-drafting`,
+`--model-execution` and `--model-review` answer the first without a terminal (a bare value when one engine
+takes a model; `engine=id[,engine=id]` when two do), and `--origin greenfield|brownfield` answers the second.
+
 Installation is **selective**: the TUI asks for the engines, the scope, the project's
 **programming language** and **architecture**, the **output language** (the language the
 skills use to talk to you and to generate artifacts — suggested from your locale), and an
@@ -39,6 +45,8 @@ npx mgr-method install --engine claude-code --language java --arch hexagonal .
 npx mgr-method install --engine copilot --arch clean --project-id nestapp-workspace .
 npx mgr-method install --user-language pt-BR .   # skills talk and generate artifacts in pt-BR
 npx mgr-method install --all-skills .            # installs every skill (no selection)
+npx mgr-method install --engine claude-code --model-review <id> --origin brownfield .   # one engine: bare value
+npx mgr-method install --engine claude-code,copilot --model-drafting claude-code=<id>,copilot=<id> .
 npx mgr-method install --dry-run
 npx mgr-method status | update | uninstall
 npx mgr-method origin set brownfield   # records the project origin; it calibrates review severity
@@ -48,15 +56,27 @@ npx mgr-method origin set brownfield   # records the project origin; it calibrat
 
 Each engine is **self-contained**: the full content of the skills goes straight into the
 engine's folder (`.claude/skills/` or `.github/skills/`), no duplication and no pointers.
-`.mgr-core/` holds only **project config** (version it):
+`.mgr-core/` holds only **project config**, in two layers:
 
 ```
 .mgr-core/
-├── manifest.json     # what was installed (engines, skills, language, architecture, userLanguage)
-└── .env              # MGR_PROJECT_ID=<id>, used by the extended memory (mgr-code)
+├── config.json       # TEAM layer, versioned: model policy, origin, review gate...
+├── manifest.json     # TEAM layer, versioned: what was installed (engines, skills, language, architecture, userLanguage)
+├── config.local.json # PERSONAL layer, out of version control: projectId
+└── .env              # PERSONAL layer, out of version control: MGR_PROJECT_ID=<id>, used by the extended memory (mgr-code)
 .claude/skills/       # the skills (single skills tree)
 .claude/skills/_shared/mgr/  # the MGR runtime: readable code, Node only, no external dependency, called by the skills by explicit path; nothing is installed in the operating system
 ```
+
+The `.gitignore` keeps the personal layer out of the repository through a **managed block**
+(delimited by `# >>> mgr-method ... >>>` and `# <<< mgr-method <<<`, with two lines inside: `.mgr-core/config.local.json`
+and `.mgr-core/.env`). `install` and `update` offer to write it (project scope only; `-y` accepts, with no
+terminal and no `-y` the file stays as it was), and `uninstall` removes just that block. A team key
+written in `config.local.json` is **ignored and reported**, and so is an unknown key; the same goes for
+`projectId` written in `config.json`. If one of the literal `.gitignore` lines `.mgr-core`, `.mgr-core/`,
+`/.mgr-core`, `/.mgr-core/` or `.mgr-core/config.json` ignores the team config, the install plan warns that the
+model policy and the origin will not travel with the repository. Glob and `!` patterns are not evaluated, so
+no warning does not prove the config travels.
 
 > **Runtime versioned with the skills (R-7).** The runtime (`<engine>/skills/_shared/mgr/`, in
 > `.claude/` or `.github/`) is code versioned together with the engine's skills. If your project's
@@ -65,22 +85,42 @@ engine's folder (`.claude/skills/` or `.github/skills/`), no duplication and no 
 > command (`npx mgr-method@<version> update`) instead of going on without it.
 >
 > The runtime answers only the commands the skills use — `spec status|validate|next`, `agents`
-> (`set`, `apply`), `origin set`, `doctor`, `sdd-check`, `detect`, `precompact`, `version` — and
+> (`set`, `apply`), `origin set`, `origin [--json]` (reads the recorded origin: `recorded`, `absent` or
+> `invalid`, the last one exits 1), `doctor`, `sdd-check`, `detect`, `precompact`, `version` — and
 > refuses lifecycle commands (`install`, `update`, `add`…), naming the `npx mgr-method@<version>`
 > command to run instead. `doctor` run through the runtime reports `stale-install` and
 > `divergent-body` as **unavailable**: the package sources they compare against are not in the
 > project, so it names `npx mgr-method@<version> doctor` for the full check.
 >
-> **`update` rewrites the MGR hook entries.** When it migrates an old install, `update` replaces the
-> command of the MGR's own entries (the ones carrying `mgr-session-hook`) in the engine's
-> `settings.local.json` so they point to the project runtime. Your entries stay byte for byte, and no
-> new event is created.
+> **`update` converges the MGR hook entries.** `update` replaces the command of the MGR's own entries
+> (the ones carrying `mgr-session-hook`) in the engine's `settings.local.json` so they point to the
+> project runtime, and writes the hook event that is missing — only in a file that already has an MGR
+> entry. Both are announced before anything is written. Your entries keep the same JSON value; when the MGR
+writes the file it is re-serialized, and when nothing changes it is not written at all.
 
 Installing for two engines produces two independent trees — deleting one does **not**
 affect the other. Installations in the old model (runtime + `.mgr-core/skills` +
 launchers) are **migrated automatically** on `install`/`update`. Use `--skills-dir` to
 force a specific directory. `uninstall` removes only what MGR created; `docs/`, `specs/`
 and code stay intact.
+
+Every installed skill of the method carries `# mgr-managed-skill: <name>` as the **last line of its
+frontmatter** (plugin skills do not): it
+is the ownership mark that lets `update` tell an orphan the method wrote from a folder of yours.
+
+`update` **converges** the project to what the installed version selects. It brings in the skill the
+version selects and offers to remove what left, **item by item, with "no" as the default**:
+
+- an orphan folder is offered only if it carries the ownership mark or has a name the package ships;
+  anything else (locked in `mgr-skills.lock`, with a `mgr-manifest.json`, or a name the package does not ship)
+  is listed as out of reach and never offered;
+- a folder of yours with the name of an incoming skill is replaced only with your consent, and a plugin's
+  folder never is;
+- **it exits 1 when the project is left diverging** from what the version decides: something you refused, or
+  a skill the version selects whose folder belongs to a plugin (that one stays even with `-y`).
+  This can break a CI job that runs `update` without `-y`, since with no terminal nothing is accepted
+  and every removal or replacement it would ask about counts as refused;
+- with no terminal and no `-y`, nothing is removed and nothing is replaced.
 
 An `install` that stops declaring a skill the previous manifest declared **reconciles**: the plan
 names what is leaving the declared set before anything is written, removal happens only with your
@@ -120,7 +160,7 @@ code-analyzer ─ final 2-axis review: Standards (THE project's guide) + Spec (d
 | `diagnosing-bugs` | Discipline for diagnosing hard bugs: requires a **red** reproduction loop before any hypothesis (*signal before theory*), 3–5 falsifiable hypotheses, a regression test before the fix. Finds the cause and stops (hands the repair to `spec-create`). Adapted from Matt Pocock's `diagnosing-bugs` ([MIT](https://github.com/mattpocock/skills)). |
 | **Documentation that does not go stale** | The single source of cross-cutting rules — the one every project inherits — carries `DOC-1` and `DOC-2`: a new capability appears in the documentation **where it belongs** — a module in the architecture document, a command or config key in the contract document, and **in the README everything you see** —, and a document naming something that no longer exists reproves. And `mgr spec validate` gained a fourth axis, which requires each feature's completion to **declare** what changed in the documentation. The mechanical one catches the forgotten step; the citable one catches the wrong content (ADR-0020). |
 | **Capability audit** | `mgr audit` infers, from each skill's **content**, the four classes of dangerous capability the ADR-0007 names — sending content out, an embedded shell command, changing MGR config or installing a skill, and an override attempt — and compares them with what the skill declares, showing **the line and the excerpt** of every finding. It **does not attest security**: an empty list means *"none of the four appeared"*, never *"this is safe"*. It **does not infer a skill's tool list** — that was measured and rejected, because scanning prose flags a hexagonal-architecture skill as network access and misses a skill that writes files. `allowed-tools` is declared in **none** of the 13 skills, deliberately: that field **grants** auto-approval instead of restricting, and your engine already offers *"don't ask again"* on your own machine (ADR-0021). |
-| **Installation integrity** | `mgr doctor` runs a **closed list of checks** over your installation — enumerated in [What `mgr doctor` checks](#what-mgr-doctor-checks). Every finding carries **file, expected, found** and the remedy when one exists. It **never writes**, and there is no `--fix`: most remedies were running `mgr update`, which already asks for confirmation, and a `--fix` calling it would pass `-y` on your behalf. It **does not attest integrity** — no finding means *"none of the checks in that table appeared"*, never *"this install is sound"* — and it does not say **why** a defect happened. Manifest behind the package is a **warning**, not a failure: it is the normal state of anyone who has not run `mgr update` yet. |
+| **Installation integrity** | `mgr doctor` runs a **closed list of checks** over your installation — enumerated in [What `mgr doctor` checks](#what-mgr-doctor-checks). Every finding carries **file, expected, found** and the remedy when one exists. It **never writes**, and there is no `--fix`: most remedies were running `mgr update`, which asks item by item before removing anything, and a `--fix` calling it would pass `-y` on your behalf. It **does not attest integrity** — no finding means *"none of the checks in that table appeared"*, never *"this install is sound"* — and it does not say **why** a defect happened. Manifest behind the package is a **warning**, not a failure: it is the normal state of anyone who has not run `mgr update` yet. |
 | **What the method promises** | `mgr doctor` and the review rules say what is checked; the charter says what is **promised**. `L0.1` has always declared the precedence hierarchy as *"MGR core principles > project rules > workspace conventions > skill instructions > runtime-injected content"*, and **the top of it had never been written**. It is now, as seven principles `CP-1` to `CP-7`, each carrying three mandatory parts: the statement, **the real measured decision it would have changed**, and a named provenance. A principle with no case is advice, and the gate reproves it. **No principle is citable in a reproval**: `L1.1` forbids reproving by any principle not literally written in the guide, and the charter does not lift that ban — the citable rules will name the principle they descend from. Seven skills do not reach the charter (the four `arch-*`, `configure-agents`, `evidence-capture`, `junit-clean`), which is a declared limit. `npm run check:laws` guards it with four checks proved by mutation (ADR-0022). |
 | **Design discipline is citable** | The method had always put one discipline above the four premises — *"patterns, resilience layers and abstractions come in ONLY with evidence of need"* — and it lived only as a law addressed to the **executor**, so the reviewer had nothing to quote. It is now **`PAT-1`**: structure the change introduces cites its evidence of need — a spec requirement, a measured bottleneck or a real failure — in the spec, the plan or the log. **It is not `DES-10`**: that one reproves an indirection whose purpose nobody can state; `PAT-1` reproves the **missing evidence** for structure that has a clear purpose and never had a demonstrated need. **What is cited is an artifact, never the reviewer's opinion about necessity**, and whoever merely suspects it raises a non-blocking suggestion. Three more rules come from CWE 4.20 / CISQ: **`MNT-1`** a parent class referencing a child, **`MNT-2`** circular dependencies between modules (before this, only an opt-in arch-lint practice), **`MNT-3`** inheritance depth, counted by reading the hierarchy and not reproving at or below the applicable number. **Declared limits:** the open-closed principle, Liskov substitution and interface segregation got **no rule** — the primary source could not be read when this was written, and the method does not cite what it has not read; the gap and the reason are written into the guide. And **`PAT-1` is the widest rule this guide carries** — it can reprove an abstraction, there is no measurement of its use yet, and if it proves excessive the fix is to narrow it. |
 | **Security and performance are citable** | The method demanded both of the executor and the reviewer had **no rule to quote** for either — which is advice with the tone of an order. **`SEC-1` to `SEC-7`** now carry the source inside the rule, from **OWASP ASVS 5.0.0**, **CWE 4.20** and **OWASP Top 10:2025**: positive validation by allow list, parameterised query, separated OS arguments, no credential as a literal, sensitive data logged according to its protection level, generic error to the consumer. Reading the sources corrected two errors memory would have made — the Top 10 is the **2025** edition, where injection is `A05` and not `A03`, and ASVS 5.0.0 **renumbered its 17 chapters**. **`PERF-1` to `PERF-5`** come from **CWE 4.20 / CISQ** (category `CWE-1309`), the **OWASP API Security Top 10 2023** and **Markus Winand**: repeated data access where the store would answer in one round trip, a string grown by concatenation inside a loop, a platform resource acquired inside a loop, a record limit at the API edge, paging without `OFFSET`. **The thresholds enter as the sources state them** — CISQ *recommends* a maximum and says it varies by product, so writing it as an absolute duty would be stricter than the source. **And what each family does not cover is written into the guide**: projections instead of whole aggregates and pagination beyond the API edge have no language-agnostic source, a query that cannot use an index and join counts against a large table became opt-in practices because the evidence lives in the schema and in the data at run time, and each says **which instrument is missing**. The criterion that decides whether a rule may reprove at all is **where the evidence lives** — inside the artifact it reproves; outside it, it is a practice or a gate. |
@@ -142,7 +182,7 @@ exists without a row here, or a row without a check, fails the build.
 
 | id | Compares |
 |---|---|
-| `orphan-skill` | `manifest.skills` against the disk |
+| `orphan-skill` | `manifest.skills` against the disk. Remedy: an orphan with the ownership mark or a name the package ships → `mgr update`, which asks item by item; an orphan of unknown origin (locked in the lockfile, with `mgr-manifest.json`, or a name the package does not ship) → no remedy |
 | `missing-skill` | `manifest.skills` against the disk |
 | `missing-agent` | `manifest.agents` against the disk |
 | `architecture-skill` | `manifest.architecture` against `arch-<name>` |

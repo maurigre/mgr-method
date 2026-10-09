@@ -8,7 +8,7 @@
 // `write` é o `process.stdout.write` assíncrono do detect (mantido para a saída não mudar).
 import path from "node:path";
 import * as installer from "../installer.js";
-import { fetchIndex, lawsFallbackRef, listRegistries, readLawsPreamble } from "../registry.js";
+import { fetchIndex, lawsFallbackRef, listRegistries, readLawsPreamble, readPersonal } from "../registry.js";
 import { readLockfile } from "../lockfile.js";
 import { collectSuggestions, detect, hookReport, lawsPreamble } from "../detector.js";
 import { ids as engineIds } from "../engines/index.js";
@@ -76,7 +76,10 @@ const caminhoDoTranscript = (payload) => {
 
 function referenciarContexto(repo, { engine, trigger, transcriptPath, sessionId }, { proc, M }) {
   try {
-    const projectId = readManifest(installer.coreDir("project", repo))?.projectId;
+    // Camada pessoal primeiro (DT-16); o manifesto só vale para projeto ainda não migrado. Sem os dois,
+    // silêncio, sem inventar id pelo nome da pasta (D-17).
+    const core = installer.coreDir("project", repo);
+    const projectId = readPersonal(core).projectId ?? readManifest(core)?.projectId;
     // Sem projeto instalado não há por onde endereçar o manifesto. Silêncio, como todo o resto deste
     // comando: quem só abriu o editor não pode receber ruído.
     if (!projectId) return "";

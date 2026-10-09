@@ -5,7 +5,7 @@
 // do frontmatter ao builder.
 import * as installer from "../installer.js";
 import * as catalogo from "../catalog.js";
-import { CONFIGURED, readAgents, writeAgentPolicy } from "../registry.js";
+import { CONFIGURED, LOCAL_CONFIG_NAME, misplacedTeamKeys, readAgents, readPersonal, writeAgentPolicy } from "../registry.js";
 import * as engineDescriptors from "../engines/index.js";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -28,6 +28,7 @@ export function agents({ root, cwd, flags, positional, io, M }) {
     io.err(M.errorPrefix(M.agentsUnknown(pedida, catalogo.INTENTS.join(" | "))));
     return 1;
   }
+  avisaChavesIgnoradas(core, io, M);
   const intents = pedida ? [pedida] : catalogo.INTENTS;
   const motores = engineIds();
 
@@ -78,6 +79,25 @@ export function agents({ root, cwd, flags, positional, io, M }) {
   io.out(io.style.dim(M.agentsEffortNote));
   if (aliasOverridden) io.out(M.agentsAliasNote);
   return 0;
+}
+
+// DT-2: chave do time em config.local.json e chave pessoal em config.json são IGNORADAS, e o aviso
+// vai só para stderr. O stdout (texto e --json) não muda: é a guarda de paridade da F1. O arquivo
+// pessoal com JSON inválido não derruba a leitura da política, que nunca o consultou; o erro dele
+// aparece no comando que realmente o lê.
+function avisaChavesIgnoradas(core, io, M) {
+  // Camada pessoal ilegível não derruba a leitura da política (que mora no config do time), mas também
+  // não some em silêncio: o erro, que nomeia o arquivo, vai para stderr, e stdout e exit ficam iguais.
+  let ignoradas = [];
+  let desconhecidas = [];
+  try {
+    ({ ignoredTeam: ignoradas, ignoredUnknown: desconhecidas } = readPersonal(core));
+  } catch (error) {
+    io.err(M.errorPrefix(error.message));
+  }
+  if (ignoradas.length) io.err(M.personalKeysIgnored(LOCAL_CONFIG_NAME, ignoradas.join(", ")));
+  if (desconhecidas.length) io.err(M.personalKeysUnknown(LOCAL_CONFIG_NAME, desconhecidas.join(", ")));
+  if (misplacedTeamKeys(core).includes("projectId")) io.err(M.projectIdPersonal);
 }
 
 // `mgr agents apply` — reescreve só o frontmatter dos agentes que o manifesto declara, a partir do

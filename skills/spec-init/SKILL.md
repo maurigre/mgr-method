@@ -200,21 +200,48 @@ Every adoption/threshold becomes an entry in the CONSTITUTION (and an ADR when s
    policy, not a per-feature choice.
 5. **Versioning (commits, branches, push) — a policy with confirmation, never automatic
    action.** FIRST detect: no `.git` in the project → policy disabled, ZERO questions
-   about commit/branch (greenfield may offer `git init` once). With git, detect and
-   FOLLOW the existing conventions (`git log` for the message pattern; branch names;
-   PR flow). Greenfield asks with these defaults:
-   - **Commits:** Conventional prefix (`feat:`, `fix:`, `refactor:`...); the project's
-     language; title ≤ 72 characters in the imperative, describing WHAT it does (not
-     how); body only when the why/impact needs explaining.
-   - **Branch per spec:** every spec is born on a new branch (default `feat/<slug>`).
-   - **Commit at the end of the spec:** the skill PREPARES and DISPLAYS (message + files)
-     and ASKS; only executes on an explicit "yes".
-   - **Push with confirmation and guards:** only the spec's branch (never main/protected
-     directly); NEVER force-push; before asking, display a checklist (quality gates
-     green, commits on convention, exact list of what goes up); diverged remote
-     (non fast-forward) → halt and ask; PR flow detected → suggest opening the PR.
-   - **Merge between specs:** suggest merging the previous branch before opening a new
-     spec; postponed ones enter a queue in opening order (COMPLETED specs only).
+   about commit/branch (greenfield may offer `git init` once; accepted → the project has git and
+   the rules below apply); without git, CONSTITUTION §5 receives `Not applicable: no git repository`. With git, detect and FOLLOW the existing
+   conventions (`git log` for the message pattern; branch names; PR flow). Record in
+   CONSTITUTION §5, in the subsections `### Commits`, `### Branches`, `### Confirmation`:
+   - **Commits** (greenfield asks with these defaults):
+     - Conventional `type: subject`, no scope; `type` ∈ {build, chore, ci, docs, feat,
+       fix, perf, refactor, revert, style, test}; subject in the imperative, no trailing
+       period, not starting with an uppercase letter, describing WHAT it does (not how).
+     - Header ≤ 72 characters → write `Commit header max: 72`; blank line after the
+       header; body only when the why/impact needs explaining, each line ≤ 100.
+     - The project's language, written in ASCII without accents; no emoji, no backtick;
+       no AI attribution (`Co-Authored-By: <AI>`, "Generated with").
+     - Precedence: a convention detected in brownfield wins over these defaults; a
+       project commitlint config wins over the defaults. Config files: `.commitlintrc`,
+       `.commitlintrc.{json,yaml,yml,js,cjs,mjs,ts,cts,mts}`,
+       `commitlint.config.{js,cjs,mjs,ts,cts,mts}`, or a `commitlint` field in
+       `package.json`/`package.yaml` (source: commitlint.js.org/reference/configuration).
+       Take the header limit from it; undeterminable → `[TO CONFIRM]`. NEVER install
+       commitlint, a hook or a dependency.
+   - **Branches** (with git, ALWAYS ask which model; offer the 4 literally):
+     1. `<type>/<TICKET>/<initials>_<description_snake>`
+     2. `<type>/<initials>_<description_snake>`
+     3. `<initials>_<description_snake>`
+     4. `feat/<slug>`
+     - Brownfield: list `git for-each-ref --format='%(refname:short)' refs/heads refs/remotes`,
+       ignoring `HEAD` and the default branch; strip the remote prefix (`origin/`) and count
+       each name once. Propose the model that more than half of the names match. Otherwise, a
+       common pattern shared by more than half → propose it as "other", written only with the
+       placeholders `<type>`, `<TICKET>`, `<initials>`, `<description_snake>`, `<slug>`. No
+       majority → ask without proposing.
+     - Write `Branch model: <model>`, the value in backticks, so a Markdown preview does not hide
+       the `<placeholders>` as HTML tags. NEVER write anyone's initials in the CONSTITUTION:
+       they are personal; `spec-create` records them with `spec initials set`.
+   - **Confirmation** (never automatic action):
+     - **Commit at the end of the spec:** the skill PREPARES and DISPLAYS (message + files)
+       and ASKS; only executes on an explicit "yes".
+     - **Push with confirmation and guards:** only the spec's branch (never main/protected
+       directly); NEVER force-push; before asking, display a checklist (quality gates
+       green, commits on convention, exact list of what goes up); diverged remote
+       (non fast-forward) → halt and ask; PR flow detected → suggest opening the PR.
+     - **Merge between specs:** suggest merging the previous branch before opening a new
+       spec; postponed ones enter a queue in opening order (COMPLETED specs only).
    Record everything in the CONSTITUTION.
 6. **Dependency vulnerabilities:** **OWASP Dependency-Check** (or equivalent) in the
    build; CVEs found → update/replace the dependency (recording an ADR when the swap is

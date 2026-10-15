@@ -138,7 +138,7 @@ test("lista vazia significa nenhuma das quatro, nunca `é seguro`", () => {
 const CLASSES_EM_DISCO = {
   "code-analyzer": [EMBEDDED_SHELL, SELF_MODIFICATION],
   "configure-agents": [EMBEDDED_SHELL, SELF_MODIFICATION],
-  "spec-create": [EMBEDDED_SHELL],
+  "spec-create": [EMBEDDED_SHELL, SELF_MODIFICATION],
   "spec-execute": [EMBEDDED_SHELL],
   "spec-init": [EMBEDDED_SHELL, SELF_MODIFICATION],
 };
@@ -286,6 +286,15 @@ test("should infer self-modification for the runtime agents apply form", () => {
 
 test("should keep inferring self-modification for the legacy mgr agents set form", () => {
   assert.ok(capabilitiesOf("Run `mgr agents set review --effort max`").includes(SELF_MODIFICATION));
+});
+
+test("should infer self-modification for spec initials set", () => {
+  assert.ok(capabilitiesOf("Run `node {{MGR_RUNTIME}} spec initials set mr`").includes(SELF_MODIFICATION));
+});
+
+test("should not infer self-modification for spec initials --json", () => {
+  assert.deepEqual(capabilitiesOf("Run `node {{MGR_RUNTIME}} spec initials --json`")
+    .filter((c) => c === SELF_MODIFICATION), []);
 });
 
 test("should match the audit --json baseline for every bundled skill", () => {

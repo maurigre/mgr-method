@@ -18,6 +18,7 @@ import * as tokens from "../src/tokens.js";
 import * as audit from "../src/audit.js";
 import { doctor } from "../src/commands/doctor.js";
 import { sddCheck } from "../src/commands/sdd-check.js";
+import { initials } from "../src/commands/initials.js";
 import { origin } from "../src/commands/origin.js";
 import { buildRuntime, gateSummary, inheritingModel } from "../src/builder.js";
 import { validateAll } from "../src/validator.js";
@@ -78,7 +79,7 @@ function warnLayers(core, repo) {
   const { ignoredTeam, ignoredUnknown } = readPersonal(core);
   if (ignoredTeam.length) console.error(pc.yellow(M.personalKeysIgnored(localFile, ignoredTeam.join(", "))));
   if (ignoredUnknown.length) console.error(pc.yellow(M.personalKeysUnknown(LOCAL_CONFIG_NAME, ignoredUnknown.join(", "))));
-  if (misplacedTeamKeys(core).length) console.error(pc.yellow(M.projectIdPersonal));
+  if (misplacedTeamKeys(core).includes("projectId")) console.error(pc.yellow(M.projectIdPersonal));
   return localFile;
 }
 
@@ -682,6 +683,7 @@ function cmdSpec(flags, positional) {
   if (sub === "validate") return cmdSpecValidate(flags, positional.slice(1));
   if (sub === "next") return cmdSpecNext(flags, positional.slice(1));
   if (sub === "status") return cmdSpecStatus(flags, positional.slice(1));
+  if (sub === "initials") return initials(commandIo(flags, positional.slice(1)));
   console.error(M.errorPrefix(M.unknownCommand(`spec ${sub || ""}`.trim())));
   return 1;
 }

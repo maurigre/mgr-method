@@ -4,6 +4,20 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 
 ## [Não lançado]
 ### Adicionado
+- **A constituição gerada pela `spec-init` traz a política de versionamento com forma fixa.** A §5
+  tem três subseções (Commits, Branches, Confirmation) e duas linhas que a `spec-create` lê:
+  `Commit header max:` e `Branch model:`.
+  - Regras de commit: Conventional sem escopo, tipos fechados, header de até 72 colunas, corpo de até
+    100, ASCII sem acento e sem atribuição a IA. A convenção detectada e um commitlint do projeto
+    prevalecem. Nada é instalado no projeto.
+  - Com git, a `spec-init` pergunta o modelo de branch: `<type>/<TICKET>/<initials>_<description_snake>`,
+    `<type>/<initials>_<description_snake>`, `<initials>_<description_snake>` ou `feat/<slug>`.
+  - A `spec-create` monta a branch pelo modelo, pede o ticket a cada spec e as iniciais uma vez por
+    pessoa, e confere o nome com `git check-ref-format`. O limite do header do commit sai da
+    constituição.
+  - Comando novo do runtime e da CLI: `spec initials [--json]` e `spec initials set <x>`. As iniciais
+    (2 a 4 letras minúsculas) moram na camada pessoal, `.mgr-core/config.local.json`.
+  - Constituições antigas continuam como estão: `feat/<slug>` e, no commit, o limite escrito nelas.
 - **O SDD gerado pela `spec-init` tem estrutura fixa.** São sempre os mesmos 12 arquivos
   (`00-overview.md` a `09-review-rules.md`, `CONSTITUTION.md` e `_self-assessment.md`), no brownfield
   e no greenfield. Onze têm seções fixas vindas de `skills/spec-init/templates/sdd/`; o

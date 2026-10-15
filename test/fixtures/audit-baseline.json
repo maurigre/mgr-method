@@ -48,7 +48,8 @@
   "spec-create": {
     "branch": "undeclared",
     "classes": [
-      "embedded-shell"
+      "embedded-shell",
+      "self-modification"
     ]
   },
   "spec-execute": {

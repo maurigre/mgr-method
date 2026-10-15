@@ -106,6 +106,7 @@ export const RUNTIME_FILES = [
   "src/commands/agents.js",
   "src/commands/doctor.js",
   "src/commands/hooks.js",
+  "src/commands/initials.js",
   "src/commands/origin.js",
   "src/commands/sdd-check.js",
   "src/commands/spec.js",

@@ -277,6 +277,14 @@ const en = ({ invocation, lifecycle }) => ({
   originUnknown: (valor, validos) => `unknown project origin: ${valor} (expected ${validos})`,
   originWritten: (antes, depois) => `project origin: ${antes} -> ${depois}`,
   originNoInstall: (dir) => `no MGR installation found at ${dir}; writing the origin anyway (this is the global-scope case).`,
+  initialsRecorded: (v) => `initials: ${v}`,
+  initialsNotRecorded: () => "initials not recorded",
+  initialsInvalid: (v) => `initials "${v}" are invalid (expected 2 to 4 lowercase letters)`,
+  initialsSetNeedsValue: () => "spec initials set needs a value",
+  initialsRefused: (v) => `refused "${v}": initials are 2 to 4 lowercase letters (a-z)`,
+  initialsWriting: (f) => `writing ${f}`,
+  initialsNone: () => "(none)",
+  initialsWritten: (a, d) => `initials: ${a} -> ${d}`,
   agentsSetEngineNotInstalled: (engine, installed) =>
     `engine \`${engine}\` is not installed in this project`
     + (installed ? ` (installed: ${installed})` : ""),
@@ -296,7 +304,8 @@ const en = ({ invocation, lifecycle }) => ({
   runtimeHelp: [
     "mgr-method project runtime",
     "",
-    "  spec status|validate|next",
+    "  spec status|validate|next|initials",
+    "  spec initials set <value>",
     "  agents [<intent>|set|apply]",
     "  origin set <value>",
     "  origin [--json]",
@@ -406,6 +415,7 @@ Usage: mgr <command> [options]
                    ([<slug>], --all, --strict, --json)
   spec next        the next action from the plan ([<slug>], --json)
   spec status      which artifacts exist ([<slug>], --all, --json)
+  spec initials    reads or records your initials for branch names (set <value>, --json)
   agents           which model and effort each intent uses, and where each
                    value came from ([<intent>], --json)
   agents set       writes one intent's policy (<intent>, --model, --effort,
@@ -701,6 +711,14 @@ const ptBR = ({ invocation, lifecycle }) => ({
   originUnknown: (valor, validos) => `origem de projeto desconhecida: ${valor} (esperado ${validos})`,
   originWritten: (antes, depois) => `origem do projeto: ${antes} -> ${depois}`,
   originNoInstall: (dir) => `nenhuma instalação MGR encontrada em ${dir}; gravando a origem mesmo assim (é o caso do escopo global).`,
+  initialsRecorded: (v) => `iniciais: ${v}`,
+  initialsNotRecorded: () => "iniciais não registradas",
+  initialsInvalid: (v) => `iniciais "${v}" inválidas (esperado de 2 a 4 letras minúsculas)`,
+  initialsSetNeedsValue: () => "spec initials set precisa de um valor",
+  initialsRefused: (v) => `recusado "${v}": iniciais têm de 2 a 4 letras minúsculas (a-z)`,
+  initialsWriting: (f) => `gravando ${f}`,
+  initialsNone: () => "(nenhuma)",
+  initialsWritten: (a, d) => `iniciais: ${a} -> ${d}`,
   agentsSetEngineNotInstalled: (engine, instalados) =>
     `motor \`${engine}\` não está instalado neste projeto`
     + (instalados ? ` (instalados: ${instalados})` : ""),
@@ -718,7 +736,8 @@ const ptBR = ({ invocation, lifecycle }) => ({
   runtimeHelp: [
     "runtime do projeto mgr-method",
     "",
-    "  spec status|validate|next",
+    "  spec status|validate|next|initials",
+    "  spec initials set <valor>",
     "  agents [<intencao>|set|apply]",
     "  origin set <valor>",
     "  origin [--json]",
@@ -828,6 +847,7 @@ Uso: mgr <comando> [opções]
                    ([<slug>], --all, --strict, --json)
   spec next        a próxima ação a partir do plano ([<slug>], --json)
   spec status      quais artefatos existem ([<slug>], --all, --json)
+  spec initials    lê ou grava suas iniciais para nomes de branch (set <valor>, --json)
   agents           qual modelo e esforço cada intenção usa, e de onde veio
                    cada valor ([<intenção>], --json)
   agents set       escreve a política de uma intenção (<intenção>, --model,

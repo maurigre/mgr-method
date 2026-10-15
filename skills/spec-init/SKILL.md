@@ -1,6 +1,6 @@
 ---
 name: spec-init
-description: Initializes a project's SDD (Specification-Driven Development) structure. On an EXISTING project, runs a phased deep analysis with chunking and generates /docs/sdd/ (00-overview to 08-glossary), CONSTITUTION.md and the review rules guide. On an EMPTY project (greenfield), conducts a guided interview about stack/architecture/domain and generates the same artifacts from the choices. Use whenever the user asks to analyze, document or map a project, generate SDD, extract contracts, onboard a repository, start a project from scratch with SDD, or generate instructions for Copilot/Cursor. Prerequisite of the spec-create skill.
+description: Initializes a project's SDD (Specification-Driven Development) structure. On an EXISTING project, runs a phased deep analysis with chunking and generates /docs/sdd/ (the canonical `docs/sdd/` files), CONSTITUTION.md and the review rules guide. On an EMPTY project (greenfield), conducts a guided interview about stack/architecture/domain and generates the same artifacts from the choices. Use whenever the user asks to analyze, document or map a project, generate SDD, extract contracts, onboard a repository, start a project from scratch with SDD, or generate instructions for Copilot/Cursor. Prerequisite of the spec-create skill.
 license: Source-Available v1.0. LICENSE has complete terms
 ---
 
@@ -93,9 +93,9 @@ the next invocation resumes from the cache (`--fresh` forces a restart).
 3. **Contracts** — endpoints, OpenAPI/GraphQL/proto, request/response, auth.
 4. **Domain/Data** — entities, invariants, migrations, schema.
 5. **Quality/Operations** — tests, CI/CD, infra, observability.
-6. **Synthesis** — generate `/docs/sdd/00-overview.md` to `08-glossary.md` + `CONSTITUTION.md`
-   (architectural principles, quality standards and non-negotiable rules EXTRACTED from the
-   project) + `09-review-rules.md` (see "Review rules guide", below).
+6. **Synthesis** — generate the canonical SDD in `/docs/sdd/`, following "Canonical SDD
+   structure (both modes)", below. `CONSTITUTION.md` holds the architectural principles,
+   quality standards and non-negotiable rules EXTRACTED from the project.
 
 ## GREENFIELD MODE — Guided interview
 
@@ -120,6 +120,38 @@ Interview blocks (each one feeds an artifact):
 Output: the same `/docs/sdd/` + `CONSTITUTION.md` + `09-review-rules.md`, clearly marked as
 born from an interview (`[ORIGIN: greenfield interview]`), and the directory skeleton of the
 chosen architecture (without generating business code).
+
+## Canonical SDD structure (both modes)
+
+Brownfield and greenfield write the same 12 files, in this order: `00-overview.md`,
+`01-stack.md`, `02-architecture.md`, `03-contracts.md`, `04-domain.md`, `05-data.md`,
+`06-quality.md`, `07-operations.md`, `08-glossary.md`, `09-review-rules.md`, `CONSTITUTION.md`
+and `_self-assessment.md`. Depth *quick* also writes all 12; a module's SDD uses the same set.
+
+- Fill each file from `templates/sdd/<name>`, except `09-review-rules.md`, which comes from the
+  `arch-*` skill (see "Review rules guide", below). Titles and body in the output language.
+- An empty section gets `Not applicable: <reason>` only with evidence; otherwise `[TO CONFIRM]`.
+- Content outside the 12 roles goes in `docs/sdd/extensions/<topic>.md`: kebab-case English
+  name, no numeric prefix.
+- **Before writing**, run `node {{MGR_RUNTIME}} sdd-check --json` and read `roles` from the JSON.
+  Exit 1 is expected here: `reason: "no-dir"` on the first run (every role `absent`), and
+  `"no-constitution"` on a re-run of an SDD that has no constitution yet. In both, `roles` and the
+  `out-of-list` entries of `warnings` stay valid. Then, per role:
+  - `canonical` → update the file in place (rule "Incremental", below), keeping the template
+    sections and adding any that are missing.
+  - `legacy` → show the user `<old name> → <canonical name>` and ask to rename it. **Yes:** rename
+    with `git mv` when `git ls-files --error-unmatch <old name>` exits 0, otherwise `mv` — never
+    `git add` a file just to rename it; confirm the content hash is the same before
+    and after, and that `sdd-check --json` now reports the role `canonical` — if either fails, STOP
+    and report; a failing rename command also STOPs. Then update it in place. **No:** update the old file in place under its old name.
+    Never copy, rewrite or delete a file to change its name. For `review-rules`, say first that the
+    review tools read only `09-review-rules.md`. A legacy file that resolves more than one role is
+    not renamed: update it in place and tell the user.
+  - `ambiguous` → STOP and ask which of the `candidates` holds the role; then treat it as
+    `legacy`. If the user says none, treat the role as `absent`.
+  - `absent` → if `warnings` lists `out-of-list` files, show them and ask whether one holds the
+    role (yes → treat it as `legacy`); otherwise create the canonical file from its template —
+    for `review-rules`, from the `arch-*` skill ("Review rules guide").
 
 ## Quality policy (greenfield asks; brownfield follows what exists)
 
@@ -205,7 +237,8 @@ NEVER embed architecture rules here — delegate:
    the assembly: it combines its **Principles** with the **single source**
    `_shared/arch/cross-cutting-rules.md` (co-located with the skills) — Mandatory rules
    (design/test/log/mutation), the project's **language profile** and the good practices.
-3. Write the returned guide to `docs/sdd/09-review-rules.md`, preserving the citable IDs
+3. Write the returned guide to the file "Canonical SDD structure" resolved for `review-rules`
+   (`docs/sdd/09-review-rules.md`, unless the user kept an old name), preserving the citable IDs
    (`INV-`, `DES-`, `TST-`, `LOG-`, `MUT-`, `NAM-`, `<PROFILE>-`). The naming rules
    (`NAM-1`/`NAM-2`) already come from the cross-cutting source — no need to add them by
    hand.
@@ -245,10 +278,12 @@ Cursor-rules are passive CONSUMERS: generate static context files for them deriv
 `/docs/sdd/`:
 - **Copilot:** `.github/copilot-instructions.md` (≤ ~400 lines: Project Context, Tech
   Stack, Architecture Patterns, Coding Conventions, Domain Glossary, References) +
-  `.github/instructions/*.instructions.md` (path-specific with `applyTo`) + `AGENTS.md`
-  (Setup, Build & Test, Code Style, Architecture, Domain, Watch out).
-- **Cursor:** `.cursorrules` + `.cursor/rules/*.mdc` (architecture, domain, contracts,
-  conventions). NEVER copy /docs/sdd/ wholesale — always reference.
+  `.github/instructions/*.instructions.md` (path-specific with `applyTo`; two fixed
+  sections: Rules and References) + `AGENTS.md` (Setup, Build & Test, Code Style,
+  Architecture, Domain, Watch out).
+- **Cursor:** `.cursorrules` (same section list as `copilot-instructions.md`) +
+  `.cursor/rules/architecture.mdc`, `domain.mdc`, `contracts.mdc`, `conventions.mdc`.
+  NEVER copy /docs/sdd/ wholesale — always reference.
 
 ## Self-assessment (mandatory at the end)
 

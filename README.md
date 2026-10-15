@@ -86,7 +86,7 @@ no warning does not prove the config travels.
 >
 > The runtime answers only the commands the skills use — `spec status|validate|next`, `agents`
 > (`set`, `apply`), `origin set`, `origin [--json]` (reads the recorded origin: `recorded`, `absent` or
-> `invalid`, the last one exits 1), `doctor`, `sdd-check`, `detect`, `precompact`, `version` — and
+> `invalid`, the last one exits 1), `doctor`, `sdd-check [--json]`, `detect`, `precompact`, `version` — and
 > refuses lifecycle commands (`install`, `update`, `add`…), naming the `npx mgr-method@<version>`
 > command to run instead. `doctor` run through the runtime reports `stale-install` and
 > `divergent-body` as **unavailable**: the package sources they compare against are not in the
@@ -152,7 +152,7 @@ code-analyzer ─ final 2-axis review: Standards (THE project's guide) + Spec (d
 | **Verifiable provenance** | `mgr spec validate` also checks the provenance tag you wrote: its form, and whether a `[code:<path>:<line>]` pointer resolves on disk from the repository root. It never **requires** a tag — the rule that would demand one was rejected on measurement, and nothing that already exists is reproved (ADR-0016). |
 | **Next action, not state** | `mgr spec next` answers what to do now: the task, its exact artifact, the helper skill and what it waits on. A task can declare `status: done`, and the answer always says how much state the plan declares — with none, it says it does not know what you have already done (ADR-0014). |
 | **Execution laws** | **Single source** in `shared/laws/execution-laws.md`: 47 laws (L0–L6) binding on every skill, each declaring **who it binds, by role** (`Planner`, `Executor`, `Verifier`, `Diagnostician`, `All`). Skills point to it; none repeats a law. The central ones enter the context **before the first message**, via the session hook (ADR-0011). |
-| `spec-init` | Initializes the SDD: analyzes an existing project (phased chunking) **or** runs a guided interview on an empty project (greenfield). Generates `docs/sdd/`, the project's `CONSTITUTION.md` and the review guide. |
+| `spec-init` | Initializes the SDD: analyzes an existing project (phased chunking) **or** runs a guided interview on an empty project (greenfield). Generates `docs/sdd/`, the project's `CONSTITUTION.md` and the review guide, always with the same 12 file names: 11 filled from templates with fixed sections, and the review guide from the `arch-*` skill. Content outside those roles goes in `docs/sdd/extensions/`. In an existing SDD, a file keeps its old name unless you confirm the rename, which never loses content; `sdd-check` warns about missing canonical files and names outside the list, without blocking. |
 | `spec-create` | Evolves the project per feature: brief → PRD → spec → plan (P0/P1/P2 + DAG), with blocking checkpoints; after plan approval, delegates the implementation to `spec-execute` and closes with the completion. |
 | `spec-execute` | Executes the approved plan task by task (DAG), applying the development premises (security, performance, resources, clarity — "vocabulary, not a checklist") and active context control (S–F tiers, archiving at 75%, hand-off, anti-compaction). Direct resumption of an interrupted execution. |
 | `adr-create` | Nygard-format ADRs: auto-detects the directory, sequential numbering, immutability of accepted ones, standalone or invoked mode. |

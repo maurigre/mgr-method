@@ -1,4 +1,4 @@
-import { checkSdd } from "../sdd-check.js";
+import { inspectSdd } from "../sdd-check.js";
 
 const CHAVE_DA_FALHA = {
   "no-dir": "sddCheckNoDir",
@@ -6,19 +6,26 @@ const CHAVE_DA_FALHA = {
   empty: "sddCheckEmpty",
 };
 
-const CHAVE_DO_AVISO = {
-  "no-review-rules": "sddCheckNoReviewRules",
+const linhaDoAviso = (M, { code, file }) => {
+  if (code === "no-review-rules") return M.sddCheckNoReviewRules();
+  if (code === "missing-canonical") return M.sddCheckMissingCanonical(file);
+  return M.sddCheckOutOfList(file);
 };
 
-export function sddCheck({ root, io, M, exists, listMd }) {
-  const resultado = checkSdd(root, { exists, listMd });
+export function sddCheck({ root, io, M, flags, exists, listMd }) {
+  const { ok, reason, dir, roles, warnings } = inspectSdd(root, { exists, listMd });
 
-  if (!resultado.ok) {
-    io.err(M[CHAVE_DA_FALHA[resultado.reason]]());
+  if (flags?.json) {
+    io.out(JSON.stringify({ schemaVersion: 1, ok, reason, dir, roles, warnings }, null, 2));
+    return ok ? 0 : 1;
+  }
+
+  if (!ok) {
+    io.err(M[CHAVE_DA_FALHA[reason]]());
     return 1;
   }
 
-  resultado.warnings.forEach((aviso) => io.err(M[CHAVE_DO_AVISO[aviso]]()));
-  io.out(M.sddCheckOk(resultado.dir));
+  warnings.forEach((aviso) => io.err(linhaDoAviso(M, aviso)));
+  io.out(M.sddCheckOk(dir));
   return 0;
 }

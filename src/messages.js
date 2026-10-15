@@ -301,7 +301,7 @@ const en = ({ invocation, lifecycle }) => ({
     "  origin set <value>",
     "  origin [--json]",
     "  doctor",
-    "  sdd-check",
+    "  sdd-check [--json]",
     "  detect --hook <engine>",
     "  precompact --hook <engine>",
     "  version",
@@ -334,6 +334,8 @@ const en = ({ invocation, lifecycle }) => ({
   sddCheckEmpty: () => "SDD INCOMPLETE: docs/sdd/ is empty",
   sddCheckNoReviewRules: () => "warning: docs/sdd/09-review-rules.md missing — code-analyzer will operate without the project guide",
   sddCheckOk: (dir) => `SDD OK: project initialized (${dir})`,
+  sddCheckMissingCanonical: (file) => `warning: docs/sdd/${file} missing (canonical SDD file)`,
+  sddCheckOutOfList: (file) => `warning: docs/sdd/${file} is not a canonical SDD file name`,
   agentsApplyMissing: (file, version) => `${file} does not exist: run npx mgr-method@${version} update`,
   agentsApplyNotOwned: (file) => `${file} was not written by MGR (no mgr-managed-agent marker): left untouched`,
   agentsApplyWriting: (file) => `Rewriting the agent frontmatter in ${file}`,
@@ -399,7 +401,7 @@ Usage: mgr <command> [options]
   validate         validates the SKILL.md files (skill authoring)
   audit            infers each skill's dangerous capabilities and compares with what it declares
   doctor           checks whether the installation is intact, and never writes anything
-  sdd-check        confirms the project was initialized for SDD (docs/sdd/)
+  sdd-check        confirms the project was initialized for SDD (docs/sdd/, --json)
   spec validate    validates this project's plan and spec artifacts
                    ([<slug>], --all, --strict, --json)
   spec next        the next action from the plan ([<slug>], --json)
@@ -721,7 +723,7 @@ const ptBR = ({ invocation, lifecycle }) => ({
     "  origin set <valor>",
     "  origin [--json]",
     "  doctor",
-    "  sdd-check",
+    "  sdd-check [--json]",
     "  detect --hook <motor>",
     "  precompact --hook <motor>",
     "  version",
@@ -754,6 +756,8 @@ const ptBR = ({ invocation, lifecycle }) => ({
   sddCheckEmpty: () => "SDD INCOMPLETO: docs/sdd/ está vazio",
   sddCheckNoReviewRules: () => "aviso: docs/sdd/09-review-rules.md ausente — o code-analyzer vai operar sem o guia do projeto",
   sddCheckOk: (dir) => `SDD OK: projeto inicializado (${dir})`,
+  sddCheckMissingCanonical: (file) => `aviso: docs/sdd/${file} ausente (arquivo canônico do SDD)`,
+  sddCheckOutOfList: (file) => `aviso: docs/sdd/${file} não é um nome canônico do SDD`,
   agentsApplyMissing: (file, version) => `${file} não existe: rode npx mgr-method@${version} update`,
   agentsApplyNotOwned: (file) => `${file} não foi escrito pelo MGR (sem o marcador mgr-managed-agent): mantido como está`,
   agentsApplyWriting: (file) => `Reescrevendo o frontmatter do agente em ${file}`,
@@ -819,7 +823,7 @@ Uso: mgr <comando> [opções]
   validate         valida as SKILL.md (autoria de skill)
   audit            infere as capacidades perigosas de cada skill e compara com o declarado
   doctor           confere se a instalacao esta integra, e nunca escreve nada
-  sdd-check        confere se o projeto foi inicializado para SDD (docs/sdd/)
+  sdd-check        confere se o projeto foi inicializado para SDD (docs/sdd/, --json)
   spec validate    valida o plano e a spec deste projeto
                    ([<slug>], --all, --strict, --json)
   spec next        a próxima ação a partir do plano ([<slug>], --json)

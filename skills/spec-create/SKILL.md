@@ -86,13 +86,16 @@ A spec with pending execution does not enter the queue. Then create this spec's 
 (CONSTITUTION convention; default `feat/<slug>`), with confirmation. No git in the
 project → skip this whole phase, no questions.
 
-### Phase 1 — Contextualization (no interaction)
+### Phase 1 — Contextualization (no interaction, except the stop for an `ambiguous` role)
 **1a. Resumption:** resolve the path first (see *Resolving artifact paths*); if the feature's
 `.handoff.md` exists, load ONLY the saved state
 (tiers S/A/B + decisions), skip already-approved phases and completed tasks, and warn:
 "Resuming <slug> from task <id>." Otherwise, normal load:
-CONSTITUTION → 01-architecture → 02-domain → 03-contracts → 08-glossary → inventory of
-available skills (built-in + custom in `.claude/skills/` and `~/.claude/skills/`;
+CONSTITUTION (by name) → run `node {{MGR_RUNTIME}} sdd-check --json` and load the `path` of
+`roles.architecture`, `roles.domain`, `roles.contracts` and `roles.glossary`. By role state:
+`legacy` → read the file and tell the user its name is outdated; `ambiguous` → STOP and ask the
+user which of the `candidates` is the one for that role; `absent` → proceed without it and say
+so. Then the inventory of available skills (built-in + custom in `.claude/skills/` and `~/.claude/skills/`;
 for each one, read the SKILL.md and note when it would be useful). Save to
 `.context.json` under the resolved `specRoot` (gitignored; fallback `/specs/<slug>/.context.json`).
 

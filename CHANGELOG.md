@@ -4,6 +4,22 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 
 ## [Não lançado]
 ### Adicionado
+- **O SDD gerado pela `spec-init` tem estrutura fixa.** São sempre os mesmos 12 arquivos
+  (`00-overview.md` a `09-review-rules.md`, `CONSTITUTION.md` e `_self-assessment.md`), no brownfield
+  e no greenfield. Onze têm seções fixas vindas de `skills/spec-init/templates/sdd/`; o
+  `09-review-rules.md` continua montado pelas skills `arch-*`. Num SDD existente, o arquivo mantém o
+  nome antigo se você não confirmar a renomeação. Conteúdo fora
+  desses papéis vai para `docs/sdd/extensions/<tópico>.md`. Os `.cursor/rules/` derivados passam a ter
+  nomes fixos (`architecture.mdc`, `domain.mdc`, `contracts.mdc`, `conventions.mdc`).
+  - O `sdd-check` ganha `--json`, com o caminho de cada papel resolvido por regra fixa: nome canônico,
+    nome antigo único (`legacy`), vários candidatos (`ambiguous`) ou nenhum (`absent`). A `spec-create`
+    usa esse caminho, e para e pergunta quando o resultado é ambíguo.
+  - Numa nova execução, a `spec-init` renomeia um arquivo de nome antigo para o canônico **só com a sua
+    confirmação**, com `git mv` e conferência de que o conteúdo não mudou. Ela nunca copia, reescreve
+    ou apaga para trocar um nome.
+  - **Atenção:** projetos com nomes antigos passam a receber avisos do `sdd-check` (canônico ausente,
+    nome fora da lista). Os avisos não bloqueiam: o exit code é o de antes (1 só sem `docs/sdd/`, sem `CONSTITUTION.md`
+    ou com o diretório vazio).
 - **O runtime do MGR passa a morar dentro do projeto.** Cada motor instalado ganha
   `<motor>/skills/_shared/mgr/` (ex.: `.claude/skills/_shared/mgr/`): código legível, só Node, sem
   dependência externa, chamado pelas skills por caminho explícito. Nada é instalado no sistema

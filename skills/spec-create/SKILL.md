@@ -82,9 +82,26 @@ Suggest merging them in opening order. MECHANICAL conflicts (imports, formatting
 with no semantic intersection) → resolve, DISPLAY the resolution diff and confirm.
 SEMANTIC conflicts (the same rule changed in different ways) → mandatory HALT: present
 both sides and ask — deciding which rule wins is a business decision, not a merge one.
-A spec with pending execution does not enter the queue. Then create this spec's branch
-(CONSTITUTION convention; default `feat/<slug>`), with confirmation. No git in the
-project → skip this whole phase, no questions.
+A spec with pending execution does not enter the queue. Then create this spec's branch. No git
+in the project → skip this whole phase, no questions. Otherwise read the line `Branch model:` in
+CONSTITUTION §5 (### Branches); its value is the text after the colon, without surrounding backticks:
+- **No such line, or `[TO CONFIRM]`** (older CONSTITUTION): use the CONSTITUTION convention;
+  default `feat/<slug>`, with no new question about the model.
+- **Otherwise** fill the model's placeholders:
+  - `<type>`: ask, showing the closed type list from `### Commits`; propose `feat` for a new
+    feature, `fix` for a bugfix, `refactor` for a refactor, nothing for the other change types;
+    an answer outside the list → ask again.
+  - `<TICKET>`: ask on every spec; one non-empty segment without `/`; empty → ask again, never
+    invent.
+  - `<initials>`: run `node {{MGR_RUNTIME}} spec initials --json`. `recorded` → use it; `absent`
+    or `invalid` (show the value) → ask, and record the answer with
+    `node {{MGR_RUNTIME}} spec initials set <x>` (2-4 lowercase letters; refused → ask again). No
+    JSON on stdout → show the error and STOP.
+  - `<description_snake>`: the confirmed slug with `-` replaced by `_`. `<slug>`: the slug as is.
+  - Any other placeholder, or a model with no placeholder at all → STOP and ask; never interpret.
+
+In both cases, check the name with `git check-ref-format --branch <name>` (failure → show the
+error and ask again), then show the name and create the branch only on an explicit "yes".
 
 ### Phase 1 — Contextualization (no interaction, except the stop for an `ambiguous` role)
 **1a. Resumption:** resolve the path first (see *Resolving artifact paths*); if the feature's
@@ -173,8 +190,9 @@ planning again.
 ### Phase 6 — Completion (`06-completion.md`)
 Summary of what changed · tests (green?) · INCREMENTAL update of `/docs/sdd/` (diff)
 · links to created ADRs · pending items. **Commit (with confirmation, never automatic):**
-if the policy is enabled, PREPARE the commit per the CONSTITUTION convention (prefix,
-language, ≤72 imperative, the what not the how), DISPLAY message + files and ASK; execute
+if the policy is enabled, PREPARE the commit per the `### Commits` rules of the CONSTITUTION
+(header limit from `Commit header max:` — absent or `[TO CONFIRM]`: the header limit written in
+§5; more than one number or unclear → STOP and ask; none → 72; the what not the how), DISPLAY message + files and ASK; execute
 only on an explicit "yes".
 **Push (with confirmation and guards):** only the spec's branch; never force-push; first
 display the checklist (gates green, convention ok, `git log origin/<branch>..<branch>` of

@@ -405,7 +405,7 @@ export function readLawsPreamble(coreDir) {
 // `.gitignore`, DT-4). As chaves são disjuntas da camada do time: chave do time escrita aqui é
 // ignorada e avisada, e nenhum leitor de política lê este arquivo — `readAgents`, `readDetectionMode`
 // e `readLawsPreamble` continuam lendo só `config.json`. A precedência é por construção.
-export const PERSONAL_KEYS = Object.freeze(["projectId"]);
+export const PERSONAL_KEYS = Object.freeze(["projectId", "initials"]);
 export const TEAM_KEYS = Object.freeze([
   "agents", "reviewGate", "origin", "registries", "detectionMode", "lawsPreamble", "architecture", "language", "userLanguage",
 ]);
@@ -441,7 +441,7 @@ export function readPersonal(coreDir) {
   return { projectId: local.projectId, ignoredTeam, ignoredUnknown };
 }
 
-// Escritor único de `config.local.json`. Read-modify-write, como `writeOrigin`: as outras chaves do
+// Escritor do `projectId` em `config.local.json` (as `initials` têm o `writeInitials`). Read-modify-write, como `writeOrigin`: as outras chaves do
 // arquivo (inclusive as de time que ele já tinha, que continuam sendo avisadas) sobrevivem à escrita.
 // Se o arquivo existente for inválido, lança ANTES de gravar, para não apagar o que o autor escreveu.
 export function writePersonal(coreDir, { projectId } = {}) {
@@ -455,8 +455,37 @@ export function writePersonal(coreDir, { projectId } = {}) {
   return dest;
 }
 
+// Iniciais da pessoa (DT-5): 2 a 4 letras minusculas, usadas so para montar o nome da branch da spec.
+// `readPersonal` nao valida esta chave, para uma inicial escrita a mao nao quebrar os outros leitores.
+export const INITIALS_PATTERN = /^[a-z]{2,4}$/;
+
+// Os tres estados de um valor de iniciais, na forma do `readOrigin`. `invalid` carrega o valor cru.
+const estadoDasIniciais = (value) => {
+  if (value === undefined) return { state: "absent" };
+  return typeof value === "string" && INITIALS_PATTERN.test(value)
+    ? { state: "recorded", initials: value }
+    : { state: "invalid", value };
+};
+
+export function readInitials(coreDir) {
+  return estadoDasIniciais(readLocalObject(coreDir).initials);
+}
+
+// Valida ANTES de ler ou gravar. Read-modify-write, como `writePersonal`: o `projectId` e as outras
+// chaves sobrevivem. Arquivo pessoal invalido lanca antes de gravar.
+export function writeInitials(coreDir, valor) {
+  if (typeof valor !== "string" || !INITIALS_PATTERN.test(valor)) {
+    throw new Error(`invalid initials: ${JSON.stringify(valor)} (expected 2 to 4 lowercase letters a-z)`);
+  }
+  const local = readLocalObject(coreDir);
+  mkdirSync(coreDir, { recursive: true });
+  writeFileSync(localConfigPath(coreDir), JSON.stringify({ ...local, initials: valor }, null, 2) + "\n", "utf8");
+  return { before: estadoDasIniciais(local.initials), after: valor };
+}
+
 // Lado "simetria" da DT-2: `projectId` escrito no config do TIME é ignorado pelo método, e este
-// leitor diz quais chaves pessoais estão no lugar errado para o `install`/`update`/`status` avisarem.
+// leitor diz quais chaves pessoais estão no lugar errado. Os avisos citam só o `projectId`: uma
+// `initials` no config do time é ignorada, porque nenhum leitor de iniciais lê esse arquivo.
 export function misplacedTeamKeys(coreDir) {
   const config = readConfig(coreDir);
   return PERSONAL_KEYS.filter((chave) => config[chave] !== undefined);

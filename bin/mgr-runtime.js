@@ -8,6 +8,7 @@ import { RUNTIME_DIR_NAME, readVersion } from "../src/bundle.js";
 import { agents } from "../src/commands/agents.js";
 import { doctor } from "../src/commands/doctor.js";
 import { detectHook, precompactHook } from "../src/commands/hooks.js";
+import { initials } from "../src/commands/initials.js";
 import { origin } from "../src/commands/origin.js";
 import { sddCheck } from "../src/commands/sdd-check.js";
 import { specNext, specStatus, specValidate } from "../src/commands/spec.js";
@@ -36,7 +37,7 @@ function readManifestSafe(root) {
 
 function specCommand(base, positional) {
   const sub = positional[0];
-  const table = { status: specStatus, validate: specValidate, next: specNext };
+  const table = { status: specStatus, validate: specValidate, next: specNext, initials };
   if (!table[sub]) {
     console.error(base.M.runtimeUnknownSpecSub(sub || ""));
     return 1;

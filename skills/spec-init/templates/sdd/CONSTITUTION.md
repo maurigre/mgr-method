@@ -24,7 +24,23 @@
 
 ## 5. Versioning policy
 
-<!-- Commit, branch and release conventions detected or chosen, and which git actions need confirmation. -->
+<!-- Detected or chosen conventions. The two `Key: value` lines are read by spec-create: keep them
+     in English, one per line, at the start of the line, with the value in backticks (spec-create strips them). No git → `Not applicable: no git repository`. -->
+
+### Commits
+
+<!-- Message rules: format, closed type list, subject, body, characters, attribution. -->
+Commit header max: [TO CONFIRM]
+[TO CONFIRM]
+
+### Branches
+
+<!-- One model, built only from the placeholders <type>, <TICKET>, <initials>, <description_snake>, <slug>. -->
+Branch model: [TO CONFIRM]
+
+### Confirmation
+
+<!-- Which git actions need an explicit "yes", push guards, merge between specs. -->
 [TO CONFIRM]
 
 ## 6. Publication

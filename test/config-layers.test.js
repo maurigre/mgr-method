@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execute, planInstall } from "../src/installer.js";
-import { PERSONAL_KEYS, TEAM_KEYS, misplacedTeamKeys, previewAgents, readAgents, readPersonal, writePersonal } from "../src/registry.js";
+import { PERSONAL_KEYS, TEAM_KEYS, misplacedTeamKeys, previewAgents, readAgents, readInitials, readPersonal, writeInitials, writePersonal } from "../src/registry.js";
 
 const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-config-layers-"));
 
@@ -99,7 +99,7 @@ test("should refuse an empty or non-string projectId on read and on write", () =
 });
 
 test("should fix the team and personal key lists of DT-2", () => {
-  assert.deepEqual([...PERSONAL_KEYS], ["projectId"]);
+  assert.deepEqual([...PERSONAL_KEYS], ["projectId", "initials"]);
   assert.deepEqual([...TEAM_KEYS].sort(), [
     "agents", "architecture", "detectionMode", "language", "lawsPreamble", "origin", "registries", "reviewGate", "userLanguage",
   ]);
@@ -383,4 +383,116 @@ test("should warn on stderr about an unknown key in config.local.json and keep t
   const depois = ler();
   assert.deepEqual(depois.out, antes.out);
   assert.deepEqual(depois.err, ["config.local.json: projectid is not a recognized key and was ignored."]);
+});
+
+test("should read recorded, absent and invalid initials", () => {
+  const core = diretorioTemporario();
+  assert.deepEqual(readInitials(core), { state: "absent" });
+  writeFileSync(path.join(core, "config.local.json"), JSON.stringify({ initials: "mr" }), "utf8");
+  assert.deepEqual(readInitials(core), { state: "recorded", initials: "mr" });
+  writeFileSync(path.join(core, "config.local.json"), JSON.stringify({ initials: "M_R" }), "utf8");
+  assert.deepEqual(readInitials(core), { state: "invalid", value: "M_R" });
+});
+
+test("should write initials and keep projectId", () => {
+  const core = diretorioTemporario();
+  const file = path.join(core, "config.local.json");
+  writePersonal(core, { projectId: "abc123" });
+  const resultado = writeInitials(core, "mr");
+  assert.deepEqual(resultado.before, { state: "absent" });
+  assert.equal(resultado.after, "mr");
+  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { projectId: "abc123", initials: "mr" });
+  assert.deepEqual(readInitials(core), { state: "recorded", initials: "mr" });
+  assert.equal(readPersonal(core).projectId, "abc123");
+});
+
+test("should refuse invalid initials and leave the file byte for byte", () => {
+  const core = diretorioTemporario();
+  const file = path.join(core, "config.local.json");
+  writePersonal(core, { projectId: "abc123" });
+  const antes = readFileSync(file, "utf8");
+  for (const valor of ["a", "abcde", "AB", "a_b", "a/b", "á"]) {
+    assert.throws(() => writeInitials(core, valor), /invalid initials/);
+    assert.equal(readFileSync(file, "utf8"), antes);
+  }
+});
+
+test("should not list initials as an unknown personal key", () => {
+  const core = diretorioTemporario();
+  writeFileSync(path.join(core, "config.local.json"), JSON.stringify({ projectId: "abc123", initials: "mr" }), "utf8");
+  assert.deepEqual(readPersonal(core), { projectId: "abc123", ignoredTeam: [], ignoredUnknown: [] });
+});
+
+test("should refuse to write initials over an unreadable config.local.json and keep it untouched", () => {
+  const core = diretorioTemporario();
+  const file = path.join(core, "config.local.json");
+  writeFileSync(file, "{ nao e json", "utf8");
+
+  assert.throws(() => writeInitials(core, "mr"), /not valid JSON/);
+  assert.equal(readFileSync(file, "utf8"), "{ nao e json");
+});
+
+test("should not warn about projectId when only initials is in config.json", async () => {
+  const { getMessages } = await import("../src/messages.js");
+  const aviso = getMessages("en").projectIdPersonal;
+  const casos = [
+    { config: { initials: "mr" }, avisa: false },
+    { config: { projectId: "x" }, avisa: true },
+  ];
+  for (const { config, avisa } of casos) {
+    const project = mkdtempSync(path.join(os.tmpdir(), "mgr-p13-projeto-"));
+    const home = mkdtempSync(path.join(os.tmpdir(), "mgr-p13-home-"));
+    const probe = spawnSync("git", ["-C", project, "rev-parse", "--is-inside-work-tree"], { encoding: "utf8" });
+    assert.equal(probe.error, undefined, "git must be runnable to prove the temp dir is outside a repository");
+    assert.notEqual(probe.status, 0, "the temp dir must not be inside a git work tree");
+    mkdirSync(path.join(project, ".mgr-core"), { recursive: true });
+    writeFileSync(path.join(project, ".mgr-core", "config.json"), JSON.stringify(config), "utf8");
+    const instalado = spawnSync(process.execPath, [MGR_BIN_P117, "install", project, "-y", "--engine", "claude-code"], {
+      cwd: project, encoding: "utf8", env: { ...process.env, LC_ALL: "C", HOME: home },
+    });
+    assert.equal(instalado.status, 0, `install failed: ${instalado.stderr}`);
+    assert.equal(instalado.stderr.includes(aviso), avisa, instalado.stderr);
+  }
+});
+
+test("should keep reading the personal layer and agents with invalid initials", () => {
+  const core = diretorioTemporario();
+  writeFileSync(path.join(core, "config.local.json"), JSON.stringify({ projectId: "abc", initials: "M_R" }), "utf8");
+  const lido = readPersonal(core);
+  assert.equal(lido.projectId, "abc");
+  assert.deepEqual(lido.ignoredUnknown, []);
+
+  const { project, home } = projetoInstaladoP117();
+  writeFileSync(path.join(project, ".mgr-core", "config.local.json"), JSON.stringify({ projectId: "abc", initials: "M_R" }), "utf8");
+  const result = agentsRuntimeP117(project, home);
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotThrow(() => JSON.parse(result.stdout), "stdout must stay pure JSON");
+});
+
+test("should accept four lowercase letters as the upper boundary of initials", () => {
+  const core = diretorioTemporario();
+  writeInitials(core, "abcd");
+
+  assert.deepEqual(readInitials(core), { state: "recorded", initials: "abcd" });
+});
+
+test("should refuse non-string initials on write and read them as invalid", () => {
+  const core = diretorioTemporario();
+  const file = path.join(core, "config.local.json");
+  writePersonal(core, { projectId: "abc123" });
+  const antes = readFileSync(file, "utf8");
+
+  assert.throws(() => writeInitials(core, ["mr"]), /invalid initials/);
+  assert.equal(readFileSync(file, "utf8"), antes);
+  for (const valor of [42, null, ["mr"]]) {
+    writeFileSync(file, JSON.stringify({ projectId: "abc123", initials: valor }), "utf8");
+    assert.deepEqual(readInitials(core), { state: "invalid", value: valor });
+  }
+});
+
+test("should return the previous initials as a state when overwriting them", () => {
+  const core = diretorioTemporario();
+  writeInitials(core, "mr");
+
+  assert.deepEqual(writeInitials(core, "abcd").before, { state: "recorded", initials: "mr" });
 });

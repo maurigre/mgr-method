@@ -3,6 +3,20 @@
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
+### Planejado
+- **Quatro motores novos, decididos em 2026-09-12**, ao lado do claude-code e do copilot:
+  **Codex CLI**, **Antigravity**, **Deep Code** (agente de terminal dos modelos DeepSeek) e
+  **OpenCode**. A matriz de capacidade de cada um, com fonte oficial e data, está em
+  `docs/engine-hooks.md` — inclusive o que **não** dá: o OpenCode integra por plugin e não por hook,
+  e Antigravity e Deep Code não têm evento de pré-compactação. A matriz traz fonte oficial e data em
+  cada célula que foi confirmada, e diz `[A CONFIRMAR]` nas que não foram — o OpenCode e o Codex
+  ainda têm células abertas, e isso está escrito lá em vez de arredondado aqui.
+- Suporte a Cursor como motor de instalação.
+- Modo scaffold (geração de estrutura de código no greenfield).
+
+## [0.7.0-beta.11] - 2026-10-15
+> Estrutura fixa do SDD e política de versionamento na constituição. Pré-release no dist-tag `next`.
+
 ### Adicionado
 - **A constituição gerada pela `spec-init` traz a política de versionamento com forma fixa.** A §5
   tem três subseções (Commits, Branches, Confirmation) e duas linhas que a `spec-create` lê:
@@ -34,6 +48,13 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   - **Atenção:** projetos com nomes antigos passam a receber avisos do `sdd-check` (canônico ausente,
     nome fora da lista). Os avisos não bloqueiam: o exit code é o de antes (1 só sem `docs/sdd/`, sem `CONSTITUTION.md`
     ou com o diretório vazio).
+
+## [0.7.0-beta.10] - 2026-10-09
+> **Data corrigida.** O bump para a 0.7.0-beta.10 foi feito em 2026-09-12, mas a versão só foi publicada
+> em 2026-10-09, a partir do `f8ca8f6`. As entradas abaixo, até "Registradas no bump", estavam em
+> `[Não lançado]` e já saíram nessa publicação (o tarball foi conferido arquivo por arquivo contra o `f8ca8f6`).
+
+### Adicionado
 - **O runtime do MGR passa a morar dentro do projeto.** Cada motor instalado ganha
   `<motor>/skills/_shared/mgr/` (ex.: `.claude/skills/_shared/mgr/`): código legível, só Node, sem
   dependência externa, chamado pelas skills por caminho explícito. Nada é instalado no sistema
@@ -734,18 +755,7 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   CLI ainda não expõe o campo, então as duas cópias carregam data e fonte para divergirem de forma
   visível.
 
-### Planejado
-- **Quatro motores novos, decididos em 2026-09-12**, ao lado do claude-code e do copilot:
-  **Codex CLI**, **Antigravity**, **Deep Code** (agente de terminal dos modelos DeepSeek) e
-  **OpenCode**. A matriz de capacidade de cada um, com fonte oficial e data, está em
-  `docs/engine-hooks.md` — inclusive o que **não** dá: o OpenCode integra por plugin e não por hook,
-  e Antigravity e Deep Code não têm evento de pré-compactação. A matriz traz fonte oficial e data em
-  cada célula que foi confirmada, e diz `[A CONFIRMAR]` nas que não foram — o OpenCode e o Codex
-  ainda têm células abertas, e isso está escrito lá em vez de arredondado aqui.
-- Suporte a Cursor como motor de instalação.
-- Modo scaffold (geração de estrutura de código no greenfield).
-
-## [0.7.0-beta.10] - 2026-09-11
+### Registradas no bump (2026-09-12)
 > Cada etapa do fluxo passa a rodar no modelo que você declarar. Pré-release no dist-tag `next`.
 
 ### Adicionado

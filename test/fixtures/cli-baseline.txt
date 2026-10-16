@@ -21,7 +21,7 @@ pessoal: config.local.json + .env) .gitignore → bloco gerenciado com
 skills (8): spec-init, spec-create, spec-execute, adr-create, code-analyzer,
 diagnosing-bugs, configure-agents, arch-hexagonal hooks →
 .claude/settings.local.json (detecção por sessão e hand-off antes da
-compactação, por motor) Runtime do MGR → .mgr-core/runtime (47 arquivos,
+compactação, por motor) Runtime do MGR → .mgr-core/runtime (50 arquivos,
 legível, só Node) agentes → .claude/agents (um agente por intenção; a revisão
 roda no próprio) drafting: mgr-draft claude-code: modelo=herda o modelo da
 sessão esforço=high execution: mgr-task claude-code: modelo=herda o modelo da
@@ -32,7 +32,7 @@ desta ferramenta. Declare um por intenção em `.mgr-core/config.json` para ter
 o benefício. leis → .claude/skills/_shared/laws/execution-laws.md (leis de
 execução: fonte única, apontada por toda skill do CORE) preâmbulo de sessão:
 ligado (as leis centrais entram antes da primeira mensagem) Skills instaladas
-em <REPO>/.claude/skills. runtime do MGR gravado em .mgr-core/runtime (47
+em <REPO>/.claude/skills. runtime do MGR gravado em .mgr-core/runtime (50
 arquivos) agente mgr-draft gravado em .claude/agents/mgr-draft.md agente
 mgr-task gravado em .claude/agents/mgr-task.md agente mgr-review gravado em
 .claude/agents/mgr-review.md Nenhum modelo gravado para: drafting, execution,

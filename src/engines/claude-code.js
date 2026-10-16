@@ -59,6 +59,11 @@ export default {
   // ramificação por nome de motor (ADR-0018, pagando a dívida que o ADR-0010 nomeou).
   // Esquema conferido na doc oficial em 2026-09-12: https://code.claude.com/docs/en/hooks
   hookFile: [".claude", "settings.local.json"],
+  // Fonte: https://code.claude.com/docs/en/memory (2026-10-16): `./CLAUDE.md` é
+  // carregado em toda sessão; `@caminho` importa em qualquer ponto do arquivo, relativo ao arquivo que
+  // importa; o import é ignorado em code span e bloco cercado; comentário HTML de bloco é removido antes
+  // do contexto; import dentro do diretório de trabalho não pede aprovação.
+  instructions: { file: ["CLAUDE.md"], constitution: "import" },
   hookEvents: { sessionStart: "SessionStart" },
   // O matcher é POR EVENTO, e não por motor: `startup` é do `SessionStart`, e o `PreCompact` filtra
   // por gatilho de compactação. Trocar um pelo outro faz o hook não disparar, em silêncio — é o

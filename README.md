@@ -78,6 +78,18 @@ written in `config.local.json` is **ignored and reported**, and so is an unknown
 model policy and the origin will not travel with the repository. Glob and `!` patterns are not evaluated, so
 no warning does not prove the config travels.
 
+**Every session points to the constitution (ADR-0026).** The engine loads only its own instruction file
+at session start, so a session that never invokes an MGR skill would not know the constitution exists.
+When `docs/sdd/CONSTITUTION.md` exists, `install` and `update` (project scope) and the `spec-init` skill
+offer a **managed block** in the instruction file of each installed engine: `CLAUDE.md` for claude-code,
+which imports the constitution with `@docs/sdd/CONSTITUTION.md` (so it is in every session), and
+`.github/copilot-instructions.md` for copilot, which points to it in plain text. The block also says
+where the SDD tiers (`docs/sdd/`) and the feature specs (`specs/<slug>/`) live. It is written with your
+consent, one file at a time (`-y` accepts; with no terminal and no `-y` the file stays as it was), your
+own content outside the block is kept byte for byte, and writing it again never duplicates it. The
+constitution stays in `docs/sdd/`. When an engine leaves the installation its block is kept and
+announced; `uninstall` removes the block and deletes the file only if nothing else was in it.
+
 > **One runtime per scope (ADR-0025).** The runtime lives in `.mgr-core/runtime/`, one copy shared by
 > every engine and by the `--skills-dir` folder (in global scope, `~/.mgr-core/runtime/`). It travels
 > with the versioned `.mgr-core/`, because the managed block only ignores the personal layer. If your
@@ -89,7 +101,7 @@ no warning does not prove the config travels.
 >
 > The runtime answers only the commands the skills use — `spec status|validate|next`, `agents`
 > (`set`, `apply`), `origin set`, `spec initials [set <value>]` (your initials for branch names, in `.mgr-core/config.local.json`), `origin [--json]` (reads the recorded origin: `recorded`, `absent` or
-> `invalid`, the last one exits 1), `doctor`, `sdd-check [--json]`, `detect`, `precompact`, `version` — and
+> `invalid`, the last one exits 1), `doctor`, `sdd-check [--json]`, `instructions [--json]` / `instructions write` (the managed block above), `detect`, `precompact`, `version` — and
 > refuses lifecycle commands (`install`, `update`, `add`…), naming the `npx mgr-method@<version>`
 > command to run instead. `doctor` run through the runtime reports `stale-install` and
 > `divergent-body` as **unavailable**: the package sources they compare against are not in the
@@ -107,7 +119,7 @@ removed runtime.
 Installing for two engines produces two independent trees — deleting one does **not**
 affect the other. Installations in the old model (runtime + `.mgr-core/skills` +
 launchers) are **migrated automatically** on `install`/`update`. Use `--skills-dir` to
-force a specific directory. `uninstall` removes only what MGR created; `docs/`, `specs/`
+force a specific directory. `uninstall` removes only what MGR created, including its managed blocks; `docs/`, `specs/`
 and code stay intact.
 
 Every installed skill of the method carries `# mgr-managed-skill: <name>` as the **last line of its

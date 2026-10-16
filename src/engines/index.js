@@ -2,8 +2,9 @@
 // ser ramificação por nome e passa a ser descritor consultável — é o que faz a degradação
 // declarada sair de consulta, e não de `if (engine === "...")` espalhado.
 //
-// O QUE JÁ MIGROU: o eixo de AGENTES (ADR-0010) e o de HOOKS (ADR-0018) — arquivo, eventos,
-// matcher por evento, forma da entrada, envelope e capacidade de compactação são dado daqui.
+// O QUE JÁ MIGROU: o eixo de AGENTES (ADR-0010), o de HOOKS (ADR-0018) e o de INSTRUÇÕES
+// (`instructions`, fatia sdd-apontado-na-raiz, DT-3) — arquivo, eventos, matcher por evento, forma
+// da entrada, envelope, capacidade de compactação e arquivo de instrução são dado daqui.
 // O diretório de SKILLS migrou em 2026-09-24, junto do de agentes: era um mapa privado em
 // `installer.js`, e o `mgr doctor` precisando dele fazia um diagnóstico read-only depender do
 // instalador. O QUE AINDA FALTA: `adapters.js` (tradução de manifest) e a saída do hook de sessão

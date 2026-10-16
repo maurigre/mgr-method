@@ -82,6 +82,18 @@ no `config.local.json` é **ignorada e avisada**, e chave desconhecida também; 
 política de modelo e a origem não vão viajar com o repositório. Padrões glob e `!` não são avaliados, então a
 ausência do aviso não prova que a config viaja.
 
+**Toda sessão aponta para a constituição (ADR-0026).** O motor carrega só o próprio arquivo de instrução
+no início da sessão, então uma sessão que nunca chama uma skill do MGR não saberia que a constituição
+existe. Quando `docs/sdd/CONSTITUTION.md` existe, o `install` e o `update` (escopo project) e a skill
+`spec-init` oferecem um **bloco gerenciado** no arquivo de instrução de cada motor instalado: o
+`CLAUDE.md` para o claude-code, que importa a constituição com `@docs/sdd/CONSTITUTION.md` (ela entra em
+toda sessão), e o `.github/copilot-instructions.md` para o copilot, que aponta para ela em texto. O bloco
+diz também onde ficam os tiers do SDD (`docs/sdd/`) e as specs (`specs/<slug>/`). Ele é gravado com o seu
+consentimento, um arquivo por vez (`-y` aceita; sem terminal e sem `-y` o arquivo fica como estava), o
+seu conteúdo fora do bloco fica byte a byte, e gravar de novo nunca o duplica. A constituição continua em
+`docs/sdd/`. Quando um motor sai da instalação, o bloco dele fica e é anunciado; o `uninstall` remove o
+bloco e só apaga o arquivo se não havia mais nada nele.
+
 > **Um runtime por escopo (ADR-0025).** O runtime mora em `.mgr-core/runtime/`, uma cópia compartilhada
 > por todos os motores e pela pasta do `--skills-dir` (no escopo global, `~/.mgr-core/runtime/`). Ele viaja
 > com o `.mgr-core/` versionado, porque o bloco gerenciado só ignora a camada pessoal. Se o lint, os testes
@@ -93,7 +105,7 @@ ausência do aviso não prova que a config viaja.
 >
 > O runtime atende só os comandos que as skills usam — `spec status|validate|next`, `agents`
 > (`set`, `apply`), `origin set`, `spec initials [set <valor>]` (suas iniciais para nomes de branch, em `.mgr-core/config.local.json`), `origin [--json]` (lê a origem gravada: `recorded`, `absent` ou
-> `invalid`, este último sai 1), `doctor`, `sdd-check [--json]`, `detect`, `precompact`, `version` — e recusa
+> `invalid`, este último sai 1), `doctor`, `sdd-check [--json]`, `instructions [--json]` / `instructions write` (o bloco gerenciado acima), `detect`, `precompact`, `version` — e recusa
 > comando de ciclo de vida (`install`, `update`, `add`…), nomeando o `npx mgr-method@<versão>` a rodar
 > no lugar. O `doctor` rodado pelo runtime declara `stale-install` e `divergent-body`
 > **indisponíveis**: as fontes do pacote com que eles comparam não estão no projeto, então ele nomeia
@@ -111,7 +123,7 @@ Instalar para dois motores gera duas árvores independentes — apagar uma **nã
 outra. Instalações no modelo antigo (runtime + `.mgr-core/skills` + lançadores) são
 **migradas automaticamente** no `install`/`update` — inclusive o idioma: instalação
 existente sem `userLanguage` herda `pt-BR` silenciosamente no `update`. Use `--skills-dir`
-para forçar um diretório específico. O `uninstall` remove só o que o MGR criou; `docs/`,
+para forçar um diretório específico. O `uninstall` remove só o que o MGR criou, inclusive os seus blocos gerenciados; `docs/`,
 `specs/` e código ficam intactos.
 
 Toda skill do método instalada leva `# mgr-managed-skill: <nome>` como **última linha do frontmatter** (as de

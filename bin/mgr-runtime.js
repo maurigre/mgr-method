@@ -9,6 +9,7 @@ import { agents } from "../src/commands/agents.js";
 import { doctor } from "../src/commands/doctor.js";
 import { detectHook, precompactHook } from "../src/commands/hooks.js";
 import { initials } from "../src/commands/initials.js";
+import { instructions } from "../src/commands/instructions.js";
 import { origin } from "../src/commands/origin.js";
 import { sddCheck } from "../src/commands/sdd-check.js";
 import { specNext, specStatus, specValidate } from "../src/commands/spec.js";
@@ -78,6 +79,7 @@ async function main() {
       case "origin": return origin(base);
       case "doctor": return doctor(base);
       case "sdd-check": return sddCheck(base);
+      case "instructions": return instructions(base);
       case "detect":
         if (!flags.hook) { console.error(M.runtimeDetectNeedsHook()); return 1; }
         try { return await detectHook({ ...base, proc: hookProc }); } catch { return 0; }

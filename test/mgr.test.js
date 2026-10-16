@@ -1305,6 +1305,17 @@ test("o descritor é dado PURO: nenhum campo de hook depende de IO ou de caminho
   }
 });
 
+test("should publish the instructions field of each engine with segments free of separators", () => {
+  assert.deepEqual(engineDescriptor("claude-code").instructions, { file: ["CLAUDE.md"], constitution: "import" });
+  assert.deepEqual(engineDescriptor("copilot").instructions,
+    { file: [".github", "copilot-instructions.md"], constitution: "pointer" });
+  for (const id of engineIds()) {
+    for (const segmento of engineDescriptor(id).instructions.file) {
+      assert.ok(!segmento.includes("/") && !segmento.includes("\\"), `${id}: segmento com separador`);
+    }
+  }
+});
+
 test("`compaction` distingue os TRÊS estados, e não é booleano", () => {
   const claude = engineDescriptor("claude-code").compaction;
   assert.equal(claude.event, "PreCompact", "tem evento");

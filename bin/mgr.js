@@ -24,8 +24,9 @@ import { buildRuntime, gateSummary, inheritingModel } from "../src/builder.js";
 import { validateAll } from "../src/validator.js";
 import { printBanner } from "../src/banner.js";
 import { PERSONAL_LINES, planGitignore, removeGitignoreBlock, writeGitignoreBlock } from "../src/gitignore.js";
-import { GITIGNORE_DECLINE, GITIGNORE_WRITE, collectInstallAnswers, consentEach, consentToGitignore, updateOutcome, consentToRemove, detectUserLanguage, removalMode, removalOutcome, CANCELLED, OUTCOME_KEPT_BY_CHOICE, OUTCOME_KEPT_NO_CONSENT, OUTCOME_REMOVED, REMOVE } from "../src/prompts.js";
+import { GITIGNORE_DECLINE, GITIGNORE_WRITE, collectInstallAnswers, consentEach, consentToGitignore, consentToBlock, BLOCK_WRITE, BLOCK_DECLINE, updateOutcome, consentToRemove, detectUserLanguage, removalMode, removalOutcome, CANCELLED, OUTCOME_KEPT_BY_CHOICE, OUTCOME_KEPT_NO_CONSENT, OUTCOME_REMOVED, REMOVE } from "../src/prompts.js";
 import { getMessages } from "../src/messages.js";
+import { instructionsToRemove, planInstructions, removeInstructionBlock, writeInstructionBlock } from "../src/instructions.js";
 import {
   add as addPlugin, remove as removePlugin, restore as restorePlugins,
   installedPluginNames, CANCELLED_EXIT_CODE,
@@ -66,6 +67,9 @@ function bail(msg) { p.cancel(msg || M.aborted); process.exit(0); }
 
 // Motores que recebem hook nesta instalação: os escolhidos pelo usuário, menos o alvo
 // `custom` do --skills-dir, e nenhum quando `--no-hooks`.
+// Plano do bloco de instrução quando ele não se aplica (escopo global, `--skills-dir`): nada a oferecer.
+const SEM_INSTRUCOES = Object.freeze({ constitution: "absent", offer: Object.freeze([]), kept: Object.freeze([]) });
+
 const hookEngines = (plan, flags) => (flags.noHooks
   ? []
   : plan.targets.map((target) => target.engine).filter((engine) => installer.ENGINES.includes(engine)));
@@ -198,11 +202,15 @@ async function cmdInstall(flags, positional) {
   const modoDeRemocao = removalMode({ isTTY, yes: flags.yes });
   // O .gitignore do usuario so e tocado no escopo project; o plano o anuncia antes de qualquer escrita.
   const gitignorePlan = plan.scope === "project" ? planGitignore(plan.repo) : null;
+  const motoresReais = [...new Set(plan.targets.map((t) => t.engine).filter((e) => installer.ENGINES.includes(e)))];
+  const instrPlan = plan.scope === "project" && !skillsDir
+    ? planInstructions(plan.repo, { engines: motoresReais })
+    : SEM_INSTRUCOES;
   // Q-3: com --no-hooks o MGR não cria hook, mas a entrada que já é dele passa a apontar para o
   // runtime novo. Só no escopo project, e só onde o comando muda: calculado aqui, sem escrita, para
   // o plano anunciar antes (LOG-1), como o `update` faz com `planOwnedHooks`.
   const reescritaSemHook = flags.noHooks && plan.scope === "project"
-    ? [...new Set(plan.targets.map((t) => t.engine).filter((e) => installer.ENGINES.includes(e)))]
+    ? motoresReais
       .map((engine) => ({ engine, rewrite: planOwnedHooks(engine, plan.repo, { command: runtimeCommand(plan.scope, plan.repo) }).rewrite }))
       .filter(({ rewrite }) => rewrite.length)
     : [];
@@ -215,6 +223,8 @@ async function cmdInstall(flags, positional) {
       (origin ?? recordedOriginOf(core)) ? M.planOrigin(origin ?? recordedOriginOf(core)) : M.planOriginNotRecorded,
       `${M.planConfig(installer.coreDir(plan.scope, plan.repo))}  ${pc.dim(M.planConfigHint)}`,
       ...(gitignorePlan ? [M.planGitignore, ...gitignorePlan.teamIgnoredLines.map((line) => M.gitignoreTeamIgnored(line))] : []),
+      ...instrPlan.offer.map(({ file }) => M.planInstructions(file)),
+      ...instrPlan.kept.map(({ file, engine }) => M.instructionsKept(file, engine)),
       ...plan.targets.map((t) => M.planSkillsDir(t.dir)),
       M.planSkills(plan.skills.length, plan.skills.join(", ")),
       ...(abandonadas.length
@@ -254,6 +264,12 @@ async function cmdInstall(flags, positional) {
   const aManter = decisao === REMOVE ? [] : abandonadas;
   const decisaoGitignore = gitignorePlan ? await consentToGitignore(CLACK, { mode: modoDeRemocao, msg: M }) : null;
   if (decisaoGitignore === CANCELLED) bail();
+  const decisoesInstr = [];
+  for (const item of instrPlan.offer) {
+    const decisaoBloco = await consentToBlock(CLACK, { mode: modoDeRemocao, message: M.qInstructionsBlock(item.file) });
+    if (decisaoBloco === CANCELLED) bail();
+    decisoesInstr.push({ item, decisao: decisaoBloco });
+  }
   if (isTTY && !flags.yes) {
     const ok = await p.confirm({ message: M.confirmInstall });
     if (p.isCancel(ok) || !ok) bail();
@@ -310,6 +326,12 @@ async function cmdInstall(flags, positional) {
 
   if (decisaoGitignore === GITIGNORE_WRITE) p.log.success(M.gitignoreWritten(path.relative(plan.repo, writeGitignoreBlock(plan.repo))));
   else if (decisaoGitignore === GITIGNORE_DECLINE) p.log.info(M.gitignoreDeclined(PERSONAL_LINES.join(", ")));
+  for (const { item, decisao: decisaoBloco } of decisoesInstr) {
+    if (decisaoBloco === BLOCK_WRITE) {
+      writeInstructionBlock(plan.repo, item.engine);
+      p.log.success(M.instructionsWritten(item.file));
+    } else if (decisaoBloco === BLOCK_DECLINE) p.log.info(M.instructionsDeclined(item.file));
+  }
 
   if (readLockfile(plan.repo)) {
     p.log.step(M.restoring(LOCKFILE_NAME));
@@ -826,6 +848,9 @@ async function cmdUpdate(flags, positional) {
   if (precisaGitignore) console.log(M.planGitignore);
   // L-5: o evento de hook que será gravado é anunciado AQUI, por cálculo sem escrita (`planOwnedHooks`).
   const motoresReais = [...new Set(planned.plan.targets.map((t) => t.engine).filter((e) => installer.ENGINES.includes(e)))];
+  const instrPlan = scope === "project" ? planInstructions(repo, { engines: motoresReais }) : SEM_INSTRUCOES;
+  for (const { file } of instrPlan.offer) console.log(M.planInstructions(file));
+  for (const { file, engine } of instrPlan.kept) console.log(M.instructionsKept(file, engine));
   for (const engine of motoresReais) {
     // L-10 (X-25): o comando que vai mudar também é anunciado antes de gravar.
     const previsto = planOwnedHooks(engine, repo, { command: runtimeCommand(scope, repo) });
@@ -849,6 +874,12 @@ async function cmdUpdate(flags, positional) {
     ? await consentToGitignore(CLACK, { mode: removalMode({ isTTY, yes: flags.yes }), msg: M })
     : null;
   if (decisaoGitignore === CANCELLED) bail();
+  const decisoesInstr = [];
+  for (const item of instrPlan.offer) {
+    const decisaoBloco = await consentToBlock(CLACK, { mode: removalMode({ isTTY, yes: flags.yes }), message: M.qInstructionsBlock(item.file) });
+    if (decisaoBloco === CANCELLED) bail();
+    decisoesInstr.push({ item, decisao: decisaoBloco });
+  }
 
   // Passo 5: execução. Só as abandonadas mantidas voltam ao manifesto (`mantidas`); órfã nunca esteve nele.
   const skipEntering = installer.skippedByConsent(planned, part);
@@ -870,6 +901,12 @@ async function cmdUpdate(flags, positional) {
   if (confiancaCopilot) console.log(M.hookCopilotTrust);
   if (decisaoGitignore === GITIGNORE_WRITE) console.log(pc.dim(M.gitignoreWritten(path.relative(repo, writeGitignoreBlock(repo)))));
   else if (decisaoGitignore === GITIGNORE_DECLINE) console.log(pc.dim(M.gitignoreDeclined(PERSONAL_LINES.join(", "))));
+  for (const { item, decisao: decisaoBloco } of decisoesInstr) {
+    if (decisaoBloco === BLOCK_WRITE) {
+      writeInstructionBlock(repo, item.engine);
+      console.log(pc.dim(M.instructionsWritten(item.file)));
+    } else if (decisaoBloco === BLOCK_DECLINE) console.log(pc.dim(M.instructionsDeclined(item.file)));
+  }
   if (res.migrated) console.log(pc.dim(M.updateMigrated));
   console.log(pc.green(M.updateDone(scope, res.skills.length, res.targets.map((t) => t.dir).join(" · "))));
 
@@ -906,6 +943,8 @@ async function cmdUpdate(flags, positional) {
 async function cmdUninstall(flags, positional) {
   const repo = path.resolve(positional[0] || ".");
   const scope = flags.scope || "project";
+  const instrRemove = instructionsToRemove(repo, { scope, projectInstalled: Boolean(installer.detectPrior("project", repo)) });
+  for (const { file } of instrRemove) console.log(M.instructionsToRemove(file));
   if (isTTY && !flags.yes) {
     const ok = await p.confirm({ message: M.uninstallConfirm(scope), initialValue: false });
     if (p.isCancel(ok) || !ok) bail();
@@ -922,6 +961,10 @@ async function cmdUninstall(flags, positional) {
   if (scope === "project") {
     const gitignore = removeGitignoreBlock(repo);
     if (gitignore.outcome === "removed") console.log(pc.dim(M.gitignoreRemoved(path.relative(repo, gitignore.file))));
+  }
+  for (const { engine, file } of instrRemove) {
+    const removed = removeInstructionBlock(repo, engine);
+    if (removed.outcome === "removed") console.log(pc.dim(M.instructionsRemoved(file)));
   }
   console.log(pc.green(M.uninstalled));
   return 0;

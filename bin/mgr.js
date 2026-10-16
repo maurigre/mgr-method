@@ -36,7 +36,7 @@ import {
 } from "../src/registry.js";
 import { diff as lockfileDiff, readLockfile, replacedByEngine, LOCKFILE_NAME } from "../src/lockfile.js";
 import { detect } from "../src/detector.js";
-import { hookFilePath, planOwnedHooks, removeHook, runtimeCommand, syncOwnedHooks, writeHook, writtenEvents } from "../src/hooks.js";
+import { hookFilePath, planOwnedHooks, removeHook, rewriteOwnedHooks, runtimeCommand, syncOwnedHooks, writeHook, writtenEvents } from "../src/hooks.js";
 import { parseArgs, resolveModelFlags } from "../src/cli-args.js";
 
 const SCOPES = ["project", "global"];
@@ -179,10 +179,12 @@ async function cmdInstall(flags, positional) {
 
   const prior = installer.detectPrior(scope, repo);
   if (prior) {
-    const migrada = installer.needsRuntimeMigration(prior);
+    const migracao = installer.runtimeMigration(prior);
     if (prior.model === "runtime-launcher") p.log.warn(M.oldInstallWarn(prior.version));
-    else if (!migrada) p.log.warn(M.resyncWarn);
-    if (migrada) p.log.warn(M.runtimeMigrated(prior.version ?? "?", runtimeDirsOf(prior, repo)));
+    else if (migracao === "none") p.log.warn(M.resyncWarn);
+    const destinoRuntime = pathsForDisplay([installer.runtimeDir(scope, repo)], scope, repo);
+    if (migracao === "copy") p.log.warn(M.runtimeMigrated(prior.version ?? "?", destinoRuntime));
+    else if (migracao === "relocate") p.log.warn(M.runtimeRelocated(prior.version ?? "?", destinoRuntime));
     if (installer.needsConfigMigration(prior)) p.log.warn(M.configMigrated(prior.version ?? "?", localFile));
   }
 
@@ -196,6 +198,14 @@ async function cmdInstall(flags, positional) {
   const modoDeRemocao = removalMode({ isTTY, yes: flags.yes });
   // O .gitignore do usuario so e tocado no escopo project; o plano o anuncia antes de qualquer escrita.
   const gitignorePlan = plan.scope === "project" ? planGitignore(plan.repo) : null;
+  // Q-3: com --no-hooks o MGR não cria hook, mas a entrada que já é dele passa a apontar para o
+  // runtime novo. Só no escopo project, e só onde o comando muda: calculado aqui, sem escrita, para
+  // o plano anunciar antes (LOG-1), como o `update` faz com `planOwnedHooks`.
+  const reescritaSemHook = flags.noHooks && plan.scope === "project"
+    ? [...new Set(plan.targets.map((t) => t.engine).filter((e) => installer.ENGINES.includes(e)))]
+      .map((engine) => ({ engine, rewrite: planOwnedHooks(engine, plan.repo, { command: runtimeCommand(plan.scope, plan.repo) }).rewrite }))
+      .filter(({ rewrite }) => rewrite.length)
+    : [];
   p.note(
     [
       M.planProject(plan.projectId, plan.scope),
@@ -215,8 +225,12 @@ async function cmdInstall(flags, positional) {
       ...(motoresComHook.length
         ? [`${M.planHooks(motoresComHook.map((engine) => path.relative(plan.repo, hookFilePath(engine, plan.repo))).join(" · "))}  ${pc.dim(M.planHooksHint)}`]
         : []),
+      ...reescritaSemHook.flatMap(({ engine, rewrite }) =>
+        rewrite.map((evento) => M.hookCommandToRewrite(path.relative(plan.repo, hookFilePath(engine, plan.repo)), evento))),
       // O runtime também é escrita em diretório do usuário: aparece no plano antes da confirmação.
-      M.planRuntime(plan.targets.map((alvo) => path.relative(plan.repo, path.join(alvo.dir, ...catalogo.RUNTIME_DIR))).join(" · "), catalogo.RUNTIME_FILES.length + 1),
+      M.planRuntime(pathsForDisplay([installer.runtimeDir(plan.scope, plan.repo)], plan.scope, plan.repo), catalogo.RUNTIME_FILES.length + 1),
+      ...(plan.legacyRuntime.remove.length ? [M.legacyRuntimeToRemove(pathsForDisplay(plan.legacyRuntime.remove, plan.scope, plan.repo))] : []),
+      ...(plan.legacyRuntime.keep.length ? [M.legacyRuntimeKept(pathsForDisplay(plan.legacyRuntime.keep, plan.scope, plan.repo))] : []),
       // O agente também mora em diretório do usuário: ele vê modelo e esforço por motor
       // ANTES de confirmar, e vê o que o motor não suporta (ADR-0010).
       ...linhasDoGate(plan),
@@ -253,7 +267,8 @@ async function cmdInstall(flags, positional) {
   const res = installer.execute(installer.keepDeclared(plan, mantidas), { abandoned: aRemover });
   s.stop(M.installedAt(res.targets.map((t) => t.dir).join(" · ")));
   if (res.migrated) p.log.info(M.migrationInfo(res.migrated.removed.length));
-  for (const item of res.runtime || []) p.log.success(M.runtimeWritten(path.relative(plan.repo, item.dir), item.files));
+  p.log.success(M.runtimeWritten(pathsForDisplay([res.runtime.dir], plan.scope, plan.repo), res.runtime.files));
+  if (res.legacyRuntimeRemoved.length) p.log.success(M.legacyRuntimeRemoved(pathsForDisplay(res.legacyRuntimeRemoved, plan.scope, plan.repo)));
   // Os quatro caminhos saem 0: recusar a remocao nunca transforma a instalacao em erro. Escrita em
   // diretorio do usuario e anunciada, e o que NAO saiu tambem e — em silencio, viraria orfa.
   // A lista do "continua declarado" e a das MANTIDAS, nunca a das abandonadas: dizer que uma skill
@@ -281,8 +296,13 @@ async function cmdInstall(flags, positional) {
   if (!recordedOriginOf(core)) p.log.warn(M.installOriginAbsent);
 
   for (const engine of motoresComHook) {
-    const file = writeHook(engine, plan.repo, { command: runtimeCommand(engine, plan.repo, plan.scope) });
+    const file = writeHook(engine, plan.repo, { command: runtimeCommand(plan.scope, plan.repo) });
     p.log.success(M.hookWritten(path.relative(plan.repo, file), writtenEvents(engine).join(" · ")));
+  }
+  // Q-3: só os motores que o plano anunciou; arquivo cujo comando já é o certo não é regravado.
+  for (const { engine } of reescritaSemHook) {
+    const result = rewriteOwnedHooks(engine, plan.repo, { command: runtimeCommand(plan.scope, plan.repo) });
+    if (result) p.log.success(M.hookWritten(path.relative(plan.repo, result.file), result.events.join(" · ")));
   }
   // O hook do repositório só carrega depois do folder trust; sem este aviso o usuário conclui,
   // com razão, que o MGR gravou algo quebrado (verificado por experimento — ADR-0009).
@@ -752,11 +772,9 @@ function cmdStatus(_f, positional) {
   return 0;
 }
 
-// Diretórios do runtime que a migração vai criar, a partir dos alvos que o manifesto anterior declarou.
-const runtimeDirsOf = (prior, repo) =>
-  (prior.skillsDirs || [])
-    .map((dir) => path.relative(repo, path.join(path.resolve(repo, dir), ...catalogo.RUNTIME_DIR)))
-    .join(" · ");
+// Caminhos absolutos para exibição: relativos ao repo no escopo project, absolutos no global.
+const pathsForDisplay = (dirs, scope, repo) =>
+  dirs.map((dir) => (scope === "project" ? path.relative(repo, dir) : dir)).join(" · ");
 
 async function cmdUpdate(flags, positional) {
   const repo = positional[0] ? path.resolve(positional[0]) : projectRoot(process.cwd()).root;
@@ -784,7 +802,12 @@ async function cmdUpdate(flags, positional) {
   // Passo 3: o que muda, antes de qualquer pergunta. A migração de config abre a lista, antes de
   // qualquer linha de diferença (DT-11, passo 3).
   if (migration.config) console.log(M.configMigrated(prior.version ?? "?", localFile));
-  if (migration.runtime) console.log(M.runtimeMigrated(prior.version ?? "?", runtimeDirsOf(prior, repo)));
+  const destinoRuntime = pathsForDisplay([installer.runtimeDir(scope, repo)], scope, repo);
+  if (migration.runtime === "copy") console.log(M.runtimeMigrated(prior.version ?? "?", destinoRuntime));
+  else if (migration.runtime === "relocate") console.log(M.runtimeRelocated(prior.version ?? "?", destinoRuntime));
+  const legado = planned.plan.legacyRuntime;
+  if (legado.remove.length) console.log(M.legacyRuntimeToRemove(pathsForDisplay(legado.remove, scope, repo)));
+  if (legado.keep.length) console.log(M.legacyRuntimeKept(pathsForDisplay(legado.keep, scope, repo)));
   // A entrante bloqueada por plugin não entra: sai desta linha e ganha a sua (X-26).
   const bloqueadas = new Set(planned.occupied.blocked.map((b) => b.name));
   for (const nome of entering.filter((n) => !bloqueadas.has(n))) console.log(M.updateSkillEntering(nome));
@@ -805,7 +828,7 @@ async function cmdUpdate(flags, positional) {
   const motoresReais = [...new Set(planned.plan.targets.map((t) => t.engine).filter((e) => installer.ENGINES.includes(e)))];
   for (const engine of motoresReais) {
     // L-10 (X-25): o comando que vai mudar também é anunciado antes de gravar.
-    const previsto = planOwnedHooks(engine, repo, { command: runtimeCommand(engine, repo, scope) });
+    const previsto = planOwnedHooks(engine, repo, { command: runtimeCommand(scope, repo) });
     const arquivo = path.relative(repo, hookFilePath(engine, repo));
     for (const evento of previsto.added) console.log(M.hookEventToAdd(arquivo, evento));
     for (const evento of previsto.rewrite) console.log(M.hookCommandToRewrite(arquivo, evento));
@@ -831,11 +854,13 @@ async function cmdUpdate(flags, positional) {
   const skipEntering = installer.skippedByConsent(planned, part);
   const res = installer.applyUpdate(planned, { aRemover: part.aRemover, mantidas: part.mantidas, skipEntering });
   if (res.removed.length) console.log(pc.dim(M.removedSkills(res.removed.map((alvo) => path.relative(repo, alvo)))));
+  if (migration.runtime !== "none") console.log(pc.dim(M.runtimeWritten(pathsForDisplay([res.runtime.dir], scope, repo), res.runtime.files)));
+  if (res.legacyRuntimeRemoved.length) console.log(pc.dim(M.legacyRuntimeRemoved(pathsForDisplay(res.legacyRuntimeRemoved, scope, repo))));
 
   // DT-12: converge os hooks SEMPRE; só arquivo onde o MGR já tem entrada (sem entrada, nada é impresso).
   let confiancaCopilot = false;
   for (const engine of new Set(res.targets.map((t) => t.engine).filter((e) => installer.ENGINES.includes(e)))) {
-    const sync = syncOwnedHooks(engine, repo, { command: runtimeCommand(engine, repo, scope) });
+    const sync = syncOwnedHooks(engine, repo, { command: runtimeCommand(scope, repo) });
     if (sync.outcome !== "synced") continue;
     const rel = path.relative(repo, sync.file);
     for (const evento of sync.added) console.log(pc.dim(M.hookEventAdded(rel, evento)));

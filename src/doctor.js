@@ -5,6 +5,7 @@ import * as catalog from "./catalog.js";
 import * as engineDescriptors from "./engines/index.js";
 import { lockedDirsOf, orphanClass, routeReviewSkill } from "./builder.js";
 import { diff } from "./lockfile.js";
+import { MODEL_CORE_RUNTIME } from "./manifest.js";
 
 // Verificacoes de integridade da instalacao (U2 do programa de superioridade).
 //
@@ -315,11 +316,12 @@ export function sharedCheckAvailability({ manifestVersion, packageVersion, file 
 }
 
 /**
- * Runtime legivel copiado para dentro do motor (`<motor>/skills/_shared/mgr/`, DT-5).
+ * Runtime legivel do MGR. Na geracao atual ele vive em `.mgr-core/runtime/`; nas geracoes anteriores,
+ * era copiado para dentro de cada motor (`<motor>/skills/_shared/mgr/`, DT-5).
  *
- * Ausente (diretorio ou `bin/mgr-runtime.js`) e DEFEITO, com `mgr update`: e o layout antigo, em
- * que o motor nao tem como rodar o comando. Versao da copia diferente do manifesto e AVISO: a copia
- * roda, mas nao e a que o manifesto declara.
+ * Ausente (diretorio ou `bin/mgr-runtime.js`) e DEFEITO, com `mgr update`: o motor nao tem como rodar
+ * o comando. Versao da copia diferente do manifesto e AVISO: a copia roda, mas nao e a que o manifesto
+ * declara.
  *
  * Nao alcanca o conteudo: quem compara byte a byte e `runtimeBodies`, e so quando o diretorio existe.
  */
@@ -329,7 +331,7 @@ function runtimeVersion({ dirDoRuntime, dirExists, entryExists, copyVersion, man
       check: "runtime-version",
       severity: DEFECT,
       file: dirDoRuntime,
-      expected: "o runtime copiado para o motor, com bin/mgr-runtime.js",
+      expected: "o runtime do MGR, com bin/mgr-runtime.js",
       found: dirExists ? "bin/mgr-runtime.js ausente" : "diretorio do runtime ausente",
       fix: FIX_UPDATE,
     })];
@@ -345,10 +347,19 @@ function runtimeVersion({ dirDoRuntime, dirExists, entryExists, copyVersion, man
   })];
 }
 
+// Onde o runtime deve estar, pela geracao que o manifesto declara. Projeto ainda nao migrado segue no
+// layout por motor, sem virar defeito por ter o que ele tem.
+export function runtimeLocations(manifest, repo, arvores) {
+  if (manifest?.model === MODEL_CORE_RUNTIME) {
+    return { layout: "core", dirs: [path.join(repo, bundle.RUNTIME_DIR_NAME, ...catalog.CORE_RUNTIME_DIR)] };
+  }
+  return { layout: "per-engine", dirs: arvores.map(({ dir }) => path.join(dir, ...catalog.LEGACY_RUNTIME_DIR)) };
+}
+
 /**
  * Arquivo do runtime copiado que difere BYTE A BYTE do arquivo do pacote (D-14).
  *
- * Reusa o id `divergent-body` e a condicao `fonte-compartilhada` (o runtime mora sob `_shared/`,
+ * Reusa o id `divergent-body` e a condicao `fonte-compartilhada` (o runtime e copia do pacote,
  * `mgr update` o re-copia). `copy`/`source` sao Buffers; `copy` nulo e arquivo ausente com o
  * diretorio presente. A ausencia do DIRETORIO e da `runtime-version`, nunca daqui.
  */
@@ -554,7 +565,7 @@ export const CHECKS = [
   },
   {
     id: "runtime-version",
-    cobre: "runtime copiado para o motor ausente, ou em versão diferente do manifesto",
+    cobre: "runtime do MGR ausente, ou em versão diferente do manifesto",
     remediacoes: [
       {
         condicao: "runtime-ausente",
@@ -913,12 +924,11 @@ export function diagnose(repo, { packageVersion, sources } = {}) {
     }
   }
 
-  // Runtime copiado por motor. Ausencia e versao: `runtime-version`, sempre. Corpo (D-14): so com o
+  // Runtime no local que a geracao declara (`runtimeLocations`). Ausencia e versao: `runtime-version`, sempre. Corpo (D-14): so com o
   // diretorio presente e sob o mesmo escudo de versao do corpo das skills, porque com o manifesto
   // atras do pacote a copia diferir do pacote e o estado esperado (o indisponivel ja foi emitido).
   const raizDoPacote = semFontes ? null : path.dirname(bundle.pkgDir("src"));
-  for (const { dir: dirDoMotor } of arvores) {
-    const dirDoRuntime = path.join(dirDoMotor, ...catalog.RUNTIME_DIR);
+  for (const dirDoRuntime of runtimeLocations(manifesto, repo, arvores).dirs) {
     const relativoDoRuntime = path.relative(repo, dirDoRuntime);
     const dirExists = existsSync(dirDoRuntime);
     const entryExists = existsSync(path.join(dirDoRuntime, ...catalog.RUNTIME_ENTRY));

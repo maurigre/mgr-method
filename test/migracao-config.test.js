@@ -6,43 +6,50 @@ import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { needsConfigMigration, needsRuntimeMigration, resolveProjectId } from "../src/installer.js";
-import { MODEL_LAYERED, MODEL_RUNTIME, writeManifest } from "../src/manifest.js";
+import { needsConfigMigration, resolveProjectId, runtimeMigration } from "../src/installer.js";
+import { layoutPorMotor } from "./fixtures/layout-por-motor.js";
+import { MODEL_CORE_RUNTIME, MODEL_LAYERED, MODEL_RUNTIME, writeManifest } from "../src/manifest.js";
 
-test("should write the layered-config model on a fresh manifest", () => {
+test("should write the core-runtime model on a fresh manifest", () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), "mgr-migracao-config-"));
   try {
     writeManifest(dir, { version: "0.0.0-test" });
     const written = JSON.parse(readFileSync(path.join(dir, "manifest.json"), "utf8"));
-    assert.equal(written.model, "self-contained-layered-config");
-    assert.equal(written.model, MODEL_LAYERED);
+    assert.equal(written.model, "self-contained-core-runtime");
+    assert.equal(written.model, MODEL_CORE_RUNTIME);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test("should require both migrations for runtime-launcher, self-contained and absent model", () => {
+test("should copy the runtime and migrate config for runtime-launcher, self-contained and absent model", () => {
   for (const prior of [{ model: "runtime-launcher" }, { model: "self-contained" }, {}]) {
-    assert.equal(needsRuntimeMigration(prior), true, `runtime migration for ${JSON.stringify(prior)}`);
+    assert.equal(runtimeMigration(prior), "copy", `runtime migration for ${JSON.stringify(prior)}`);
     assert.equal(needsConfigMigration(prior), true, `config migration for ${JSON.stringify(prior)}`);
   }
 });
 
-test("should require only the config migration for self-contained-runtime", () => {
+test("should relocate the runtime and migrate config for self-contained-runtime", () => {
   const prior = { model: MODEL_RUNTIME };
-  assert.equal(needsRuntimeMigration(prior), false);
+  assert.equal(runtimeMigration(prior), "relocate");
   assert.equal(needsConfigMigration(prior), true);
 });
 
-test("should require no migration for self-contained-layered-config", () => {
+test("should relocate the runtime and skip config migration for self-contained-layered-config", () => {
   const prior = { model: MODEL_LAYERED };
-  assert.equal(needsRuntimeMigration(prior), false);
+  assert.equal(runtimeMigration(prior), "relocate");
+  assert.equal(needsConfigMigration(prior), false);
+});
+
+test("should require no migration for self-contained-core-runtime", () => {
+  const prior = { model: MODEL_CORE_RUNTIME };
+  assert.equal(runtimeMigration(prior), "none");
   assert.equal(needsConfigMigration(prior), false);
 });
 
 test("should require nothing when there is no prior install", () => {
   for (const prior of [null, undefined]) {
-    assert.equal(needsRuntimeMigration(prior), false);
+    assert.equal(runtimeMigration(prior), "none");
     assert.equal(needsConfigMigration(prior), false);
   }
 });
@@ -156,12 +163,13 @@ const comoF1 = (repo, home) => {
   delete manifesto.optional;
   delete manifesto.allSkills;
   writeFileSync(path.join(core, "manifest.json"),
-    JSON.stringify({ ...manifesto, model: MODEL_RUNTIME, projectId: COMO_F1 }, null, 2), "utf8");
+    JSON.stringify({ ...manifesto, projectId: COMO_F1 }, null, 2), "utf8");
   rmSync(path.join(core, "config.local.json"), { force: true });
   for (const arquivo of skillsMd(repo)) {
     const texto = readFileSync(arquivo, "utf8").split("\n").filter((l) => !l.startsWith(MARCA)).join("\n");
     writeFileSync(arquivo, texto, "utf8");
   }
+  layoutPorMotor(repo, { model: MODEL_RUNTIME });
 };
 const atualizar = (repo, home) => spawnSync("node", [BIN, "update", repo], { env: ambiente(home), encoding: "utf8" });
 
@@ -207,7 +215,7 @@ test("should migrate a self-contained-runtime install announcing before the firs
   const core = path.join(repo, ".mgr-core");
   assert.equal(lerJson(path.join(core, "config.local.json")).projectId, COMO_F1, "o id anterior passa para a camada pessoal");
   const manifesto = lerJson(path.join(core, "manifest.json"));
-  assert.equal(manifesto.model, MODEL_LAYERED);
+  assert.equal(manifesto.model, MODEL_CORE_RUNTIME);
   assert.equal("projectId" in manifesto, false, "o manifesto versionado deixa de carregar o projectId");
   const skills = skillsMd(repo);
   assert.ok(skills.length > 0);
@@ -231,7 +239,7 @@ test("should change no file of an F1-layout project on doctor and runtime agents
   assert.deepEqual(impressaoDaArvore(repo), antes, "o runtime agents não escreve em nada");
 }));
 
-test("should be idempotent on a layered-config manifest", () => cenario((repo, home) => {
+test("should be idempotent on a core-runtime manifest", () => cenario((repo, home) => {
   comoF1(repo, home);
   const primeiro = atualizar(repo, home);
   assert.equal(primeiro.status, 0, primeiro.stderr);
@@ -242,5 +250,5 @@ test("should be idempotent on a layered-config manifest", () => cenario((repo, h
   assert.equal(segundo.status, 0, segundo.stderr);
   assert.doesNotMatch(segundo.stdout + segundo.stderr, /Installation in the previous layout/);
   assert.equal(readFileSync(local, "utf8"), antes, "o config.local.json fica byte a byte igual");
-  assert.equal(lerJson(path.join(repo, ".mgr-core", "manifest.json")).model, MODEL_LAYERED);
+  assert.equal(lerJson(path.join(repo, ".mgr-core", "manifest.json")).model, MODEL_CORE_RUNTIME);
 }));

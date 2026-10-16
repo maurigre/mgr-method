@@ -88,10 +88,14 @@ export const QUALITY_INSTALLED = [SHARED_DIR, "quality", "quality-rules.md"];
 export const USER_LANGUAGE_TOKEN = "{{MGR_USER_LANGUAGE}}";
 export const USER_LANGUAGE_FALLBACK = "the language the user writes in";
 
-// Runtime do MGR copiado por motor (DT-5): `<motor>/skills/_shared/mgr/`. A entrada e os arquivos
+// Runtime do MGR: uma copia por escopo em `.mgr-core/runtime/` (ADR-0025). A entrada e os arquivos
 // sao relativos a raiz do pacote. RUNTIME_FILES e conferida pelo teste de fecho
 // (test/runtime-closure.test.js), que recalcula os imports a partir de RUNTIME_ENTRY.
-export const RUNTIME_DIR = [SHARED_DIR, "mgr"];
+// Relativo a `.mgr-core/`.
+export const CORE_RUNTIME_DIR = Object.freeze(["runtime"]);
+// Local das geracoes anteriores, relativo ao diretorio de skills do motor (`<motor>/skills/_shared/mgr/`).
+// So a migracao, que o remove, e o doctor dessas geracoes o usam.
+export const LEGACY_RUNTIME_DIR = Object.freeze([SHARED_DIR, "mgr"]);
 export const RUNTIME_ENTRY = ["bin", "mgr-runtime.js"];
 export const RUNTIME_TOKEN = "{{MGR_RUNTIME}}";
 export const RUNTIME_FILES = [

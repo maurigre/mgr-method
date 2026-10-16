@@ -16,11 +16,10 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { get as engineDescriptor, ids as engineIds } from "./engines/index.js";
-import { RUNTIME_DIR, RUNTIME_ENTRY } from "./catalog.js";
-import { engineSkillsDir } from "./installer.js";
+import { RUNTIME_ENTRY } from "./catalog.js";
+import { runtimeDir } from "./installer.js";
 
-export const runtimeCommand = (engine, root, scope) =>
-  `node "${path.join(engineSkillsDir(engine, scope, root), ...RUNTIME_DIR, ...RUNTIME_ENTRY)}"`;
+export const runtimeCommand = (scope, root) => `node "${path.join(runtimeDir(scope, root), ...RUNTIME_ENTRY)}"`;
 
 // Comentário de shell inerte que torna a entrada do MGR inequívoca no arquivo do usuário.
 export const HOOK_MARKER = "mgr-session-hook";

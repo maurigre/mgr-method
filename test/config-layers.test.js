@@ -208,7 +208,7 @@ test("should record optional and allSkills in the manifest", () => {
 
 // --- P1.17: `agents` avisa a chave pessoal ignorada só em stderr (CA-6), pelo runtime copiado ---
 const MGR_BIN_P117 = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
-const RUNTIME_P117 = path.join(".claude", "skills", "_shared", "mgr", "bin", "mgr-runtime.js");
+const RUNTIME_P117 = path.join(".mgr-core", "runtime", "bin", "mgr-runtime.js");
 
 const projetoInstaladoP117 = () => {
   const project = mkdtempSync(path.join(os.tmpdir(), "mgr-p117-projeto-"));

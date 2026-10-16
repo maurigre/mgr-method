@@ -99,23 +99,21 @@ test("motor desconhecido é erro explícito", () => {
   assert.throws(() => hookFilePath("cursor", repo), /invalid engine for session hook/);
 });
 
-test("should point runtimeCommand at the runtime copied inside each engine skills dir", () => {
+test("should give both engines the same runtime command under .mgr-core/runtime", () => {
   const root = path.join(path.sep, "work", "proj");
+  const comando = runtimeCommand("project", root);
 
-  assert.equal(
-    runtimeCommand("claude-code", root, "project"),
-    `node "${root}/.claude/skills/_shared/mgr/bin/mgr-runtime.js"`,
-  );
-  assert.equal(
-    runtimeCommand("copilot", root, "project"),
-    `node "${root}/.github/skills/_shared/mgr/bin/mgr-runtime.js"`,
-  );
+  assert.equal(comando, `node "${path.join(root, ".mgr-core", "runtime", "bin", "mgr-runtime.js")}"`);
+  for (const engine of ["claude-code", "copilot"]) {
+    const gravado = readFileSync(writeHook(engine, diretorioTemporario(), { command: comando }), "utf8");
+    assert.ok(gravado.includes(path.join(root, ".mgr-core", "runtime", "bin", "mgr-runtime.js")), engine);
+  }
 });
 
 test("should write detect --hook and the ownership marker when the command comes from runtimeCommand", () => {
   for (const engine of ["claude-code", "copilot"]) {
     const repo = diretorioTemporario();
-    const runtime = runtimeCommand(engine, repo, "project");
+    const runtime = runtimeCommand("project", repo);
 
     const gravado = readFileSync(writeHook(engine, repo, { command: runtime }), "utf8");
 

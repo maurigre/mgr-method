@@ -98,7 +98,7 @@ export function instalacaoComDefeitosDoisMotores() {
 
 // O runtime e o que o `install` REAL copia (`installRuntime`); a fixture so o muta. Cada helper
 // lanca se o alvo nao existe, para nao plantar defeito em arquivo inexistente sem reclamar.
-const RUNTIME = [".claude", "skills", "_shared", "mgr"];
+const RUNTIME = [".mgr-core", "runtime"];
 
 export const caminhoDoRuntime = (repo, ...segmentos) => path.join(repo, ...RUNTIME, ...segmentos);
 

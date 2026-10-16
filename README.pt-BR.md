@@ -59,17 +59,17 @@ npx mgr-method origin set brownfield   # registra a origem do projeto; calibra a
 ### Layout instalado
 
 Cada motor é **autossuficiente**: o conteúdo completo das skills vai direto para a pasta do
-motor (`.claude/skills/` ou `.github/skills/`), sem duplicação e sem apontadores. O
-`.mgr-core/` guarda apenas **config do projeto**, em duas camadas:
+motor (`.claude/skills/` ou `.github/skills/`), e nenhum motor aponta para a pasta de outro. O
+`.mgr-core/` guarda a **config do projeto**, em duas camadas, e a cópia única do runtime do MGR:
 
 ```
 .mgr-core/
 ├── config.json       # camada do TIME, versionada: política de modelo, origem, gate de review...
 ├── manifest.json     # camada do TIME, versionada: o que foi instalado (motores, skills, linguagem, arquitetura, userLanguage)
 ├── config.local.json # camada PESSOAL, fora do versionamento: projectId
-└── .env              # camada PESSOAL, fora do versionamento: MGR_PROJECT_ID=<id>, usado pela memória estendida (mgr-code)
+├── .env              # camada PESSOAL, fora do versionamento: MGR_PROJECT_ID=<id>, usado pela memória estendida (mgr-code)
+└── runtime/          # o runtime do MGR, uma cópia para todos os motores deste escopo: código legível, só Node, sem dependência externa, chamado pelas skills por caminho explícito; nada é instalado no sistema operacional
 .claude/skills/       # as skills (única árvore de skills)
-.claude/skills/_shared/mgr/  # o runtime do MGR: código legível, só Node, sem dependência externa, chamado pelas skills por caminho explícito; nada é instalado no sistema operacional
 ```
 
 O `.gitignore` mantém a camada pessoal fora do repositório por um **bloco gerenciado** (delimitado por
@@ -82,9 +82,12 @@ no `config.local.json` é **ignorada e avisada**, e chave desconhecida também; 
 política de modelo e a origem não vão viajar com o repositório. Padrões glob e `!` não são avaliados, então a
 ausência do aviso não prova que a config viaja.
 
-> **Runtime versionado junto com as skills (R-7).** O runtime (`<motor>/skills/_shared/mgr/`, em
-> `.claude/` ou `.github/`) é código versionado junto com as skills do motor. Se o lint, os testes ou
-> o typecheck do seu projeto varrerem essa pasta, pode ser preciso ignorá-la (`**/skills/_shared/mgr/**`).
+> **Um runtime por escopo (ADR-0025).** O runtime mora em `.mgr-core/runtime/`, uma cópia compartilhada
+> por todos os motores e pela pasta do `--skills-dir` (no escopo global, `~/.mgr-core/runtime/`). Ele viaja
+> com o `.mgr-core/` versionado, porque o bloco gerenciado só ignora a camada pessoal. Se o lint, os testes
+> ou o typecheck do seu projeto varrerem essa pasta, pode ser preciso ignorá-la (`.mgr-core/runtime/**`).
+> Instalações no layout anterior (`<motor>/skills/_shared/mgr/`) são migradas pelo `install` e pelo
+> `update`, com anúncio antes; a cópia antiga só sai das pastas que o plano reinstala.
 > As skills chamam o runtime por caminho explícito. Se ele faltar, elas **param** e mostram o comando
 > de restauração (`npx mgr-method@<versão> update`), em vez de seguir sem ele.
 >
@@ -100,7 +103,9 @@ ausência do aviso não prova que a config viaja.
 > MGR (as que levam `mgr-session-hook`) no `settings.local.json` do motor para apontar ao runtime do
 > projeto, e grava o evento de hook que falta — só em arquivo onde já existe entrada do MGR. Os dois são
 > anunciados antes de qualquer escrita. As suas entradas mantêm o mesmo valor JSON; quando o MGR grava o
-arquivo ele é reserializado, e quando nada muda ele nem é gravado.
+arquivo ele é reserializado, e quando nada muda ele nem é gravado. O `install --no-hooks` (escopo
+project) nunca cria hook, mas reescreve o comando de uma entrada do MGR que já existe quando o runtime
+mudou de lugar, anunciado antes no plano, para a entrada não apontar para um runtime removido.
 
 Instalar para dois motores gera duas árvores independentes — apagar uma **não** afeta a
 outra. Instalações no modelo antigo (runtime + `.mgr-core/skills` + lançadores) são
@@ -197,7 +202,7 @@ linha aqui, ou linha sem verificação, quebra o build.
 | `broken-hook` | caminho absoluto em `settings.local.json` |
 | `lockfile-drift` | `lockfile.diff()` |
 | `missing-shared` | as fontes de `_shared/` que o conjunto instalado exige, contra o disco |
-| `runtime-version` | o runtime do projeto `<motor>/skills/_shared/mgr/` e o seu `package.json` gerado contra o manifesto (ausente → defeito; outra versão → aviso); o corpo de cada arquivo do runtime é conferido por `divergent-body` |
+| `runtime-version` | o runtime do projeto `.mgr-core/runtime/` (no layout anterior, `<motor>/skills/_shared/mgr/`) e o seu `package.json` gerado contra o manifesto (ausente → defeito; outra versão → aviso); o corpo de cada arquivo do runtime é conferido por `divergent-body` |
 
 
 ### Princípios que governam tudo
@@ -231,7 +236,7 @@ src/                # o núcleo, 40 módulos: instalação e build · descritor 
                     # (hooks, pré-compactação, referência ao contexto) · mensagens
 src/engines/        # o que cada motor suporta, como DADO — nunca `if` por nome de motor
 src/commands/       # a cola dos comandos, comum à CLI e ao runtime do projeto (IO injetado)
-bin/mgr-runtime.js  # a entrada do runtime do projeto, copiada com o fecho de imports para <motor>/skills/_shared/mgr/
+bin/mgr-runtime.js  # a entrada do runtime do projeto, copiada com o fecho de imports para .mgr-core/runtime/
 skills/             # as 13 skills (fonte)
 agents/             # os 3 moldes de agente (redação, implementação, gate de review)
 shared/             # fontes transversais: regras de arquitetura e qualidade, leis

@@ -1,12 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, existsSync, writeFileSync, cpSync, rmSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, writeFileSync, cpSync, mkdtempSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import os from "node:os";
 import {
   DEFECT, FIX_RESTORE, FIX_UPDATE, NO_FIX, UNAVAILABLE, WARNING,
   SKILL_DECLARADA, SKILL_ORFA, SKILL_ORFA_SEM_PROVA, FONTE_COMPARTILHADA,
   PROVA_FUNCIONA, PROVA_NAO_FUNCIONA, PROVA_NAO_MEDIDA, SEM_REMEDIACAO,
   architectureSkill, bodyCheckAvailability, brokenHooks, divergentBody, lockfileDrift, missingAgents, missingShared, missingSkills,
-  orphanSkills, runtimeBodies, sharedCheckAvailability, staleInstall, unresolvedTokens,
+  orphanSkills, runtimeBodies, runtimeLocations, sharedCheckAvailability, staleInstall, unresolvedTokens,
   AUDITED, NO_INSTALL, diagnose, hasDefect, CHECKS,
 } from "../src/doctor.js";
 import path from "node:path";
@@ -16,6 +19,7 @@ import * as bundle from "../src/bundle.js";
 import * as catalog from "../src/catalog.js";
 import * as engineDescriptors from "../src/engines/index.js";
 import { ORFA, VERSAO_VELHA, descartar, instalacaoComDefeitos, instalacaoComDefeitosDoisMotores, instalacaoLimpa, instalacaoLimpaDoisMotores, apagarFonteCompartilhada, plantarTokenEmShared, alterarCorpoEmShared, apagarRuntime, alterarVersaoDoRuntime, alterarUmByteDoRuntime, removerArquivoDoRuntime } from "./fixtures/instalacao.js";
+import { layoutPorMotor } from "./fixtures/layout-por-motor.js";
 
 const DIR = ".claude/skills";
 
@@ -524,7 +528,91 @@ test("as 10 verificacoes antigas mantem remediacao e severidade de antes", () =>
 
 const doRuntime = (findings) => findings.filter((f) => f.check === "runtime-version");
 const corposDoRuntime = (findings) => findings.filter((f) => f.check === "divergent-body"
-  && f.file.includes("_shared/mgr"));
+  && f.file.includes(path.join(".mgr-core", "runtime")));
+
+const BIN_MGR = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+const rodarMgr = (comando, repo) => {
+  const home = mkdtempSync(path.join(os.tmpdir(), "mgr-doctor-home-"));
+  try {
+    return spawnSync("node", [BIN_MGR, comando, repo], { env: { ...process.env, HOME: home }, encoding: "utf8" });
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+};
+const arquivosDe = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+  e.isDirectory() ? arquivosDe(path.join(dir, e.name)) : [path.join(dir, e.name)]);
+const impressaoDaArvore = (raiz) => Object.fromEntries(arquivosDe(raiz).sort().map((f) =>
+  [path.relative(raiz, f), readFileSync(f, "base64")]));
+
+test("should flag a deleted core runtime as one runtime-version defect at .mgr-core/runtime and exit 1", () => {
+  const repo = instalacaoLimpa();
+  try {
+    apagarRuntime(repo);
+    const achados = doRuntime(diagnose(repo).findings);
+    assert.equal(achados.length, 1);
+    assert.equal(achados[0].severity, DEFECT);
+    assert.equal(achados[0].file, path.join(".mgr-core", "runtime"));
+    assert.equal(achados[0].fix, FIX_UPDATE);
+    assert.equal(rodarMgr("doctor", repo).status, 1);
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("should clear runtime-version after mgr update restores the deleted core runtime", () => {
+  const repo = instalacaoLimpa();
+  try {
+    apagarRuntime(repo);
+    const atualizado = rodarMgr("update", repo);
+    assert.equal(atualizado.status, 0, atualizado.stderr);
+    assert.deepEqual(doRuntime(diagnose(repo).findings), []);
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("should warn and exit 0 when the core runtime version differs from the manifest", () => {
+  const repo = instalacaoLimpa();
+  try {
+    alterarVersaoDoRuntime(repo, "0.0.0-copia");
+    const achados = doRuntime(diagnose(repo).findings);
+    assert.equal(achados.length, 1);
+    assert.equal(achados[0].severity, WARNING);
+    assert.equal(achados[0].file, path.join(".mgr-core", "runtime", "package.json"));
+    assert.equal(rodarMgr("doctor", repo).status, 0);
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("should keep the per-engine layout free of runtime-version and change no byte of the tree", () => {
+  const repo = instalacaoLimpa();
+  try {
+    layoutPorMotor(repo, { model: "self-contained-layered-config" });
+    assert.ok(existsSync(path.join(repo, ".claude", "skills", "_shared", "mgr", "bin", "mgr-runtime.js")),
+      "o layout por motor existe antes do doctor");
+    const antes = impressaoDaArvore(repo);
+    assert.deepEqual(doRuntime(diagnose(repo).findings), []);
+    rodarMgr("doctor", repo);
+    assert.deepEqual(impressaoDaArvore(repo), antes, "o doctor nao escreve em nada");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("should locate the runtime at .mgr-core/runtime for the core model and per engine otherwise", () => {
+  const repo = path.join(path.sep, "work", "proj");
+  const arvores = [{ dir: path.join(repo, ".claude", "skills") }, { dir: path.join(repo, ".github", "skills") }];
+
+  assert.deepEqual(runtimeLocations({ model: "self-contained-core-runtime" }, repo, arvores), {
+    layout: "core",
+    dirs: [path.join(repo, ".mgr-core", "runtime")],
+  });
+  assert.deepEqual(runtimeLocations({ model: "self-contained-layered-config" }, repo, arvores), {
+    layout: "per-engine",
+    dirs: [path.join(repo, ".claude", "skills", "_shared", "mgr"), path.join(repo, ".github", "skills", "_shared", "mgr")],
+  });
+});
 
 test("runtime integro nao produz achado de runtime-version nem de divergent-body do runtime", () => {
   const repo = instalacaoLimpa();
@@ -602,7 +690,7 @@ test("um byte alterado num arquivo copiado do runtime acusa divergent-body naque
     const { findings } = diagnose(repo);
     const achados = corposDoRuntime(findings);
     assert.equal(achados.length, 1, "so o arquivo mutado");
-    assert.equal(achados[0].file, path.join(".claude", "skills", "_shared", "mgr", "src", "catalog.js"));
+    assert.equal(achados[0].file, path.join(".mgr-core", "runtime", "src", "catalog.js"));
     assert.equal(achados[0].severity, DEFECT);
     assert.equal(achados[0].fix, FIX_UPDATE);
     assert.deepEqual(doRuntime(findings), [], "o diretorio esta presente e a versao confere");

@@ -107,12 +107,13 @@ const CASOS_MC_DC = [
   ["should keep the old runtime when it is declared, present and out of the plan", { prior: PRIOR_CLAUDE, targets: PLANO_COPILOT, existentes: [CAND_CLAUDE] }, { remove: [], keep: [CAND_CLAUDE] }],
   ["should leave nothing when the old runtime is declared and in the plan but absent", { prior: PRIOR_CLAUDE, targets: PLANO_CLAUDE, existentes: [] }, VAZIO],
   ["should leave nothing when the old runtime is declared, out of the plan and absent", { prior: PRIOR_CLAUDE, targets: PLANO_COPILOT, existentes: [] }, VAZIO],
-  ["should leave nothing when the old runtime is present and in the plan but not declared", { prior: PRIOR_COPILOT, targets: PLANO_CLAUDE, existentes: [CAND_CLAUDE] }, VAZIO],
+  ["should remove the old runtime of a folder the plan reinstalls even when the prior manifest did not declare it", { prior: PRIOR_COPILOT, targets: PLANO_CLAUDE, existentes: [CAND_CLAUDE] }, { remove: [CAND_CLAUDE], keep: [] }],
   ["should keep the copilot runtime when it is declared, present and out of the plan", { prior: PRIOR_COPILOT, targets: PLANO_CLAUDE, existentes: [CAND_COPILOT] }, { remove: [], keep: [CAND_COPILOT] }],
   ["should leave nothing when the old runtime is present and out of the plan but not declared", { prior: PRIOR_COPILOT, targets: PLANO_COPILOT, existentes: [CAND_CLAUDE] }, VAZIO],
   ["should return two empty lists when there is no prior installation", { prior: null, targets: PLANO_CLAUDE, existentes: [CAND_CLAUDE] }, VAZIO],
   ["should take the singular skillsDir of an older manifest as declared", { prior: { skillsDir: ".claude/skills" }, targets: PLANO_CLAUDE, existentes: [CAND_CLAUDE] }, { remove: [CAND_CLAUDE], keep: [] }],
-  ["should leave nothing when the prior manifest declares no skills folder", { prior: {}, targets: PLANO_CLAUDE, existentes: [CAND_CLAUDE] }, VAZIO],
+  ["should still remove the old runtime of a planned folder when the prior manifest declares no skills folder", { prior: {}, targets: PLANO_CLAUDE, existentes: [CAND_CLAUDE] }, { remove: [CAND_CLAUDE], keep: [] }],
+  ["should not keep a declared folder out of the plan whose old runtime is absent while removing the planned one", { prior: { skillsDirs: [".claude/skills", ".github/skills"] }, targets: PLANO_CLAUDE, existentes: [CAND_CLAUDE] }, { remove: [CAND_CLAUDE], keep: [] }],
 ];
 
 test("should write the core-runtime model on a fresh install", () => {
@@ -434,6 +435,25 @@ test("should keep the copilot runtime copy and its hook byte for byte when reins
     const comando = hooks.sessionStart.find((entry) => JSON.stringify(entry).includes("mgr-session-hook")).bash;
     const hook = spawnSync(comando, { shell: true, cwd: repo, encoding: "utf8", input: "", env: { ...process.env, LC_ALL: "C" } });
     assert.equal(hook.status, 0, hook.stderr);
+  });
+});
+
+test("should remove and announce the old copilot runtime when reinstalling both engines after a claude-only reinstall", () => {
+  withRepo((repo) => {
+    geracaoPorMotor(repo, { engines: ["claude-code", "copilot"], model: MODEL_RUNTIME });
+    const base = ["install", "-y", "--scope", "project", "--all-skills", "--user-language", "en"];
+    assert.equal(runMgr([...base, "--engine", "claude-code", repo]).status, 0);
+    assert.ok(existsSync(path.join(repo, ".github", "skills", "_shared", "mgr")));
+
+    const run = runMgr([...base, "--engine", "both", repo]);
+
+    assert.equal(run.status, 0, run.stderr);
+    const out = stripVTControlCharacters(run.stdout + run.stderr).replace(/[│\s]+/g, " ");
+    assert.ok(out.includes("old MGR runtime to remove: .github/skills/_shared/mgr"), out);
+    assert.ok(out.includes("old MGR runtime removed: .github/skills/_shared/mgr"), out);
+    assert.equal(existsSync(path.join(repo, ".github", "skills", "_shared", "mgr")), false);
+    assert.ok(existsSync(path.join(repo, ".github", "skills", "_shared", "laws", "execution-laws.md")));
+    assert.ok(existsSync(path.join(repo, ".mgr-core", "runtime", "bin", "mgr-runtime.js")));
   });
 });
 

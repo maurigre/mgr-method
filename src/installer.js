@@ -289,21 +289,18 @@ export function needsConfigMigration(prior) {
   return Boolean(prior) && ![MODEL_LAYERED, MODEL_CORE_RUNTIME].includes(prior.model);
 }
 
-// O `_shared/mgr/` da geração anterior (DT-5). Candidatos saem de `prior.skillsDirs`, conjunto que o
-// método escreveu: sem varredura, e o `exists` só subtrai. Sai o do diretório que o plano reescreve;
-// fica (e é anunciado) o de um diretório fora do plano, cujas skills e hook ainda o chamam.
+// O `_shared/mgr/` da geração anterior (DT-5, emenda N-3). Sai o de toda pasta que o plano reinstala,
+// declarada ou não no manifesto anterior: o método escreve nela agora, e até a 0.7.0-beta.11 todo
+// install já apagava esse caminho em todo alvo. Fica (e é anunciado) o de uma pasta declarada que
+// saiu do plano, cujas skills e hook ainda o chamam. Sem instalação anterior, nada sai. O `exists`
+// só subtrai; não há varredura.
 export function legacyRuntimeDirs({ prior, targets, scope, repo, exists = existsSync }) {
   if (!prior) return { remove: [], keep: [] };
-  const declared = prior.skillsDirs || (prior.skillsDir ? [prior.skillsDir] : []);
-  const inPlan = new Set((targets || []).map((t) => absDir(t.dir, scope, repo)));
-  const remove = [];
-  const keep = [];
-  for (const d of declared) {
-    const base = absDir(d, scope, repo);
-    const candidate = path.join(base, ...catalog.LEGACY_RUNTIME_DIR);
-    if (!exists(candidate)) continue;
-    (inPlan.has(base) ? remove : keep).push(candidate);
-  }
+  const declared = (prior.skillsDirs || (prior.skillsDir ? [prior.skillsDir] : [])).map((d) => absDir(d, scope, repo));
+  const inPlan = (targets || []).map((t) => absDir(t.dir, scope, repo));
+  const candidate = (base) => path.join(base, ...catalog.LEGACY_RUNTIME_DIR);
+  const remove = [...new Set(inPlan)].map(candidate).filter((dir) => exists(dir));
+  const keep = [...new Set(declared)].filter((base) => !inPlan.includes(base)).map(candidate).filter((dir) => exists(dir));
   return { remove, keep };
 }
 

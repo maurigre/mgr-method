@@ -33,8 +33,9 @@ foi escrita sobre a leitura das leis por caminho relativo; as leis continuam em 
    motor, entao apagar a pasta de um motor nao o alcanca.
 3. **Geracao `self-contained-core-runtime`.** Install e update migram todas as geracoes anteriores,
    anunciando antes: as que tinham runtime por motor sao relocadas, e as que nao tinham ganham a copia.
-4. **Remocao do `_shared/mgr/` antigo** so nos diretorios que o manifesto anterior declarava e que o
-   plano reinstala, anunciada antes de qualquer escrita. Diretorio declarado que sai do plano mantem a
+4. **Remocao do `_shared/mgr/` antigo** de toda pasta que o plano reinstala, declarada ou nao no
+   manifesto anterior, quando ha instalacao anterior; anunciada antes de qualquer escrita. Ate a
+   0.7.0-beta.11 todo install ja apagava esse caminho em todo alvo, entao nao ha exposicao nova. Diretorio declarado que sai do plano mantem a
    copia e e anunciado, porque as skills e o hook dele ainda a chamam.
 5. **O doctor confere o local que a geracao do manifesto declara**: `.mgr-core/runtime/` na geracao
    nova, a copia por motor nas anteriores.
@@ -65,10 +66,10 @@ foi escrita sobre a leitura das leis por caminho relativo; as leis continuam em 
 - Ferramenta do usuario que referencie `<motor>/skills/_shared/mgr/` deixa de casar.
 
 ### Risks and Mitigations
-- **Risk:** a remocao alcancar pasta que nao e do metodo. — **Mitigation:** candidatos so da
-  intersecao entre os diretorios do manifesto anterior e os do plano, caminho exato `_shared/mgr`. —
-  **proved by:** test/migracao-runtime.test.js, a tabela MC/DC de `legacyRuntimeDirs` (CA-13) e as
-  migracoes das quatro geracoes (CA-11); mutacoes que tiram cada condicao (declarado, no plano, existe)
+- **Risk:** a remocao alcancar pasta que nao e do metodo. — **Mitigation:** so o caminho exato
+  `_shared/mgr` das pastas do plano (onde o metodo escreve) e so com instalacao anterior; nada fora do
+  plano e removido. — **proved by:** test/migracao-runtime.test.js, a tabela MC/DC de `legacyRuntimeDirs`
+  (CA-13) e as migracoes das quatro geracoes (CA-11); mutacoes que tiram cada condicao (no plano, existe)
   derrubam a tabela (specs/runtime-em-mgr-core/05-execution.md, P2.3).
 - **Risk:** alvo fora do plano ficar sem runtime. — **Mitigation:** a copia antiga dele fica e e
   anunciada. — **proved by:** "should keep the copilot runtime copy and its hook byte for byte when

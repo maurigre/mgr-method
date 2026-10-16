@@ -28,8 +28,8 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - **Migração automática e anunciada** no `install` e no `update`, para todas as gerações anteriores:
   - as que tinham runtime por motor são relocadas;
   - as que não tinham ganham a cópia;
-  - o `_shared/mgr/` antigo é removido só dos diretórios que o manifesto anterior declarava **e** que o
-    plano reinstala, com anúncio antes, inclusive no `--dry-run`;
+  - o `_shared/mgr/` antigo é removido de toda pasta que o plano reinstala, declarada ou não no
+    manifesto anterior, com anúncio antes, inclusive no `--dry-run`;
   - o de um diretório fora do plano fica e é anunciado, porque as skills e o hook dele ainda o chamam.
 - **Quebra de contrato:** as skills de um alvo que saiu do manifesto e já foi migrado dependem da
   cópia única. Depois do `uninstall`, elas param com a mensagem de restauração, em vez de rodar de uma

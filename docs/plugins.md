@@ -192,7 +192,8 @@ accept it and the hook starts working, including in `-p` mode.
 
 The hook lives in a machine-local, gitignored file, so it never changes the agent's behaviour
 for anyone else who clones the repository. `mgr` only ever touches its own entry, identified
-by a marker in the command; `--no-hooks` skips writing them, and `mgr uninstall` removes them.
+by a marker in the command; `--no-hooks` creates none, only rewriting the command of an existing MGR entry
+when the runtime moved (project scope, announced in the plan), and `mgr uninstall` removes them.
 ## `mgr-skills.lock`
 
 ```json

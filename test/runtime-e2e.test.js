@@ -12,9 +12,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MGR_BIN = path.join(PACKAGE_ROOT, "bin", "mgr.js");
-const RUNTIME_RELATIVE = ["skills", "_shared", "mgr", "bin", "mgr-runtime.js"];
-const RUNTIMES = [path.join(".claude", ...RUNTIME_RELATIVE), path.join(".github", ...RUNTIME_RELATIVE)];
+const RUNTIME = path.join(".mgr-core", "runtime", "bin", "mgr-runtime.js");
 const TIMEOUT_MS = 120000;
+const HOOK_MARKER = "mgr-session-hook";
 
 const COMMANDS = [
   ["spec", "status", "demo", "--json"],
@@ -51,6 +51,13 @@ const PRELOAD_TEXT = [
   'net.createConnection = () => { throw new Error("network is forbidden in this test"); };',
   "",
 ].join("\n");
+
+const collectStrings = (value) => {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(collectStrings);
+  if (value && typeof value === "object") return Object.values(value).flatMap(collectStrings);
+  return [];
+};
 
 const makeTemp = (label) => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), `mgr-e2e-${label}-`)));
 
@@ -114,21 +121,19 @@ const nestedPackage = (project) => {
   return nested;
 };
 
-test("should exit 0 on the ten runtime commands of both engines with only node in the PATH (CA-2)", () => {
+test("should exit 0 on the ten runtime commands from the single runtime with only node in the PATH (CA-6)", () => {
   const { project, home } = fixture("ca2");
-  for (const runtime of RUNTIMES) {
-    for (const command of COMMANDS) {
-      const result = runNode([runtime, ...command], { cwd: project, env: runtimeEnv(home) });
-      assert.equal(result.error, undefined, `${runtime} ${command.join(" ")}: ${result.error}`);
-      assert.equal(result.status, 0, `${runtime} ${command.join(" ")}: ${result.stdout}${result.stderr}`);
-    }
+  for (const command of COMMANDS) {
+    const result = runNode([RUNTIME, ...command], { cwd: project, env: runtimeEnv(home) });
+    assert.equal(result.error, undefined, `${RUNTIME} ${command.join(" ")}: ${result.error}`);
+    assert.equal(result.status, 0, `${RUNTIME} ${command.join(" ")}: ${result.stdout}${result.stderr}`);
   }
 });
 
 test("should resolve the project root and the saved model from a subdirectory with its own package.json and .git (CA-3)", () => {
   const { project, home } = fixture("ca3");
-  const runtime = path.join(project, RUNTIMES[0]);
-  const set = runNode([runtime, "agents", "set", "drafting", "--model", "opus"], { cwd: project, env: runtimeEnv(home) });
+  const runtime = path.join(project, RUNTIME);
+  const set =runNode([runtime, "agents", "set", "drafting", "--model", "opus"], { cwd: project, env: runtimeEnv(home) });
   assert.equal(set.status, 0, set.stderr);
   const nested = nestedPackage(project);
 
@@ -159,11 +164,9 @@ test("should keep the CA-2 exit codes with fetch and net.connect throwing (CA-15
   );
   assert.equal(guard.status, 0, `the preload must make the network calls throw: ${guard.stderr}`);
 
-  for (const runtime of RUNTIMES) {
-    for (const command of COMMANDS) {
-      const result = runNode([...importFlag, runtime, ...command], { cwd: project, env: runtimeEnv(home) });
-      assert.equal(result.status, 0, `${runtime} ${command.join(" ")} offline: ${result.stdout}${result.stderr}`);
-    }
+  for (const command of COMMANDS) {
+    const result = runNode([...importFlag, RUNTIME, ...command], { cwd: project, env: runtimeEnv(home) });
+    assert.equal(result.status, 0, `${RUNTIME} ${command.join(" ")} offline: ${result.stdout}${result.stderr}`);
   }
 });
 
@@ -178,7 +181,7 @@ test("should answer in the manifest language, not the locale, from a subdirector
   const portuguese = "Isto é EXISTÊNCIA DE ARQUIVO, não progresso.";
 
   const viaPackage = runPackage(["spec", "status", "--all"], { cwd: nested, home, extra: { LC_ALL: "pt_BR.UTF-8" } });
-  const viaRuntime = runNode([path.join(project, RUNTIMES[0]), "spec", "status", "--all"], {
+  const viaRuntime = runNode([path.join(project, RUNTIME), "spec", "status", "--all"], {
     cwd: nested,
     env: runtimeEnv(home, { LC_ALL: "pt_BR.UTF-8" }),
   });
@@ -195,21 +198,36 @@ test("should name the npx lifecycle command, never a bare mgr, in the doctor fix
   const { version } = JSON.parse(fs.readFileSync(path.join(project, ".mgr-core", "manifest.json"), "utf8"));
   fs.rmSync(path.join(project, ".claude", "agents", "mgr-draft.md"));
 
-  const result = runNode([RUNTIMES[0], "doctor"], { cwd: project, env: runtimeEnv(home) });
+  const result = runNode([RUNTIME, "doctor"], { cwd: project, env: runtimeEnv(home) });
   assert.equal(result.status, 1, result.stdout);
   assert.ok(result.stdout.includes(`npx mgr-method@${version} update`), result.stdout);
   assert.equal(/resolva com: mgr /.test(result.stdout), false, result.stdout);
 });
 
-test("should keep the eight engine-independent commands at exit 0 and name the removed .claude agents on the other two (CA-25)", () => {
+test("should keep the eight engine-independent commands at exit 0 and name the removed .claude agents on the other two after the whole .claude folder is deleted (CA-7)", () => {
   const { project, home } = fixture("ca25");
   fs.rmSync(path.join(project, ".claude"), { recursive: true, force: true });
-  const runtime = RUNTIMES[1];
   const inspectsRemovedEngine = (command) => ["agents apply", "doctor"].includes(command.join(" "));
 
+  const version = runNode([RUNTIME, "version"], { cwd: project, env: runtimeEnv(home) });
+  assert.equal(version.status, 0, version.stderr);
+  const agents = runNode([RUNTIME, "agents", "--json"], { cwd: project, env: runtimeEnv(home) });
+  assert.equal(agents.status, 0, agents.stderr);
+  const settings = JSON.parse(fs.readFileSync(path.join(project, ".github", "copilot", "settings.local.json"), "utf8"));
+  const [sessionCommand] = collectStrings(settings.hooks?.sessionStart ?? []).filter((text) => text.includes(HOOK_MARKER));
+  assert.ok(sessionCommand, "no sessionStart entry owned by the MGR in the copilot settings");
+  const session = spawnSync("sh", ["-c", sessionCommand], {
+    cwd: project,
+    input: "",
+    encoding: "utf8",
+    timeout: TIMEOUT_MS,
+    env: { ...process.env, LC_ALL: "C", HOME: home },
+  });
+  assert.equal(session.status, 0, `copilot sessionStart: ${session.stderr}`);
+
   for (const command of COMMANDS) {
-    const result = runNode([runtime, ...command], { cwd: project, env: runtimeEnv(home) });
-    const label = `${runtime} ${command.join(" ")}`;
+    const result = runNode([RUNTIME, ...command], { cwd: project, env: runtimeEnv(home) });
+    const label = `${RUNTIME} ${command.join(" ")}`;
     if (!inspectsRemovedEngine(command)) {
       assert.equal(result.status, 0, `${label}: ${result.stdout}${result.stderr}`);
       continue;

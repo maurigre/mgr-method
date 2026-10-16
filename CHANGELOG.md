@@ -14,6 +14,37 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
+### Alterado
+- **Runtime do MGR em cópia única em `.mgr-core/runtime/` (ADR-0025).** O runtime deixa de ir para
+  `<motor>/skills/_shared/mgr/`, uma cópia por motor e por `--skills-dir`. Passa a existir uma cópia por
+  escopo (`.mgr-core/runtime/` no projeto e `~/.mgr-core/runtime/` no global), usada pelas skills e pelas
+  entradas de hook de todos os motores. O restante de `_shared/` (leis, carta, qualidade) continua em
+  cada motor. A CONSTITUTION 2.6 passa a admitir o runtime no `.mgr-core/`, e a 2.5 ganha a linha que
+  diz que o runtime não é diretório de motor.
+- **Quebra de contrato:** `manifest.model` vale `self-contained-core-runtime`.
+- **Quebra de contrato:** o caminho do runtime nas skills e nos hooks passa a
+  `.mgr-core/runtime/bin/mgr-runtime.js`. Uma exclusão do tipo `**/skills/_shared/mgr/**` em ferramenta do
+  projeto deixa de casar; o equivalente agora é `.mgr-core/runtime/**`.
+- **Migração automática e anunciada** no `install` e no `update`, para todas as gerações anteriores:
+  - as que tinham runtime por motor são relocadas;
+  - as que não tinham ganham a cópia;
+  - o `_shared/mgr/` antigo é removido de toda pasta que o plano reinstala, declarada ou não no
+    manifesto anterior, com anúncio antes, inclusive no `--dry-run`;
+  - o de um diretório fora do plano fica e é anunciado, porque as skills e o hook dele ainda o chamam.
+- **Quebra de contrato:** as skills de um alvo que saiu do manifesto e já foi migrado dependem da
+  cópia única. Depois do `uninstall`, elas param com a mensagem de restauração, em vez de rodar de uma
+  cópia própria.
+- O `install --no-hooks` (escopo project) reescreve o comando de uma entrada de hook do MGR que já
+  existe, para ela não apontar para o runtime removido. A reescrita é anunciada no plano, inclusive no
+  `--dry-run`, e só acontece onde o comando muda. Não cria evento nem arquivo.
+- O `doctor` confere o runtime no local que a geração do manifesto declara. Um projeto ainda não
+  migrado com runtime por motor (`self-contained-runtime` ou `self-contained-layered-config`) não sai
+  com `runtime-version` falso. As gerações sem runtime no projeto continuam acusando a falta, como
+  antes.
+- **Downgrade:** uma versão anterior rodada sobre a geração nova recopia o runtime por motor e deixa
+  `.mgr-core/runtime/` sem uso. O próximo comando da versão nova reloca de novo. A CONSTITUTION 2.7
+  cobre só a migração para a frente.
+
 ## [0.7.0-beta.11] - 2026-10-15
 > Estrutura fixa do SDD e política de versionamento na constituição. Pré-release no dist-tag `next`.
 

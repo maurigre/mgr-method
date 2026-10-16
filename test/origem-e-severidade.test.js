@@ -5,7 +5,6 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
 import path from "node:path";
-import { RUNTIME_DIR, RUNTIME_FILES } from "../src/catalog.js";
 
 const BIN = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
 const CONFIG = path.join(".mgr-core", "config.json");
@@ -163,12 +162,11 @@ test("negativo: a fatia nao introduziu token — a arvore instalada nao tem MGR_
     const sobraram = spawnSync("grep", ["-rl", "{{MGR_", path.join(repo, SKILLS)], { encoding: "utf8" });
     assert.equal(sobraram.error, undefined, "grep ausente devolve stdout vazio, e vazio contra vazio nao e prova");
     assert.ok([0, 1].includes(sobraram.status), `grep falhou: status ${sobraram.status}`);
-    // Exclusao por caminho COMPLETO: as copias do runtime (D-15) sao provadas identicas ao pacote
-    // pela D-14, e nelas o token e constante de codigo. Prefixo de pasta excluiria arquivo novo.
-    const copiasRuntime = new Set(RUNTIME_FILES.map((arquivo) => path.join(repo, SKILLS, ...RUNTIME_DIR, arquivo)));
-    const sobrantes = `${sobraram.stdout}`.split("\n").filter((linha) => linha !== "" && !copiasRuntime.has(linha));
+    const sobrantes = `${sobraram.stdout}`.split("\n").filter((linha) => linha !== "");
     assert.deepEqual(sobrantes, [],
       "token novo seria resolvido no install, quando a origem ainda nao existe, e a copia ficaria errada sem o doctor poder ver");
+    assert.ok(!existsSync(path.join(repo, SKILLS, "_shared", "mgr")),
+      "a arvore de skills nao tem runtime: a copia unica fica em .mgr-core/runtime");
   } finally {
     rmSync(repo, { recursive: true, force: true });
   }

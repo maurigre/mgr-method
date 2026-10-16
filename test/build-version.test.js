@@ -72,7 +72,7 @@ test("should print the runtime version without a warning when the manifest match
   const projeto = mkdtempSync(path.join(os.tmpdir(), "mgr-runtime-"));
   try {
     instalarProjeto(projeto);
-    const runtime = path.join(projeto, ".claude", "skills", "_shared", "mgr", "bin", "mgr-runtime.js");
+    const runtime = path.join(projeto, ".mgr-core", "runtime", "bin", "mgr-runtime.js");
     const versao = readJson(path.join(projeto, ".mgr-core", "manifest.json")).version;
     const resultado = runNode(projeto, [runtime, "--version"]);
     assert.equal(resultado.status, 0, resultado.stderr);
@@ -87,7 +87,7 @@ test("should warn on stderr with both versions and exit 0 when the manifest vers
   const projeto = mkdtempSync(path.join(os.tmpdir(), "mgr-runtime-"));
   try {
     instalarProjeto(projeto);
-    const runtime = path.join(projeto, ".claude", "skills", "_shared", "mgr", "bin", "mgr-runtime.js");
+    const runtime = path.join(projeto, ".mgr-core", "runtime", "bin", "mgr-runtime.js");
     const manifesto = path.join(projeto, ".mgr-core", "manifest.json");
     const versaoRuntime = readJson(manifesto).version;
     const versaoManifesto = `${versaoRuntime}-divergente`;

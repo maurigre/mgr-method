@@ -127,7 +127,7 @@ test("install autossuficiente: só o subconjunto na pasta do motor, sem .mgr-cor
   assert.ok(archMd.includes("_shared/arch/cross-cutting-rules.md"), "deve apontar para a fonte co-locada");
 
   const man = JSON.parse(readFileSync(path.join(core, "manifest.json"), "utf8"));
-  assert.equal(man.model, "self-contained-layered-config");
+  assert.equal(man.model, "self-contained-core-runtime");
   assert.equal(man.architecture, "hexagonal");
   assert.equal(man.language, "java");
   const local = JSON.parse(readFileSync(path.join(core, "config.local.json"), "utf8"));
@@ -161,7 +161,7 @@ test("migra instalação antiga (runtime-launcher) para o novo layout", () => {
   assert.ok(res.migrated, "deve reportar migração");
   assert.ok(!existsSync(path.join(core, "skills")), "conteúdo antigo (.mgr-core/skills) deve sumir");
   assert.ok(existsSync(path.join(core, "manifest.json")), ".mgr-core permanece como config");
-  assert.equal(JSON.parse(readFileSync(path.join(core, "manifest.json"), "utf8")).model, "self-contained-layered-config");
+  assert.equal(JSON.parse(readFileSync(path.join(core, "manifest.json"), "utf8")).model, "self-contained-core-runtime");
   const md = readFileSync(path.join(repo, ".claude/skills/spec-init/SKILL.md"), "utf8");
   assert.ok(md.includes("name: spec-init") && !md.includes("launcher antigo"));
 });
@@ -245,7 +245,7 @@ test("detect, installs e detectPrior enxergam a instalação", () => {
 
   assert.ok(installer.detect(repo).some((f) => f.path.endsWith(path.join(".claude", "skills")) && f.count >= 1));
   const prior = installer.detectPrior("project", repo);
-  assert.ok(prior && prior.model === "self-contained-layered-config");
+  assert.ok(prior && prior.model === "self-contained-core-runtime");
   assert.equal(installer.installs("project", repo).length, 1);
 });
 
@@ -272,15 +272,11 @@ test("SHARED_SOURCES e instalador leem as mesmas fontes compartilhadas", () => {
 
   const emDisco = arquivosSob(path.join(sk, catalog.SHARED_DIR))
     .map((abs) => path.relative(sk, abs)).sort();
-  const runtimeDir = catalog.RUNTIME_DIR;
-  const runtimeNaTabela = catalog.RUNTIME_FILES.map((arquivo) => path.join(...runtimeDir, arquivo));
-  const naTabela = [
-    ...required.map((source) => path.join(...source.installed)),
-    ...runtimeNaTabela,
-    path.join(...runtimeDir, "package.json"),
-  ].sort();
+  const naTabela = required.map((source) => path.join(...source.installed)).sort();
   assert.deepEqual(emDisco, naTabela,
     "a direcao inversa importa igual: fonte escrita pelo instalador e ausente da tabela nao seria conferida pelo doctor");
+  assert.ok(!existsSync(path.join(sk, ...catalog.LEGACY_RUNTIME_DIR)),
+    "o runtime nao volta para o motor: o _shared/mgr so existe na geracao anterior");
 });
 
 test("getMessages: en é o default e qualquer pt-* seleciona a tabela pt-BR", () => {

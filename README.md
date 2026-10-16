@@ -55,17 +55,17 @@ npx mgr-method origin set brownfield   # records the project origin; it calibrat
 ### Installed layout
 
 Each engine is **self-contained**: the full content of the skills goes straight into the
-engine's folder (`.claude/skills/` or `.github/skills/`), no duplication and no pointers.
-`.mgr-core/` holds only **project config**, in two layers:
+engine's folder (`.claude/skills/` or `.github/skills/`), and no engine points at another engine's folder.
+`.mgr-core/` holds the **project config**, in two layers, and the single copy of the MGR runtime:
 
 ```
 .mgr-core/
 ├── config.json       # TEAM layer, versioned: model policy, origin, review gate...
 ├── manifest.json     # TEAM layer, versioned: what was installed (engines, skills, language, architecture, userLanguage)
 ├── config.local.json # PERSONAL layer, out of version control: projectId
-└── .env              # PERSONAL layer, out of version control: MGR_PROJECT_ID=<id>, used by the extended memory (mgr-code)
+├── .env              # PERSONAL layer, out of version control: MGR_PROJECT_ID=<id>, used by the extended memory (mgr-code)
+└── runtime/          # the MGR runtime, one copy for every engine in this scope: readable code, Node only, no external dependency, called by the skills by explicit path; nothing is installed in the operating system
 .claude/skills/       # the skills (single skills tree)
-.claude/skills/_shared/mgr/  # the MGR runtime: readable code, Node only, no external dependency, called by the skills by explicit path; nothing is installed in the operating system
 ```
 
 The `.gitignore` keeps the personal layer out of the repository through a **managed block**
@@ -78,9 +78,12 @@ written in `config.local.json` is **ignored and reported**, and so is an unknown
 model policy and the origin will not travel with the repository. Glob and `!` patterns are not evaluated, so
 no warning does not prove the config travels.
 
-> **Runtime versioned with the skills (R-7).** The runtime (`<engine>/skills/_shared/mgr/`, in
-> `.claude/` or `.github/`) is code versioned together with the engine's skills. If your project's
-> lint, tests or typecheck scan that folder, you may need to ignore it (`**/skills/_shared/mgr/**`).
+> **One runtime per scope (ADR-0025).** The runtime lives in `.mgr-core/runtime/`, one copy shared by
+> every engine and by the `--skills-dir` folder (in global scope, `~/.mgr-core/runtime/`). It travels
+> with the versioned `.mgr-core/`, because the managed block only ignores the personal layer. If your
+> project's lint, tests or typecheck scan that folder, you may need to ignore it (`.mgr-core/runtime/**`).
+> Installations in the previous layout (`<engine>/skills/_shared/mgr/`) are migrated by `install` and
+> `update`, announced first; the old copy is removed only from the folders the plan reinstalls.
 > The skills call the runtime by explicit path. If it is missing, they **stop** and show the restore
 > command (`npx mgr-method@<version> update`) instead of going on without it.
 >
@@ -96,7 +99,10 @@ no warning does not prove the config travels.
 > (the ones carrying `mgr-session-hook`) in the engine's `settings.local.json` so they point to the
 > project runtime, and writes the hook event that is missing — only in a file that already has an MGR
 > entry. Both are announced before anything is written. Your entries keep the same JSON value; when the MGR
-writes the file it is re-serialized, and when nothing changes it is not written at all.
+writes the file it is re-serialized, and when nothing changes it is not written at all. `install
+--no-hooks` (project scope) never creates a hook, but it rewrites the command of an MGR entry that
+already exists when the runtime moved, announced in the plan first, so the entry does not point to a
+removed runtime.
 
 Installing for two engines produces two independent trees — deleting one does **not**
 affect the other. Installations in the old model (runtime + `.mgr-core/skills` +
@@ -192,7 +198,7 @@ exists without a row here, or a row without a check, fails the build.
 | `broken-hook` | absolute path in `settings.local.json` |
 | `lockfile-drift` | `lockfile.diff()` |
 | `missing-shared` | the `_shared/` sources the installed set requires, against the disk |
-| `runtime-version` | the project runtime `<engine>/skills/_shared/mgr/` and its generated `package.json` against the manifest (missing → defect; other version → warning); each runtime file's body is checked by `divergent-body` |
+| `runtime-version` | the project runtime `.mgr-core/runtime/` (in the previous layout, `<engine>/skills/_shared/mgr/`) and its generated `package.json` against the manifest (missing → defect; other version → warning); each runtime file's body is checked by `divergent-body` |
 
 
 ### Principles that govern everything
@@ -228,7 +234,7 @@ src/                # the core, 40 modules: install and build · per-engine desc
                     # pre-compaction, context reference) · messages
 src/engines/        # what each engine supports, as DATA — never an `if` on the engine name
 src/commands/       # the command glue shared by the CLI and the project runtime (IO injected)
-bin/mgr-runtime.js  # the project runtime entry, copied with its import closure into <engine>/skills/_shared/mgr/
+bin/mgr-runtime.js  # the project runtime entry, copied with its import closure into .mgr-core/runtime/
 skills/             # the 13 skills (source)
 agents/             # the 3 agent moulds (drafting, execution, review gate)
 shared/             # cross-cutting sources: architecture and quality rules, laws

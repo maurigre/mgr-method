@@ -350,7 +350,7 @@ test("should list configure-agents as entering for a manifest that lacks it", ()
 test("should flag the config migration for a self-contained-runtime manifest", () => {
   withRepo((repo) => {
     writeManifest(coreDir("project", repo), { ...priorBase, model: MODEL_RUNTIME, scope: "project", skillsDirs: [".claude/skills"], skills: [] });
-    assert.deepEqual(planUpdate("project", repo).migration, { runtime: false, config: true });
+    assert.deepEqual(planUpdate("project", repo).migration, { runtime: "relocate", config: true });
   });
 });
 

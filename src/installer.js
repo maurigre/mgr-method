@@ -1,6 +1,6 @@
 // Instalação no modelo AUTOSSUFICIENTE por motor: o conteúdo completo das skills selecionadas
-// vai direto para a pasta do motor (.claude/skills ou .github/skills). O `.mgr-core/` guarda
-// APENAS config do projeto (manifest.json + .env com MGR_PROJECT_ID) — sem skills.
+// vai direto para a pasta do motor (.claude/skills ou .github/skills). O `.mgr-core/` guarda a
+// config do projeto e a cópia única do runtime em `runtime/` (ADR-0025) — sem skills.
 // Instalações do modelo antigo (runtime-launcher, com skills dentro de .mgr-core) são migradas
 // automaticamente no install: remove-se o conteúdo antigo e mantém-se o .mgr-core só como config.
 //
@@ -14,7 +14,7 @@ import * as bundle from "./bundle.js";
 import { installAgents, installEngine, installRuntime, isOurAgent, isOurSkill, lockedDirsOf, orphanClass } from "./builder.js";
 import * as engineDescriptors from "./engines/index.js";
 import { previewAgents, readAgents, readPersonal, writeAgentPolicy, writeOrigin, writePersonal } from "./registry.js";
-import { readManifest, writeManifest, writeEnv, readEnvProjectId, MODEL_RUNTIME, MODEL_LAYERED } from "./manifest.js";
+import { readManifest, writeManifest, writeEnv, readEnvProjectId, MODEL_RUNTIME, MODEL_LAYERED, MODEL_CORE_RUNTIME } from "./manifest.js";
 import * as catalog from "./catalog.js";
 
 const KNOWN_PROJECT = [".claude/skills", ".github/skills", ".agents/skills", ".cursor/skills"];
@@ -56,6 +56,11 @@ export function coreDir(scope, repo) {
   return path.join(base, bundle.RUNTIME_DIR_NAME);
 }
 
+// Cópia única do runtime, dentro do `.mgr-core/` (DT-1).
+export function runtimeDir(scope, repo) {
+  return path.join(coreDir(scope, repo), ...catalog.CORE_RUNTIME_DIR);
+}
+
 const absDir = (d, scope, repo) => (path.isAbsolute(d) ? d : (scope === "project" ? path.join(repo, d) : d));
 
 // Referência (string) que substitui o token {{MGR_ARCH_RULES}} nas skills arch-*.
@@ -71,8 +76,8 @@ function lawsRulesRef(engineDir, scope, repo) {
 }
 
 // Referência que substitui o token {{MGR_RUNTIME}}: relativa à raiz com "/" no projeto, absoluta no global.
-export function runtimeRef(engineDir, scope, repo) {
-  const entry = path.join(engineDir, ...catalog.RUNTIME_DIR, ...catalog.RUNTIME_ENTRY);
+export function runtimeRef(scope, repo) {
+  const entry = path.join(runtimeDir(scope, repo), ...catalog.RUNTIME_ENTRY);
   return scope === "project" ? path.relative(repo, entry).split(path.sep).join("/") : entry;
 }
 
@@ -126,7 +131,8 @@ export function planInstall(engines, scope, repo, opts = {}) {
   const targets = skillsDir
     ? [{ engine: "custom", dir: skillsDir, skills: skills.filter((name) => !cedidasEmQualquerMotor[name]) }]
     : engines.map((e) => ({ engine: e, dir: engineSkillsDir(e, scope, repo), skills: forEngine(e) }));
-  const pid = resolveProjectId({ flag: projectId, coreDir: coreDir(scope, repo), prior: readManifest(coreDir(scope, repo)), repo });
+  const prior = readManifest(coreDir(scope, repo));
+  const pid = resolveProjectId({ flag: projectId, coreDir: coreDir(scope, repo), prior, repo });
   // A política de TODAS as intenções, de UMA fonte (ADR-0017, RN-1). O `reviewGate` do plano passa
   // a SAIR daqui, e não mais de `readReviewGate`: lendo o apelido enquanto a instalação gravava a
   // partir de `agents`, o plano que o usuário confirmava contradizia o arquivo que era escrito —
@@ -140,6 +146,7 @@ export function planInstall(engines, scope, repo, opts = {}) {
   return {
     engines: skillsDir ? ["custom"] : engines, scope, repo, targets, skills, replaced, language, architecture, userLanguage,
     projectId: pid, agents, answers: { models, origin }, optional, all,
+    legacyRuntime: legacyRuntimeDirs({ prior, targets, scope, repo }),
   };
 }
 
@@ -200,7 +207,8 @@ export function execute(plan, { abandoned = [], remove = rmSync } = {}) {
   const agentsDirs = [];
   const agentChanges = [];
   const gateWarnings = [];
-  const runtime = [];
+  // Uma cópia só, antes do laço: nenhuma SKILL.md reescrita aponta para um runtime que ainda não existe.
+  const runtime = installRuntime(runtimeDir(plan.scope, plan.repo), { version: bundle.readVersion() });
   for (const t of plan.targets) {
     const ref = t.engine === "custom" ? undefined : archRulesRef(t.dir, plan.scope, plan.repo);
     const engineId = t.engine === "custom" ? undefined : t.engine;
@@ -208,10 +216,9 @@ export function execute(plan, { abandoned = [], remove = rmSync } = {}) {
       archRulesRef: ref,
       lawsRulesRef: t.engine === "custom" ? undefined : lawsRulesRef(t.dir, plan.scope, plan.repo),
       charterRulesRef: t.engine === "custom" ? undefined : charterRulesRef(t.dir, plan.scope, plan.repo),
-      runtimeRef: runtimeRef(t.dir, plan.scope, plan.repo),
+      runtimeRef: runtimeRef(plan.scope, plan.repo),
       userLanguage: plan.userLanguage, engineId, reviewGate: engineId ? gate : undefined,
     });
-    runtime.push(installRuntime(t.dir, { version: bundle.readVersion() }));
     // Motor "custom" (--skills-dir) não é plataforma: não há diretório de agentes para ele.
     //
     // O gate desligado NÃO pula mais o bloco inteiro: cada intenção decide sozinha se é escrita,
@@ -227,6 +234,12 @@ export function execute(plan, { abandoned = [], remove = rmSync } = {}) {
     agentChanges.push(...changes);
     for (const capability of skipped) gateWarnings.push({ engine: engineId, capability });
     for (const file of blocked) gateWarnings.push({ engine: engineId, blocked: file });
+  }
+  // Remover o `_shared/mgr/` antigo ANTES de declarar o manifesto, como as abandonadas (DT-5).
+  const legacyRuntimeRemoved = [];
+  for (const legacy of plan.legacyRuntime?.remove ?? []) {
+    remove(legacy, { recursive: true, force: true });
+    legacyRuntimeRemoved.push(legacy);
   }
   const rel = (p) => (plan.scope === "project" ? path.relative(plan.repo, p) : p);
   writeManifest(core, {
@@ -252,7 +265,7 @@ export function execute(plan, { abandoned = [], remove = rmSync } = {}) {
   return {
     targets: plan.targets.map((t) => ({ engine: t.engine, dir: t.dir })),
     skills: plan.skills, migrated, core, projectId: plan.projectId,
-    agents, gate, gateWarnings, agentChanges, removed, runtime,
+    agents, gate, gateWarnings, agentChanges, removed, runtime, legacyRuntimeRemoved,
   };
 }
 
@@ -265,12 +278,30 @@ export function detectPrior(scope, repo) {
   return readManifest(coreDir(scope, repo));
 }
 
-export function needsRuntimeMigration(prior) {
-  return Boolean(prior) && ![MODEL_RUNTIME, MODEL_LAYERED].includes(prior.model);
+// Como o runtime chega ao layout novo (DT-4): "none" (sem instalação ou já no layout novo),
+// "relocate" (geração com runtime em cada motor) ou "copy" (geração sem runtime no projeto).
+export function runtimeMigration(prior) {
+  if (!prior || prior.model === MODEL_CORE_RUNTIME) return "none";
+  return [MODEL_RUNTIME, MODEL_LAYERED].includes(prior.model) ? "relocate" : "copy";
 }
 
 export function needsConfigMigration(prior) {
-  return Boolean(prior) && prior.model !== MODEL_LAYERED;
+  return Boolean(prior) && ![MODEL_LAYERED, MODEL_CORE_RUNTIME].includes(prior.model);
+}
+
+// O `_shared/mgr/` da geração anterior (DT-5, emenda N-3). Sai o de toda pasta que o plano reinstala,
+// declarada ou não no manifesto anterior: o método escreve nela agora, e até a 0.7.0-beta.11 todo
+// install já apagava esse caminho em todo alvo. Fica (e é anunciado) o de uma pasta declarada que
+// saiu do plano, cujas skills e hook ainda o chamam. Sem instalação anterior, nada sai. O `exists`
+// só subtrai; não há varredura.
+export function legacyRuntimeDirs({ prior, targets, scope, repo, exists = existsSync }) {
+  if (!prior) return { remove: [], keep: [] };
+  const declared = (prior.skillsDirs || (prior.skillsDir ? [prior.skillsDir] : [])).map((d) => absDir(d, scope, repo));
+  const inPlan = (targets || []).map((t) => absDir(t.dir, scope, repo));
+  const candidate = (base) => path.join(base, ...catalog.LEGACY_RUNTIME_DIR);
+  const remove = [...new Set(inPlan)].map(candidate).filter((dir) => exists(dir));
+  const keep = [...new Set(declared)].filter((base) => !inPlan.includes(base)).map(candidate).filter((dir) => exists(dir));
+  return { remove, keep };
 }
 
 // Skills cedidas a plugin num alvo. O alvo do `--skills-dir` tem engine "custom", e `replaced` so e
@@ -528,7 +559,7 @@ export function planUpdate(scope, repo, { replaced = {}, lockfile = null, projec
     occupied,
     abandoned,
     orphans,
-    migration: { runtime: needsRuntimeMigration(prior), config: needsConfigMigration(prior) },
+    migration: { runtime: runtimeMigration(prior), config: needsConfigMigration(prior) },
   };
 }
 

@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MGR_BIN = path.join(PACKAGE_ROOT, "bin", "mgr.js");
 const ENGINES = [".claude", ".github"];
-const RUNTIME_RELATIVE = ["skills", "_shared", "mgr", "bin", "mgr-runtime.js"];
+const RUNTIME_RELATIVE = [".mgr-core", "runtime", "bin", "mgr-runtime.js"];
 const SKILLS = ["spec-create", "spec-execute", "code-analyzer", "spec-init", "configure-agents"];
 const HOOK_MARKER = "mgr-session-hook";
 const TIMEOUT_MS = 120000;
@@ -90,17 +90,16 @@ const isInside = (root, candidate) => {
   return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
 };
 
-test("should install the runtime, a module package.json and the new manifest model in both engines (CA-1)", () => {
+test("should install one runtime with a module package.json and the self-contained-core-runtime model in the project (CA-1)", () => {
   const { project } = freshInstall("ca1");
   const manifest = readJson(path.join(project, ".mgr-core", "manifest.json"));
-  assert.equal(manifest.model, "self-contained-layered-config");
-  for (const engine of ENGINES) {
-    const runtimeDir = path.join(project, engine, "skills", "_shared", "mgr");
-    assert.ok(fs.existsSync(path.join(project, engine, ...RUNTIME_RELATIVE)), `${engine} runtime entry missing`);
-    const generated = readJson(path.join(runtimeDir, "package.json"));
-    assert.equal(generated.type, "module");
-    assert.equal(generated.version, manifest.version);
-  }
+  assert.equal(manifest.model, "self-contained-core-runtime");
+  assert.ok(fs.existsSync(path.join(project, ...RUNTIME_RELATIVE)), "runtime entry missing in .mgr-core/runtime");
+  const generated = readJson(path.join(project, ".mgr-core", "runtime", "package.json"));
+  assert.equal(generated.type, "module");
+  assert.equal(generated.private, true);
+  assert.equal(generated.name, undefined);
+  assert.equal(generated.version, manifest.version);
 });
 
 test("should write session and compaction hooks pointing inside the project for each engine (CA-5)", () => {
@@ -163,7 +162,7 @@ test("should run the recorded hooks after the package copy is deleted, from the 
 test("should leave no CLI-only wording and a resolved runtime path in the five installed skills (CA-7)", () => {
   const { project } = freshInstall("ca7");
   const forbidden = ["`mgr` CLI is NOT installed", "skills alone", "sdd-check.sh", ".mgr-core/shared", "{{MGR_RUNTIME}}"];
-  const required = ["STOP — the MGR runtime is missing", "npx mgr-method@", "skills/_shared/mgr/bin/mgr-runtime.js"];
+  const required = ["STOP — the MGR runtime is missing", "npx mgr-method@", ".mgr-core/runtime/bin/mgr-runtime.js"];
   for (const engine of ENGINES) {
     for (const skill of SKILLS) {
       const file = path.join(project, engine, "skills", skill, "SKILL.md");
@@ -178,10 +177,10 @@ test("should leave no CLI-only wording and a resolved runtime path in the five i
   }
 });
 
-test("should run the copilot runtime alone after the whole .claude folder is deleted (CA-25)", () => {
+test("should run the single runtime alone after the whole .claude folder is deleted (CA-25)", () => {
   const { project, home } = freshInstall("ca25");
   fs.rmSync(path.join(project, ".claude"), { recursive: true, force: true });
-  const runtime = path.join(".github", ...RUNTIME_RELATIVE);
+  const runtime = path.join(...RUNTIME_RELATIVE);
 
   const version = run(process.execPath, [runtime, "version"], { cwd: project, home });
   assert.equal(version.status, 0, version.stderr);
@@ -202,6 +201,7 @@ test("should remove the runtime of both engines and only the MGR hook entries on
   const result = run(process.execPath, [MGR_BIN, "uninstall", "-y", project], { cwd: project, home });
   assert.equal(result.status, 0, result.stderr);
 
+  assert.equal(fs.existsSync(path.join(project, ".mgr-core", "runtime")), false, "runtime survived in .mgr-core/runtime");
   for (const engine of ENGINES) {
     assert.equal(fs.existsSync(path.join(project, engine, "skills", "_shared", "mgr")), false, `${engine} runtime survived`);
   }
@@ -220,11 +220,11 @@ test("should report no defect on a fresh install and a divergent-body when one r
   const cleanFindings = JSON.parse(clean.stdout).findings;
   assert.deepEqual(cleanFindings.filter((finding) => finding.severity === "defect"), []);
 
-  const runtimeFile = path.join(project, ".claude", ...RUNTIME_RELATIVE);
+  const runtimeFile = path.join(project, ...RUNTIME_RELATIVE);
   fs.appendFileSync(runtimeFile, " ");
   const tampered = run(process.execPath, [MGR_BIN, "doctor", project, "--json"], { cwd: project, home });
   const divergent = JSON.parse(tampered.stdout).findings.filter(
-    (finding) => finding.check === "divergent-body" && finding.file.includes(".claude") && finding.file.includes("mgr-runtime.js"),
+    (finding) => finding.check === "divergent-body" && finding.file.includes(".mgr-core") && finding.file.includes("mgr-runtime.js"),
   );
   assert.equal(divergent.length, 1, tampered.stdout);
   assert.equal(divergent[0].severity, "defect");

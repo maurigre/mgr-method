@@ -155,6 +155,10 @@ const en = ({ invocation, lifecycle }) => ({
   planRuntime: (dirs, n) => `MGR runtime → ${dirs}  (${n} files, readable, Node only)`,
   runtimeWritten: (dir, n) => `MGR runtime written to ${dir} (${n} files)`,
   runtimeMigrated: (version, dirs) => `Installation in the previous layout (v${version}, no runtime in the project) — the MGR runtime will be copied to ${dirs} and the skills will call it by explicit path.`,
+  runtimeRelocated: (version, dir) => `Installation in the previous layout (v${version}, one MGR runtime per engine) — the runtime moves to ${dir}, a single copy for every engine in this scope, and the skills and the MGR hook entries will call it there.`,
+  legacyRuntimeToRemove: (dirs) => `old MGR runtime to remove: ${dirs} (written by the MGR; the rest of _shared/ is not touched)`,
+  legacyRuntimeRemoved: (dirs) => `old MGR runtime removed: ${dirs}`,
+  legacyRuntimeKept: (dirs) => `old MGR runtime kept: ${dirs} (that target is not in this installation, and its skills and hook still call it)`,
   // Nomeia os eventos, e não "o hook": desde o ADR-0018 o arquivo carrega dois, e anunciar um só
   // esconderia do usuário metade do que o método tirou do arquivo dele.
   hookRemoved: (file, events) => `  hooks removed from ${file}: ${events}`,
@@ -590,6 +594,10 @@ const ptBR = ({ invocation, lifecycle }) => ({
   planRuntime: (dirs, n) => `Runtime do MGR → ${dirs}  (${n} arquivos, legível, só Node)`,
   runtimeWritten: (dir, n) => `runtime do MGR gravado em ${dir} (${n} arquivos)`,
   runtimeMigrated: (version, dirs) => `Instalação no layout anterior (v${version}, sem runtime no projeto) — o runtime do MGR será copiado para ${dirs} e as skills passarão a chamá-lo por caminho explícito.`,
+  runtimeRelocated: (version, dir) => `Instalação no layout anterior (v${version}, um runtime do MGR por motor) — o runtime passa para ${dir}, uma cópia única para todos os motores deste escopo, e as skills e as entradas de hook do MGR passarão a chamá-lo lá.`,
+  legacyRuntimeToRemove: (dirs) => `runtime antigo do MGR a remover: ${dirs} (escrito pelo MGR; o restante de _shared/ não é tocado)`,
+  legacyRuntimeRemoved: (dirs) => `runtime antigo do MGR removido: ${dirs}`,
+  legacyRuntimeKept: (dirs) => `runtime antigo do MGR mantido: ${dirs} (esse alvo não está nesta instalação, e as skills e o hook dele ainda o chamam)`,
   // Nomeia os eventos, e não "o hook": desde o ADR-0018 o arquivo carrega dois, e anunciar um só
   // esconderia do usuário metade do que o método tirou do arquivo dele.
   hookRemoved: (file, events) => `  hooks removidos de ${file}: ${events}`,

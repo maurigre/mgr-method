@@ -85,7 +85,7 @@ test("should record the answered team policy, origin and personal id", () => {
 
   const manifest = readJson(path.join(project, ".mgr-core", "manifest.json"));
   assert.equal(Object.hasOwn(manifest, "projectId"), false, "the manifest must not carry projectId");
-  assert.equal(manifest.model, "self-contained-layered-config");
+  assert.equal(manifest.model, "self-contained-core-runtime");
 });
 
 test("should warn and record nothing without model and origin flags", () => {
@@ -124,7 +124,7 @@ test("should give a clone the team policy without asking and without the persona
 
   const result = run(
     process.execPath,
-    [path.join(".claude", "skills", "_shared", "mgr", "bin", "mgr-runtime.js"), "agents", "drafting", "--json"],
+    [path.join(".mgr-core", "runtime", "bin", "mgr-runtime.js"), "agents", "drafting", "--json"],
     { cwd: clone, input: "", home },
   );
   assert.equal(result.status, 0, result.stderr);

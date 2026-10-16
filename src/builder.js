@@ -1,7 +1,7 @@
 // Build das skills.
 // Modelo autossuficiente por motor: o conteúdo completo das skills é escrito DIRETO na pasta
-// do motor (.claude/skills ou .github/skills). Sem runtime compartilhado, sem lançadores —
-// cada motor é independente e pode ser removido sem afetar o outro.
+// do motor (.claude/skills ou .github/skills). Sem lançadores; o runtime é uma cópia única em
+// `.mgr-core/runtime/` (ADR-0025), e cada motor pode ser removido sem afetar o outro nem o runtime.
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import * as bundle from "./bundle.js";
@@ -45,7 +45,7 @@ export function resolveLaws(text, lawsRef) {
 }
 
 export function resolveRuntime(text, runtimeRef) {
-  return text.replaceAll(catalog.RUNTIME_TOKEN, runtimeRef || [...catalog.RUNTIME_DIR, ...catalog.RUNTIME_ENTRY].join("/"));
+  return text.replaceAll(catalog.RUNTIME_TOKEN, runtimeRef || [bundle.RUNTIME_DIR_NAME, ...catalog.CORE_RUNTIME_DIR, ...catalog.RUNTIME_ENTRY].join("/"));
 }
 
 // Resolve o ponteiro da carta DENTRO do texto das leis, e não numa SKILL.md: a `L0.1` é quem
@@ -146,11 +146,10 @@ export function installEngine(engineSkillsDir, skills, { archRulesRef, lawsRules
   return dirs;
 }
 
-// Copia o runtime legível para dentro do motor (DT-5/DT-6): árvore espelhada em
-// `_shared/mgr/` com um package.json gerado, sem `name`. A raiz do pacote vem de `bundle.pkgDir`.
-export function installRuntime(engineSkillsDir, { version }) {
+// Copia o runtime legível para o diretório final recebido (`.mgr-core/runtime/`): árvore espelhada
+// com um package.json gerado, sem `name`. A raiz do pacote vem de `bundle.pkgDir`.
+export function installRuntime(dir, { version }) {
   const pkgRoot = path.dirname(bundle.pkgDir("src"));
-  const dir = path.join(engineSkillsDir, ...catalog.RUNTIME_DIR);
   rmSync(dir, { recursive: true, force: true });
   for (const rel of catalog.RUNTIME_FILES) {
     const dest = path.join(dir, ...rel.split("/"));

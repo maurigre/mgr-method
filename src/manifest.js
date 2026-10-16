@@ -1,9 +1,10 @@
-// Config do projeto MGR, em `.mgr-core/` (leve, sem skills — só metadados):
+// Config do projeto MGR, em `.mgr-core/` (sem skills; o runtime fica em `.mgr-core/runtime/`):
 //   manifest.json  fonte de verdade do que foi instalado (motores, skills, linguagem, arquitetura)
 //   .env           MGR_PROJECT_ID=<id>, usado pela memória estendida (mgr-code)
 // O campo `model` no manifesto distingue as gerações de instalação e habilita a migração:
-//   "self-contained-layered-config" — atual (DT-16 da F2): config em duas camadas, sem migração pendente;
-//   "self-contained-runtime"        — geração da F1: runtime dentro do motor, precisa só da migração de config;
+//   "self-contained-core-runtime"   — atual (fatia runtime-em-mgr-core): runtime único em `.mgr-core/runtime/`;
+//   "self-contained-layered-config" — geração da F2 (DT-16): config em duas camadas, runtime em cada motor (realoca);
+//   "self-contained-runtime"        — geração da F1: runtime dentro do motor, precisa da migração de config e realoca;
 //   "self-contained" e "runtime-launcher" — antigas: precisam das duas migrações.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -14,12 +15,13 @@ export const ENV_NAME = ".env";
 
 export const MODEL_RUNTIME = "self-contained-runtime";
 export const MODEL_LAYERED = "self-contained-layered-config";
+export const MODEL_CORE_RUNTIME = "self-contained-core-runtime";
 
 export const manifestPath = (dir) => path.join(dir, MANIFEST_NAME);
 
 export function writeManifest(dir, data) {
   const manifest = {
-    model: MODEL_LAYERED,
+    model: MODEL_CORE_RUNTIME,
     installedAt: new Date().toISOString(),
     ...data,
   };

@@ -63,9 +63,7 @@ weighs (**L6.6**). It is a fact about the project, so it is confirmed and record
 
 ## Initial interaction (mandatory, both modes)
 
-1. **Output format:** Claude (SKILL/context) · GitHub Copilot
-   (.github/copilot-instructions.md + instructions/ + AGENTS.md) · Cursor
-   (.cursorrules + .cursor/rules/*.mdc) · All · SDD markdown only.
+1. **Output format:** Claude (skills/context) · GitHub Copilot (.github/copilot-instructions.md + instructions/ + AGENTS.md) · Cursor (.cursorrules + .cursor/rules/*.mdc) · All · SDD markdown only. The output format does not decide the managed block that points each session to the constitution: that block follows the installed engines (see "Point every session to the constitution").
 2. **Scope:** whole project or a specific module (ask for the path).
 3. **Depth:** quick (overview) or full (all phases).
 
@@ -318,6 +316,24 @@ Generate `/docs/sdd/_self-assessment.md` with: confidence per section (High/Medi
 justification), blind spots, sampling applied, Facts vs Inferences (strong/weak),
 and 5-15 questions for the team to raise confidence. In greenfield, list the decisions
 left as `[TO DEFINE]`.
+
+## Point every session to the constitution (mandatory, both modes)
+
+The engine loads only its own instruction file at session start, so a session that never invokes an
+MGR skill does not learn that the constitution exists. Run this after `docs/sdd/CONSTITUTION.md` and
+the per-format outputs are written, whatever the output format.
+
+1. Run `node {{MGR_RUNTIME}} instructions --json`. `constitution: "absent"` → skip this section and say so.
+2. For each entry of `files` whose `state` is not `current`, ask the user, one file at a time:
+   "Write the MGR managed block in <file>? It points every session to docs/sdd/CONSTITUTION.md, and
+   uninstall removes it."
+3. Yes → `node {{MGR_RUNTIME}} instructions write --engine <engine>`. No → say the file was left
+   unchanged and that `npx mgr-method@<version> update` offers the block again, where `<version>` is
+   the `version` field of `.mgr-core/manifest.json`.
+4. Never write or edit the lines between `<!-- >>> mgr-method` and `<!-- <<< mgr-method <<< -->`: the
+   runtime owns them. When the Copilot format regenerates `.github/copilot-instructions.md`, keep that
+   block byte for byte; the call in step 3 restores it if it was lost.
+5. Runtime missing: STOP as described in "MGR runtime (mandatory)". Do not write the block by hand.
 
 ## Closing
 

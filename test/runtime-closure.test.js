@@ -75,3 +75,9 @@ test("should find no dynamic import() call in any file of the runtime closure", 
   }
   assert.deepEqual(offending, []);
 });
+
+test("should keep src/gitignore.js out of the runtime closure and src/managed-block.js in it", () => {
+  const closure = computeClosure();
+  assert.equal(closure.has("src/gitignore.js"), false);
+  assert.equal(closure.has("src/managed-block.js"), true);
+});

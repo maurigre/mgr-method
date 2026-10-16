@@ -69,6 +69,10 @@ export default {
   // O envelope `version` é exigência da plataforma, e só é acrescentado quando ainda não existe, para
   // não sobrescrever a escolha de quem já usava o arquivo.
   hookFile: [".github", "copilot", "settings.local.json"],
+  // Fonte: https://docs.github.com/en/copilot/how-tos/configure-custom-instructions/add-repository-instructions
+  // (2026-10-16): `.github/copilot-instructions.md` é "automatically added to requests". Resolução de `@`
+  // e remoção de comentário HTML não estão documentadas: [A CONFIRMAR]. Por isso, ponteiro em texto.
+  instructions: { file: [".github", "copilot-instructions.md"], constitution: "pointer" },
   hookEvents: { sessionStart: "sessionStart" },
   // O `sessionStart` deste motor nunca usou matcher, e continua sem — mudar isso reescreveria o
   // arquivo de quem já tem o MGR instalado. O `preCompact` usa, como a doc documenta.

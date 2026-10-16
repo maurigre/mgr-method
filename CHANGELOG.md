@@ -14,6 +14,23 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
+### Adicionado
+- **Toda sessão aponta para a constituição (ADR-0026).** Quando `docs/sdd/CONSTITUTION.md` existe, o
+  `install` e o `update` (escopo project) e a skill `spec-init` oferecem um bloco gerenciado no arquivo
+  de instrução de cada motor instalado: o `CLAUDE.md` (claude-code), que importa a constituição com
+  `@docs/sdd/CONSTITUTION.md`, e o `.github/copilot-instructions.md` (copilot), que aponta para ela em
+  texto. O bloco segue o motor instalado, e não o formato de saída do `spec-init`.
+- O bloco usa o mesmo modelo do bloco do `.gitignore`:
+  - consentimento por arquivo, com anúncio no plano e no `--dry-run`;
+  - o conteúdo do usuário fora do bloco fica byte a byte, e gravar de novo não duplica;
+  - o `update` converge um bloco desatualizado;
+  - o motor que sai da instalação mantém o bloco, que é anunciado;
+  - o `uninstall` remove o bloco e apaga o arquivo só se ele ficar vazio.
+- Comando novo do runtime, usado pela `spec-init`: `instructions [--json]` (estado de cada arquivo) e
+  `instructions write [--engine <id>]`. O runtime passa de 47 para 50 arquivos.
+- A mecânica do bloco foi extraída para `src/managed-block.js`, que o `.gitignore` também usa, sem
+  mudança no contrato dele.
+
 ### Alterado
 - **Runtime do MGR em cópia única em `.mgr-core/runtime/` (ADR-0025).** O runtime deixa de ir para
   `<motor>/skills/_shared/mgr/`, uma cópia por motor e por `--skills-dir`. Passa a existir uma cópia por

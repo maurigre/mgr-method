@@ -245,18 +245,24 @@ export function removalOutcome({ removed = [], abandoned = [], mode = REMOVAL_NO
   return mode === REMOVAL_NO_CONSENT ? OUTCOME_KEPT_NO_CONSENT : OUTCOME_KEPT_BY_CHOICE;
 }
 
-export const GITIGNORE_WRITE = "write";
-export const GITIGNORE_DECLINE = "decline";
+export const BLOCK_WRITE = "write";
+export const BLOCK_DECLINE = "decline";
+export const GITIGNORE_WRITE = BLOCK_WRITE;
+export const GITIGNORE_DECLINE = BLOCK_DECLINE;
 
-// Consentimento do bloco no `.gitignore` (DT-4). Mesmo modo de `removalMode`, com outro default: o bloco
+// Consentimento de um bloco gerenciado (DT-4, DT-6). Mesmo modo de `removalMode`, com outro default: o bloco
 // so ACRESCENTA linhas, entao `initialValue: true`. Sem terminal e sem `-y` nao ha como perguntar: o
 // arquivo nao muda (`decline`).
-export async function consentToGitignore(ask, { mode = REMOVAL_NO_CONSENT, msg = getMessages("en") } = {}) {
-  if (mode === REMOVAL_ASSUMED) return GITIGNORE_WRITE;
-  if (mode !== REMOVAL_ASK) return GITIGNORE_DECLINE;
-  const ok = await ask.confirm({ message: msg.qGitignoreBlock, initialValue: true });
+export async function consentToBlock(ask, { mode, message }) {
+  if (mode === REMOVAL_ASSUMED) return BLOCK_WRITE;
+  if (mode !== REMOVAL_ASK) return BLOCK_DECLINE;
+  const ok = await ask.confirm({ message, initialValue: true });
   if (ask.isCancel(ok)) return CANCELLED;
-  return ok ? GITIGNORE_WRITE : GITIGNORE_DECLINE;
+  return ok ? BLOCK_WRITE : BLOCK_DECLINE;
+}
+
+export async function consentToGitignore(ask, { mode = REMOVAL_NO_CONSENT, msg = getMessages("en") } = {}) {
+  return consentToBlock(ask, { mode, message: msg.qGitignoreBlock });
 }
 
 export async function consentToRemove(ask, abandoned = [], { mode = REMOVAL_NO_CONSENT, msg = getMessages("en") } = {}) {

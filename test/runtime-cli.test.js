@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ENTRY = path.join(ROOT, "bin", "mgr-runtime.js");
@@ -18,7 +18,7 @@ const runIn = (cwd, ...args) => spawnSync(process.execPath, [ENTRY, ...args], {
 const run = (...args) => runIn(ROOT, ...args);
 
 const comProjeto = (teste) => () => {
-  const dir = mkdtempSync(path.join(tmpdir(), "mgr-runtime-"));
+  const dir = tempDir("mgr-runtime-");
   try {
     mkdirSync(path.join(dir, "docs", "sdd"), { recursive: true });
     mkdirSync(path.join(dir, "specs", "demo"), { recursive: true });

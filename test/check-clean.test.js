@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pendentes, removidos } from "../scripts/check-clean.mjs";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const repoTemporario = () => {
-  const repo = mkdtempSync(path.join(os.tmpdir(), "mgr-pend-"));
+  const repo = tempDir("mgr-pend-");
   execFileSync("git", ["init", "-q"], { cwd: repo });
   return repo;
 };

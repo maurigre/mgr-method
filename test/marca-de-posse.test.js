@@ -4,13 +4,13 @@ import { DISTRIBUTED_SKILLS, LEGACY_SKILL_NAMES, distributesSkill } from "../src
 import * as bundle from "../src/bundle.js";
 import { SKILL_MARKER, installEngine, isOurSkill, markSkill, orphanClass, routeReviewSkill } from "../src/builder.js";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
-import os from "node:os";
+import { readFileSync, readdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { frontmatter } from "../src/validator.js";
 import { AUDITED, diagnose } from "../src/doctor.js";
 import { descartar, instalacaoLimpa } from "./fixtures/instalacao.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const FIXTURE_DIR = fileURLToPath(new URL("./fixtures/orfas-f0/", import.meta.url));
 
@@ -144,7 +144,7 @@ test("should end every installed method skill frontmatter with its ownership mar
 });
 
 test("should keep the mark as the last frontmatter line of the routed review skill", () => {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "mgr-marca-"));
+  const dir = tempDir("mgr-marca-");
   try {
     installEngine(dir, ["code-analyzer"], { engineId: "claude-code", reviewGate: { enabled: true } });
     const texto = readFileSync(path.join(dir, "code-analyzer", "SKILL.md"), "utf8");
@@ -156,7 +156,7 @@ test("should keep the mark as the last frontmatter line of the routed review ski
 });
 
 test("should parse the installed frontmatter to the same object as the routed source", () => {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "mgr-marca-"));
+  const dir = tempDir("mgr-marca-");
   try {
     installEngine(dir, ["code-analyzer"], { engineId: "claude-code", reviewGate: { enabled: true } });
     const instalada = readFileSync(path.join(dir, "code-analyzer", "SKILL.md"), "utf8");

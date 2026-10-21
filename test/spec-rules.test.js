@@ -6,8 +6,8 @@ import { fileURLToPath } from "node:url";
 import { parse } from "../src/spec-parser.js";
 import { check } from "../src/spec-rules.js";
 import { validateSpecs } from "../src/spec-validator.js";
-import { mkdirSync, writeFileSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const RAIZ = fileURLToPath(new URL("..", import.meta.url));
 const FIXTURES = path.join(RAIZ, "test", "fixtures", "specs");
@@ -115,7 +115,7 @@ test("SPEC-2 pega a colisão por número: `CA-1` e `CA-01` são o mesmo critéri
 });
 
 test("o contador só soma o que foi conferido: spec sem marcador não entra", () => {
-  const repo = mkdtempSync(path.join(tmpdir(), "mgr-spec-"));
+  const repo = tempDir("mgr-spec-");
   const escrever = (slug, corpo) => {
     mkdirSync(path.join(repo, "specs", slug), { recursive: true });
     writeFileSync(path.join(repo, "specs", slug, "03-spec.md"), corpo);

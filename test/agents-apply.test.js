@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { agentsApply } from "../src/commands/agents.js";
 import { installAgents, AGENT_MARKER } from "../src/builder.js";
 import { readAgents } from "../src/registry.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const M = {
   agentChanged: (agent, engine, field, from, to) => `${agent} (${engine}): ${field} ${from} -> ${to}`,
@@ -16,7 +16,7 @@ const M = {
 };
 
 function projeto(contexto) {
-  const root = mkdtempSync(path.join(os.tmpdir(), "mgr-apply-"));
+  const root = tempDir("mgr-apply-");
   contexto.after(() => rmSync(root, { recursive: true, force: true }));
   const core = path.join(root, ".mgr-core");
   mkdirSync(core, { recursive: true });

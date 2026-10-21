@@ -1,9 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, existsSync, writeFileSync, cpSync, mkdtempSync, rmSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, writeFileSync, cpSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import os from "node:os";
 import {
   DEFECT, FIX_RESTORE, FIX_UPDATE, NO_FIX, UNAVAILABLE, WARNING,
   SKILL_DECLARADA, SKILL_ORFA, SKILL_ORFA_SEM_PROVA, FONTE_COMPARTILHADA,
@@ -20,6 +19,7 @@ import * as catalog from "../src/catalog.js";
 import * as engineDescriptors from "../src/engines/index.js";
 import { ORFA, VERSAO_VELHA, descartar, instalacaoComDefeitos, instalacaoComDefeitosDoisMotores, instalacaoLimpa, instalacaoLimpaDoisMotores, apagarFonteCompartilhada, plantarTokenEmShared, alterarCorpoEmShared, apagarRuntime, alterarVersaoDoRuntime, alterarUmByteDoRuntime, removerArquivoDoRuntime } from "./fixtures/instalacao.js";
 import { layoutPorMotor } from "./fixtures/layout-por-motor.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const DIR = ".claude/skills";
 
@@ -532,7 +532,7 @@ const corposDoRuntime = (findings) => findings.filter((f) => f.check === "diverg
 
 const BIN_MGR = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
 const rodarMgr = (comando, repo) => {
-  const home = mkdtempSync(path.join(os.tmpdir(), "mgr-doctor-home-"));
+  const home = tempDir("mgr-doctor-home-");
   try {
     return spawnSync("node", [BIN_MGR, comando, repo], { env: { ...process.env, HOME: home }, encoding: "utf8" });
   } finally {

@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as catalogo from "../src/catalog.js";
 import { get as engineDescriptor } from "../src/engines/index.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 // Contrato revisado pelo ADR-0023 (antes: ADR-0015/0017, "o método funciona SEM a CLI").
 // Toda chamada ao MGR feita por uma skill é `node {{MGR_RUNTIME}} <comando>`, a partir de
@@ -93,7 +93,7 @@ test("as cinco skills trazem a seção do runtime com o texto canônico da parad
 
 // O que vale é o que chega ao disco do usuário. Instalação real, nos dois motores.
 test("a parada sobrevive à instalação, nos dois motores, com o caminho do runtime resolvido", () => {
-  const repo = mkdtempSync(path.join(tmpdir(), "mgr-fb-"));
+  const repo = tempDir("mgr-fb-");
   execFileSync("node", [BIN, "install", repo, "--engine", "both", "--scope", "project",
     "--all-skills", "-y"], { encoding: "utf8" });
 

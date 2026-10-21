@@ -7,9 +7,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MGR_BIN = path.join(PACKAGE_ROOT, "bin", "mgr.js");
@@ -21,7 +21,7 @@ const TIMEOUT_MS = 120000;
 
 const baseEnv = (home) => ({ ...process.env, LC_ALL: "C", HOME: home });
 
-const makeTemp = (label) => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), `mgr-oraculo-${label}-`)));
+const makeTemp = (label) => fs.realpathSync(tempDir(`mgr-oraculo-${label}-`));
 
 function run(command, args, { cwd, input = "", home }) {
   return spawnSync(command, args, {

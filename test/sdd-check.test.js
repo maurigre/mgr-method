@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { checkSdd, describeSdd, inspectSdd, ROLE_STEMS, SDD_FILES } from "../src/sdd-check.js";
 import { sddCheck } from "../src/commands/sdd-check.js";
 import { getMessages } from "../src/messages.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
-const temporario = () => mkdtempSync(path.join(tmpdir(), "mgr-sdd-"));
+const temporario = () => tempDir("mgr-sdd-");
 
 const comDocs = (arquivos) => {
   const raiz = temporario();

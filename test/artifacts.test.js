@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { SPECS_DIR, artifactFiles, repoRoot, slugs } from "../src/artifacts.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const repoCom = (arvore) => {
-  const repo = mkdtempSync(path.join(tmpdir(), "mgr-art-"));
+  const repo = tempDir("mgr-art-");
   for (const [slug, arquivos] of Object.entries(arvore)) {
     mkdirSync(path.join(repo, SPECS_DIR, slug), { recursive: true });
     for (const nome of arquivos) writeFileSync(path.join(repo, SPECS_DIR, slug, nome), "x");
@@ -20,7 +20,7 @@ test("slugs devolve os diretórios de specs/ em ordem estável", () => {
 });
 
 test("slugs devolve vazio quando specs/ não existe, sem lançar", () => {
-  const repo = mkdtempSync(path.join(tmpdir(), "mgr-art-"));
+  const repo = tempDir("mgr-art-");
   assert.deepEqual(slugs(repo), [], "ausência legítima não é exceção");
 });
 
@@ -45,7 +45,7 @@ test("artifactFiles continua devolvendo só o que existe, por slug e de todos", 
 });
 
 test("artifactFiles devolve vazio quando specs/ não existe", () => {
-  assert.deepEqual(artifactFiles(mkdtempSync(path.join(tmpdir(), "mgr-art-")), null, "04-plan.md"), []);
+  assert.deepEqual(artifactFiles(tempDir("mgr-art-"), null, "04-plan.md"), []);
 });
 
 // `repoRoot` existe porque os comandos `spec` tratavam o diretório atual como raiz: rodados de
@@ -58,7 +58,7 @@ test("repoRoot sobe até o diretório que tem specs/", () => {
 });
 
 test("repoRoot não atravessa a fronteira do projeto", () => {
-  const fora = mkdtempSync(path.join(tmpdir(), "mgr-art-"));
+  const fora = tempDir("mgr-art-");
   mkdirSync(path.join(fora, SPECS_DIR), { recursive: true });
   const interno = path.join(fora, "sub");
   mkdirSync(interno);
@@ -69,7 +69,7 @@ test("repoRoot não atravessa a fronteira do projeto", () => {
 });
 
 test("repoRoot sem specs/ em lugar nenhum devolve o ponto de partida", () => {
-  const solto = mkdtempSync(path.join(tmpdir(), "mgr-art-"));
+  const solto = tempDir("mgr-art-");
   writeFileSync(path.join(solto, "package.json"), "{}");
   assert.equal(repoRoot(solto), solto, "mesma mensagem de erro de hoje, sem mudar comportamento");
 });

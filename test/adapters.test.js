@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
   applyManifestToSkillMd, applyToEngine, compositionHeader, copilotApplied,
   injectCompositionHeader, injectFrontmatter, resolveInstallDirName, PLUGIN_ENGINES,
 } from "../src/adapters.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const SKILL_MD = `---
 name: junit-clean
@@ -30,7 +30,7 @@ const manifest = (overrides = {}) => ({
 });
 
 const installedSkill = (text = SKILL_MD) => {
-  const dir = path.join(mkdtempSync(path.join(os.tmpdir(), "mgr-adapters-")), "junit-clean");
+  const dir = path.join(tempDir("mgr-adapters-"), "junit-clean");
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, "SKILL.md"), text, "utf8");
   return dir;

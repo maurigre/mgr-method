@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { hookCommand, hookFilePath, HOOK_MARKER, removeHook, runtimeCommand, writeHook } from "../src/hooks.js";
 import { ids as engineIds } from "../src/engines/index.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
-const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-hooks-"));
+const diretorioTemporario = () => tempDir("mgr-hooks-");
 const MGR = "/usr/local/bin/mgr";
 
 const ler = (file) => JSON.parse(readFileSync(file, "utf8"));

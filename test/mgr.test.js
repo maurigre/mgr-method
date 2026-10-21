@@ -1,12 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, existsSync, readFileSync, readdirSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { Buffer } from "node:buffer";
 import { execFile, execFileSync, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
-import os from "node:os";
 import path from "node:path";
 import * as bundle from "../src/bundle.js";
 import { CHECKS } from "../src/doctor.js";
@@ -24,10 +23,11 @@ import { add as addPlugin } from "../src/plugin-installer.js";
 import { addRegistry, readAgents, writeAgentPolicy, writeConfig } from "../src/registry.js";
 import { eventsFor, hookCommand, removeHook, writeHook, writtenEvents } from "../src/hooks.js";
 import { readLockfile } from "../src/lockfile.js";
-import { captureCli } from "../scripts/capture-cli-baseline.mjs";
+import { captureCli, normalize } from "../scripts/capture-cli-baseline.mjs";
 import { descartar, instalacaoComDefeitos, instalacaoLimpa } from "./fixtures/instalacao.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
-const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-"));
+const diretorioTemporario = () => tempDir("mgr-");
 
 const arquivosSob = (dir) => (existsSync(dir) ? readdirSync(dir, { withFileTypes: true }) : [])
   .flatMap((entrada) => (entrada.isDirectory()
@@ -737,6 +737,13 @@ test("regressão §2.7: a saída da CLI só muda por decisão deliberada", () =>
       assert.ok(!atual.includes(titulo), `seção de plugin vazou na saída: ${titulo}`);
     }
   }
+});
+
+test("regressão §2.7: o caminho do repo quebrado pela moldura no meio vira <REPO>", () => {
+  const repo = "/tmp/mgr-method/1234567-abcdef/mgr-XYZ123";
+  const texto = "\u2502  skills \u2192 /tmp/mgr-method/1234567-ab\n\u2502  cdef/mgr-XYZ123/.claude/skills\n";
+
+  assert.equal(normalize(texto, { repo, home: "/home-fora" }), "skills \u2192 <REPO>/.claude/skills\n");
 });
 
 test("CLI: status de projeto só com plugin não se contradiz nem falha", () => {

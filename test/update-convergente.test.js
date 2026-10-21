@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { planOwnedHooks, syncOwnedHooks } from "../src/hooks.js";
 import { applyUpdate, consentItems, coreDir, execute, migrateOld, occupiedFolders, orphanCandidates, partitionConsent, planInstall, planUpdate, skippedByConsent, versionSet } from "../src/installer.js";
@@ -17,6 +16,7 @@ import { Buffer } from "node:buffer";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { aggregateChecksum, sha256 } from "../src/plugin.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 // --- helpers reutilizáveis (outras tasks acrescentam testes a este arquivo) ---
 
@@ -29,7 +29,7 @@ const OWNED_OLD = {
 };
 
 function withRepo(fn) {
-  const repo = mkdtempSync(path.join(os.tmpdir(), "mgr-convergente-"));
+  const repo = tempDir("mgr-convergente-");
   try {
     fn(repo);
   } finally {
@@ -405,8 +405,8 @@ async function mgr(home, args) {
 }
 
 async function withProcessProject(fn) {
-  const repo = mkdtempSync(path.join(os.tmpdir(), "mgr-update-cli-"));
-  const home = mkdtempSync(path.join(os.tmpdir(), "mgr-update-home-"));
+  const repo = tempDir("mgr-update-cli-");
+  const home = tempDir("mgr-update-home-");
   try {
     const git = spawnSync("git", ["rev-parse", "--is-inside-work-tree"], { cwd: repo, encoding: "utf8" });
     assert.notEqual(git.status, 0, "the project must live outside any git work tree");

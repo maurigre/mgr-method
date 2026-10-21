@@ -1,16 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import os from "node:os";
 import path from "node:path";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const BIN = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
 const CONFIG = path.join(".mgr-core", "config.json");
 const SKILLS = path.join(".claude", "skills");
 
-const repoTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-origem-"));
+const repoTemporario = () => tempDir("mgr-origem-");
 
 // `mgr origin set` resolve o repositorio pelo CWD, entao o subprocesso roda DENTRO dele. Subprocesso
 // tambem nao herda terminal, que e o caminho sem consentimento que o install exercita.

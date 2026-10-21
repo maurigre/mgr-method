@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
   ASSEMBLED, AUTO, MANUAL, NOTHING_IN_PROGRESS, REPEAT_WINDOW_MS, assemble, decide, decideFor, notice,
   persist, readStamp, writeStamp,
 } from "../src/precompact.js";
 import { get as engineDescriptor, ids as engineIds } from "../src/engines/index.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 // A tabela da DT-2 da spec, afirmada célula a célula. Bloquear é a única coisa que esta fatia faz
 // que pode custar trabalho do usuário, então é a que mais precisa de teste.
@@ -117,7 +117,7 @@ test("nenhum motor declara bloqueio sem ter o evento", () => {
 
 // --- A montagem do hand-off (P1.4) ---
 
-const diretorioTemporario = () => mkdtempSync(path.join(tmpdir(), "mgr-pc-"));
+const diretorioTemporario = () => tempDir("mgr-pc-");
 
 const task = (id, status) => [
   `### ${id} — task de teste`,

@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "../src/provenance.js";
 import { check } from "../src/prov-rules.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const RAIZ = fileURLToPath(new URL("..", import.meta.url));
 const FIXTURES = path.join(RAIZ, "test", "fixtures", "provenance");
@@ -51,7 +51,7 @@ test("ponteiro para arquivo gitignored que existe não produz achado", () => {
   // Repositório temporário com `.gitignore` próprio. Apontar para `specs/` deste repositório
   // passaria aqui e quebraria em qualquer clone, que é exatamente o defeito que esta feature
   // existe para não repetir.
-  const repo = mkdtempSync(path.join(tmpdir(), "mgr-prov-gi-"));
+  const repo = tempDir("mgr-prov-gi-");
   writeFileSync(path.join(repo, ".gitignore"), "ignorado.md\n");
   writeFileSync(path.join(repo, "ignorado.md"), "uma linha\n");
   const parsed = parse("gitignored [code:ignorado.md:1]");

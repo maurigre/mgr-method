@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import os from "node:os";
+import { existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import {
   readManifest, writeManifest, MANIFEST_NAME,
@@ -10,9 +9,7 @@ import { INSTALL_DIR_RE, readLockfile } from "../src/lockfile.js";
 import { diagnose } from "../src/doctor.js";
 import { migrateOld, uninstall } from "../src/installer.js";
 import { skillNames } from "../src/bundle.js";
-
-
-const tempDir = () => mkdtempSync(path.join(os.tmpdir(), "mgr-sec-"));
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 test("shouldAcceptEveryRealSkillNameOfTheMethod", () => {
   const names = skillNames();
@@ -23,7 +20,7 @@ test("shouldAcceptEveryRealSkillNameOfTheMethod", () => {
 });
 
 test("shouldRoundtripAFullManifestUnchanged", () => {
-  const tmpdir = tempDir();
+  const tmpdir = tempDir("mgr-sec-");
   try {
     const original = {
       engines: ["test-engine"],
@@ -52,7 +49,7 @@ test("shouldRoundtripAFullManifestUnchanged", () => {
 });
 
 test("shouldAcceptASkillNameWithARegistrySuffix", () => {
-  const tmpdir = tempDir();
+  const tmpdir = tempDir("mgr-sec-");
   try {
     writeManifest(tmpdir, { skills: ["foo--acme"] });
     const read = readManifest(tmpdir);
@@ -64,7 +61,7 @@ test("shouldAcceptASkillNameWithARegistrySuffix", () => {
 });
 
 test("shouldReadAManifestWithoutTheSkillsFieldAndAnAbsentOne", () => {
-  const tmpdir = tempDir();
+  const tmpdir = tempDir("mgr-sec-");
   try {
     writeManifest(tmpdir, { engines: ["test"] });
     const read = readManifest(tmpdir);
@@ -80,7 +77,7 @@ test("shouldReadAManifestWithoutTheSkillsFieldAndAnAbsentOne", () => {
 });
 
 test("shouldStillReportFromTheDoctorWhenAManifestNameIsInvalid", () => {
-  const base = tempDir();
+  const base = tempDir("mgr-sec-");
   try {
     const core = path.join(base, ".mgr-core");
     mkdirSync(core, { recursive: true });
@@ -106,7 +103,7 @@ test("shouldStillReportFromTheDoctorWhenAManifestNameIsInvalid", () => {
 });
 
 test("shouldRejectAPathTraversalName", () => {
-  const tmpdir = tempDir();
+  const tmpdir = tempDir("mgr-sec-");
   try {
     writeManifest(tmpdir, { skills: ["../../etc"] });
     assert.throws(
@@ -119,7 +116,7 @@ test("shouldRejectAPathTraversalName", () => {
 });
 
 test("shouldRejectANameWithASeparator", () => {
-  const tmpdir = tempDir();
+  const tmpdir = tempDir("mgr-sec-");
   try {
     writeManifest(tmpdir, { skills: ["a/b"] });
     assert.throws(
@@ -132,7 +129,7 @@ test("shouldRejectANameWithASeparator", () => {
 });
 
 test("shouldRejectAParentDirectoryName", () => {
-  const tmpdir = tempDir();
+  const tmpdir = tempDir("mgr-sec-");
   try {
     writeManifest(tmpdir, { skills: [".."] });
     assert.throws(
@@ -145,7 +142,7 @@ test("shouldRejectAParentDirectoryName", () => {
 });
 
 test("shouldRejectAnUppercaseAndAnEmptyName", () => {
-  const tmpdir = tempDir();
+  const tmpdir = tempDir("mgr-sec-");
   try {
     writeManifest(tmpdir, { skills: ["Foo"] });
     assert.throws(
@@ -164,7 +161,7 @@ test("shouldRejectAnUppercaseAndAnEmptyName", () => {
 });
 
 test("shouldRejectAStringInsteadOfAnArrayWithoutIteratingCharacters", () => {
-  const tmpdir = tempDir();
+  const tmpdir = tempDir("mgr-sec-");
   try {
     writeManifest(tmpdir, { skills: "ab" });
     assert.throws(
@@ -177,7 +174,7 @@ test("shouldRejectAStringInsteadOfAnArrayWithoutIteratingCharacters", () => {
 });
 
 test("shouldRejectANonStringElement", () => {
-  const tmpdir = tempDir();
+  const tmpdir = tempDir("mgr-sec-");
   try {
     writeManifest(tmpdir, { skills: [null] });
     assert.throws(
@@ -196,7 +193,7 @@ test("shouldRejectANonStringElement", () => {
 });
 
 test("shouldThrowBeforeRemovingAnythingOnATamperedManifest", () => {
-  const tmpdir = tempDir();
+  const tmpdir = tempDir("mgr-sec-");
   try {
     const coreDir_ = path.join(tmpdir, ".mgr-core");
     mkdirSync(coreDir_, { recursive: true });
@@ -239,7 +236,7 @@ test("shouldGiveTheSameVerdictInBothReadersForTheSameShapes", () => {
     { name: "", shouldPass: false },
   ];
 
-  const tmpdir = tempDir();
+  const tmpdir = tempDir("mgr-sec-");
   try {
     for (const testCase of cases) {
       const lockfileVerdictPasses = INSTALL_DIR_RE.test(testCase.name);
@@ -267,7 +264,7 @@ test("shouldGiveTheSameVerdictInBothReadersForTheSameShapes", () => {
 });
 
 test("shouldThrowBeforeRemovingAnythingOnUninstallToo", () => {
-  const base = tempDir();
+  const base = tempDir("mgr-sec-");
   try {
     const core = path.join(base, ".mgr-core");
     mkdirSync(core, { recursive: true });
@@ -299,7 +296,7 @@ test("shouldGiveTheSameVerdictInBothActualReadersNotJustTheRegex", () => {
     { nome: "", valida: false },
   ];
   for (const forma of formas) {
-    const base = tempDir();
+    const base = tempDir("mgr-sec-");
     try {
       const core = path.join(base, ".mgr-core");
       mkdirSync(core, { recursive: true });

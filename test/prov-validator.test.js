@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { validateProvenance } from "../src/prov-validator.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
-const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-prov-"));
+const diretorioTemporario = () => tempDir("mgr-prov-");
 
 const feature = (repo, slug, arquivos) => {
   mkdirSync(path.join(repo, "specs", slug), { recursive: true });

@@ -32,6 +32,21 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   mudança no contrato dele.
 
 ### Alterado
+- **A suíte e os gates param de deixar diretórios no temporário do sistema.** Um `npm test` deixava
+  637 diretórios `mgr-*` no `/tmp`, e o `check:laws` deixava 2 por execução. Agora:
+  - todo temporário de teste e de script passa por `tempDir(prefixo)` de `scripts/lib/tmp.mjs`, que
+    cria sob `<tmp do sistema>/mgr-method/<pid>-XXXXXX/` e apaga ao fim do processo, mesmo com teste
+    falhando;
+  - a execução seguinte varre as pastas de processos que morreram sem limpar (Ctrl+C, timeout);
+  - `MGR_KEEP_TMP=1` preserva a pasta e imprime o caminho, para investigar uma falha;
+  - `scripts/check-tmp.mjs`, encadeado no `npm test` e no `npm run coverage` (e por isso no CI), falha
+    nomeando cada sobra;
+  - uma regra de lint em `test/` e `scripts/` reprova o `mkdtemp` direto;
+  - o módulo fica calado quando tudo dá certo, e só escreve no stderr a falha, a varredura de
+    sobras e a pasta preservada (ADR-0027).
+- O teste da baseline da CLI deixa de quebrar com `TMPDIR` longo: o caminho do repositório que a
+  moldura do `@clack` quebra no meio da linha passa a virar `<REPO>`.
+- `npm test -- <arquivo>` passa a sair com 2 e indicar `node --test <arquivo>`.
 - **Runtime do MGR em cópia única em `.mgr-core/runtime/` (ADR-0025).** O runtime deixa de ir para
   `<motor>/skills/_shared/mgr/`, uma cópia por motor e por `--skills-dir`. Passa a existir uma cópia por
   escopo (`.mgr-core/runtime/` no projeto e `~/.mgr-core/runtime/` no global), usada pelas skills e pelas

@@ -1,8 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { initials } from "../src/commands/initials.js";
@@ -10,11 +9,12 @@ import * as installer from "../src/installer.js";
 import { LOCAL_CONFIG_NAME } from "../src/registry.js";
 import { getMessages } from "../src/messages.js";
 import { descartar, instalacaoLimpa } from "./fixtures/instalacao.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const BIN = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
 const M = getMessages("en");
 
-const temporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-initials-"));
+const temporario = () => tempDir("mgr-initials-");
 
 const coletor = () => {
   const out = [];

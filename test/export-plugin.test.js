@@ -1,15 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { buildManifest, collectFiles, exportPlugin, readFrontmatter, resolveTokens } from "../scripts/export-plugin.mjs";
 import { MANIFEST_NAME, validateManifest } from "../src/plugin.js";
 import { manifestFromFiles } from "../src/plugin-installer.js";
 import { ARCH_RULES_TOKEN, USER_LANGUAGE_FALLBACK, USER_LANGUAGE_TOKEN } from "../src/catalog.js";
 import { fileURLToPath } from "node:url";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
-const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-export-"));
+const diretorioTemporario = () => tempDir("mgr-export-");
 
 const POC = ["junit-clean", "diagnosing-bugs"];
 const skillSource = (skill) => fileURLToPath(new URL(`../skills/${skill}/SKILL.md`, import.meta.url));

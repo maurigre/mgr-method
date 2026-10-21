@@ -1,16 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { blockState, locateBlock, removeBlock, writeBlock } from "../src/managed-block.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const BLOCO = ["<!-- >>> mgr-method (managed block: mgr uninstall removes it) >>> -->", "linha um", "linha dois", "<!-- <<< mgr-method <<< -->"];
 const ABERTURA = BLOCO[0];
 const MSG_SEM_FECHO = (file) => `bloco do mgr-method sem linha de fecho em ${file}; corrija o arquivo à mão`;
 
-const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-managed-block-"));
+const diretorioTemporario = () => tempDir("mgr-managed-block-");
 
 const comArquivo = (conteudo) => {
   const dir = diretorioTemporario();

@@ -12,20 +12,27 @@
 // A comparacao e de CONTEUDO, nao de pixels: a normalizacao abaixo remove cor, moldura do
 // @clack, caminhos absolutos, versao e timestamp; o que sobra e a informacao da CLI.
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
-import os from "node:os";
+import { rmSync, symlinkSync } from "node:fs";
 import path from "node:path";
+import { tempDir } from "./lib/tmp.mjs";
 
 const ESC = String.fromCharCode(27);
 const ANSI = new RegExp(`${ESC}\\[[0-9;?]*[A-Za-z]`, "g");
 const BOX = /[─-╿■-◿]/g;
 const WRAP = 78;
 
+// A moldura do @clack quebra o caminho no meio quando ele nao cabe na linha, e a quebra leva
+// espaco e caractere de moldura para dentro dele: o caminho casa com eles entre cada caractere.
+function caminhoQuebravel(caminho) {
+  const entre = `(?:\\s|${BOX.source})*`;
+  return new RegExp([...caminho].map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(entre), "g");
+}
+
 export function normalize(text, { repo, home }) {
   return text
     .replace(ANSI, "")
-    .replaceAll(repo, "<REPO>")
-    .replaceAll(home, "<HOME>")
+    .replace(caminhoQuebravel(repo), "<REPO>")
+    .replace(caminhoQuebravel(home), "<HOME>")
     .replace(/\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?/g, "<VERSION>")
     .replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, "<TS>")
     .replace(BOX, " ")
@@ -68,15 +75,15 @@ export function captureCli(bin, { repo, home }) {
 function main() {
   const ref = process.argv[2] || "main";
   const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
-  const work = mkdtempSync(path.join(os.tmpdir(), "mgr-baseline-"));
+  const work = tempDir("mgr-baseline-");
   const checkout = path.join(work, "src-tree");
 
   // `working-tree` captura a arvore atual, sem worktree: e o que se usa quando a mudanca de
   // saida e DELIBERADA e aprovada, para congelar o novo normal. Qualquer outro valor e um ref
   // git, usado para comparar com uma versao anterior.
   if (ref === "working-tree") {
-    const repo = mkdtempSync(path.join(work, "repo-"));
-    const home = mkdtempSync(path.join(work, "home-"));
+    const repo = tempDir("repo-");
+    const home = tempDir("home-");
     try {
       process.stdout.write("# saida da CLI congelada da arvore de trabalho - regenerar SO com mudanca deliberada,\n");
       process.stdout.write("# com scripts/capture-cli-baseline.mjs working-tree > test/fixtures/cli-baseline.txt\n");
@@ -90,8 +97,8 @@ function main() {
   try {
     execFileSync("git", ["worktree", "add", "--detach", checkout, ref], { cwd: root, stdio: "ignore" });
     symlinkSync(path.join(root, "node_modules"), path.join(checkout, "node_modules"));
-    const repo = mkdtempSync(path.join(work, "repo-"));
-    const home = mkdtempSync(path.join(work, "home-"));
+    const repo = tempDir("repo-");
+    const home = tempDir("home-");
     process.stdout.write(`# baseline da CLI capturada de "${ref}" - regenerar com scripts/capture-cli-baseline.mjs\n`);
     process.stdout.write(captureCli(path.join(checkout, "bin", "mgr.js"), { repo, home }));
   } finally {

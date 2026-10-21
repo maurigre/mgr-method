@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { ARTIFACTS, BASIS, BLOCKED, PRESENT, READY, describe, statusAll, statusFor } from "../src/spec-status.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const repoCom = (arvore) => {
-  const repo = mkdtempSync(path.join(tmpdir(), "mgr-st-"));
+  const repo = tempDir("mgr-st-");
   for (const [slug, arquivos] of Object.entries(arvore)) {
     mkdirSync(path.join(repo, "specs", slug), { recursive: true });
     for (const nome of arquivos) writeFileSync(path.join(repo, "specs", slug, nome), "x");
@@ -140,5 +140,5 @@ test("statusAll devolve uma entrada por feature, em ordem estável", () => {
 });
 
 test("statusAll num repositório sem specs/ devolve vazio, sem lançar", () => {
-  assert.deepEqual(statusAll(mkdtempSync(path.join(tmpdir(), "mgr-st-"))), []);
+  assert.deepEqual(statusAll(tempDir("mgr-st-")), []);
 });

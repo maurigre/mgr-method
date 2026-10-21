@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { detectPrior, execute, legacyRuntimeDirs, planInstall, runtimeMigration } from "../src/installer.js";
@@ -10,6 +9,7 @@ import { rewriteOwnedHooks, runtimeCommand, writeHook } from "../src/hooks.js";
 import { getMessages } from "../src/messages.js";
 import { layoutPorMotor } from "./fixtures/layout-por-motor.js";
 import { spawnSync } from "node:child_process";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const RUNTIME_ENTRY = [".mgr-core", "runtime", "bin", "mgr-runtime.js"];
 const SKILLS_DIR = ".claude/skills";
@@ -17,7 +17,7 @@ const FOREIGN = { matcher: "startup", hooks: [{ type: "command", command: "echo 
 const STALE_MGR = { matcher: "startup", hooks: [{ type: "command", command: 'node "/nao/existe/mgr.js" detect --hook claude-code # mgr-session-hook', timeout: 5 }] };
 
 function withRepo(fn) {
-  const repo = mkdtempSync(path.join(os.tmpdir(), "mgr-migracao-"));
+  const repo = tempDir("mgr-migracao-");
   try {
     fn(repo);
   } finally {
@@ -93,7 +93,7 @@ const COMANDOS = {
   "install -y": (repo) => runMgr(["install", "-y", "--engine", "claude-code", "--scope", "project", "--all-skills", "--user-language", "en", repo]),
 };
 
-const REPO_LEGADO = path.join(os.tmpdir(), "mgr-legado-repo");
+const REPO_LEGADO = tempDir("mgr-legado-repo-");
 const CAND_CLAUDE = path.join(REPO_LEGADO, ".claude", "skills", "_shared", "mgr");
 const CAND_COPILOT = path.join(REPO_LEGADO, ".github", "skills", "_shared", "mgr");
 const PRIOR_CLAUDE = { skillsDirs: [".claude/skills"] };
@@ -580,7 +580,7 @@ test("should leave the project hook file untouched on a global install with --no
   withRepo((repo) => {
     const file = projetoComHookAntigo(repo);
     const antes = readFileSync(file);
-    const home = mkdtempSync(path.join(os.tmpdir(), "mgr-global-nohooks-"));
+    const home = tempDir("mgr-global-nohooks-");
     try {
       const run = spawnSync(process.execPath, [MGR_BIN, "install", "-y", "--no-hooks", "--engine", "claude-code", "--scope", "global", "--all-skills", "--user-language", "en", repo], {
         encoding: "utf8", input: "", cwd: repo, env: { ...process.env, LC_ALL: "C", HOME: home },

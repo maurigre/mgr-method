@@ -115,4 +115,28 @@ export default [
       globals: globaisNode,
     },
   },
+
+  // tmp-organizado (RN-7, P-6): diretorio temporario so por `tempDir` de `scripts/lib/tmp.mjs`, que cria
+  // sob <os.tmpdir()>/mgr-method/<pid>-XXXXXX/ e apaga ao fim do processo. O proprio helper e a unica
+  // excecao. `noInlineConfig` fecha o desvio por comentario `eslint-disable`.
+  {
+    files: ["test/**/*.js", "scripts/**/*.mjs"],
+    ignores: ["scripts/lib/tmp.mjs"],
+    linterOptions: { noInlineConfig: true },
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...[
+          "MemberExpression[property.name=/^(tmpdir|mkdtemp|mkdtempSync)$/]",
+          "MemberExpression[computed=true][property.value=/^(tmpdir|mkdtemp|mkdtempSync)$/]",
+          "ImportSpecifier[imported.name=/^(tmpdir|mkdtemp|mkdtempSync)$/]",
+          "ObjectPattern > Property[key.name=/^(tmpdir|mkdtemp|mkdtempSync)$/]",
+        ].map((selector) => ({
+          selector,
+          message:
+            "temporario so por tempDir(prefixo) de scripts/lib/tmp.mjs (tmp-organizado): ele limpa ao fim do processo",
+        })),
+      ],
+    },
+  },
 ];

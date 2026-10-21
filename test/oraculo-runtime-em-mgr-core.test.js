@@ -2,20 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
-import os from "node:os";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { layoutPorMotor } from "./fixtures/layout-por-motor.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const MGR = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
 const EXPORT_PLUGIN = fileURLToPath(new URL("../scripts/export-plugin.mjs", import.meta.url));
@@ -54,7 +45,7 @@ function git(args, cwd) {
 }
 
 function novoRepo() {
-  return mkdtempSync(path.join(os.tmpdir(), "mgr-oraculo-core-"));
+  return tempDir("mgr-oraculo-core-");
 }
 
 function plantarHooksAlheios(tmp) {

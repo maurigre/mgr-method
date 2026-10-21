@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { COMPLETION_FILE, check, isDiffHeading, parse } from "../src/doc-rules.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
-const repoTemporario = () => mkdtempSync(path.join(tmpdir(), "mgr-doc-"));
+const repoTemporario = () => tempDir("mgr-doc-");
 
 const comDoc = (nomes) => {
   const repo = repoTemporario();
@@ -147,7 +147,7 @@ test("caminho que ESCAPA da raiz não conta como fato, mesmo o arquivo existindo
   // O arquivo de fora mora num diretório que ENVOLVE o repo, e não na raiz de `/tmp`: o resto deste
   // arquivo já vaza um diretório temporário por caso, e vazar arquivo solto ao lado seria sujeira de
   // ordem diferente na máquina de quem roda a suíte.
-  const envolve = mkdtempSync(path.join(tmpdir(), "mgr-doc-fora-"));
+  const envolve = tempDir("mgr-doc-fora-");
   const repo = path.join(envolve, "repo");
   mkdirSync(path.join(repo, "docs", "sdd"), { recursive: true });
   writeFileSync(path.join(envolve, "fora.md"), "# vive fora do repositorio\n", "utf8");

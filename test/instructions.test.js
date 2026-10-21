@@ -2,8 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripVTControlCharacters } from "node:util";
@@ -26,12 +25,13 @@ import {
 import { instructions } from "../src/commands/instructions.js";
 import { blockState } from "../src/managed-block.js";
 import { getMessages } from "../src/messages.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const OPEN = "<!-- >>> mgr-method (managed block: mgr uninstall removes it) >>> -->";
 const CLOSE = "<!-- <<< mgr-method <<< -->";
 
 const comRepo = (corpo) => async () => {
-  const repo = mkdtempSync(path.join(os.tmpdir(), "mgr-instructions-"));
+  const repo = tempDir("mgr-instructions-");
   try {
     return await corpo(repo);
   } finally {
@@ -217,7 +217,7 @@ test("should read the installed engines from the project manifest", comRepo((rep
 }));
 
 test("should read the installed engines from the global manifest when the project has none", comRepo(async (repo) => {
-  const home = mkdtempSync(path.join(os.tmpdir(), "mgr-instructions-home-"));
+  const home = tempDir("mgr-instructions-home-");
   const homeAnterior = process.env.HOME;
   try {
     criarManifesto(home, { engines: ["copilot"] });
@@ -232,7 +232,7 @@ test("should read the installed engines from the global manifest when the projec
 }));
 
 test("should report none when there is no manifest in the project or globally", comRepo(async (repo) => {
-  const home = mkdtempSync(path.join(os.tmpdir(), "mgr-instructions-home-"));
+  const home = tempDir("mgr-instructions-home-");
   const homeAnterior = process.env.HOME;
   try {
     process.env.HOME = home;
@@ -323,8 +323,8 @@ const runtime = (script, args, { cwd, home }) =>
 const git = (repo, home, args) => spawnSync("git", args, { encoding: "utf8", cwd: repo, env: ambiente(home) });
 
 const comCasaERepo = (corpo) => async () => {
-  const repo = mkdtempSync(path.join(os.tmpdir(), "mgr-instructions-cli-"));
-  const home = mkdtempSync(path.join(os.tmpdir(), "mgr-instructions-home-"));
+  const repo = tempDir("mgr-instructions-cli-");
+  const home = tempDir("mgr-instructions-home-");
   try {
     return await corpo({ repo, home });
   } finally {

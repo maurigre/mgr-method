@@ -1,8 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
   estimateTokens,
@@ -12,6 +11,7 @@ import {
   readSliceArtifacts,
   resolveSlugPath,
 } from "../scripts/measure-cost.mjs";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const fatiaPresente = (slug) => {
   const existe = existsSync(path.join("specs", slug));
@@ -243,7 +243,7 @@ test("shouldAcceptTheHeadingWithOrWithoutTheAccent", () => {
 });
 
 test("shouldCountEveryMarkdownFileOfTheSliceIncludingTheOnesSpecStatusDoesNotDeclare", () => {
-  const base = mkdtempSync(path.join(tmpdir(), "mc-extras-"));
+  const base = tempDir("mc-extras-");
   const sliceDir = path.join(base, "fatia-com-extra");
 
   mkdirSync(sliceDir, { recursive: true });
@@ -266,7 +266,7 @@ test("shouldCountEveryMarkdownFileOfTheSliceIncludingTheOnesSpecStatusDoesNotDec
 });
 
 test("shouldCountCharactersAndNotBytesOnAccentedText", () => {
-  const dir = mkdtempSync(path.join(tmpdir(), "mc-acentos-"));
+  const dir = tempDir("mc-acentos-");
   const fatia = path.join(dir, "fatia-acentuada");
   mkdirSync(fatia);
   const acentuado = "coração, ação, informação, decisão\n";
@@ -332,7 +332,7 @@ test("shouldDeclareTheThreeUnmeasuredParcelsInTheOutput", () => {
 });
 
 const montaFatia = (prefixo, plano, registro) => {
-  const base = mkdtempSync(path.join(tmpdir(), prefixo));
+  const base = tempDir(prefixo);
   const fatia = path.join(base, "fatia-montada");
   mkdirSync(fatia, { recursive: true });
   writeFileSync(path.join(fatia, "01-brief.md"), "# Brief\n", "utf8");

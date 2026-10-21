@@ -5,8 +5,10 @@ Deciders: Mauri Reis
 
 ## Status
 
-Proposed. Abre uma excecao a regra `LOG-1` do guia de review (`docs/sdd/09-review-rules.md`), so para
-`scripts/lib/tmp.mjs`.
+Accepted
+
+> Aceito pelo autor em 2026-10-21, depois do merge da fatia tmp-organizado (PR #47). Abre uma excecao
+> a regra `LOG-1` do guia de review (`docs/sdd/09-review-rules.md`), so para `scripts/lib/tmp.mjs`.
 
 ## Context
 

@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   parse, checkPointer, MARK_FORMS,
   POINTER_OK, POINTER_ESCAPES_ROOT, POINTER_NO_FILE, POINTER_NO_LINE,
 } from "../src/provenance.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const RAIZ = fileURLToPath(new URL("..", import.meta.url));
 const FIXTURES = path.join(RAIZ, "test", "fixtures", "provenance");
@@ -97,14 +97,14 @@ test("ponteiro para arquivo GITIGNORED que existe resolve — o git não é cons
   // Repositório temporário, e NÃO um caminho real de `specs/`: apontar para conteúdo gitignored
   // deste repositório faria a suíte passar aqui e falhar em qualquer clone. É o mesmo defeito que
   // o comentário do `.gitignore` registra sobre `test/fixtures/specs/`.
-  const repo = mkdtempSync(path.join(tmpdir(), "mgr-prov-gi-"));
+  const repo = tempDir("mgr-prov-gi-");
   writeFileSync(path.join(repo, ".gitignore"), "ignorado.md\n");
   writeFileSync(path.join(repo, "ignorado.md"), "uma linha\n");
   assert.equal(checkPointer(repo, { pointer: { path: "ignorado.md", line: 1 } }).outcome, POINTER_OK);
 });
 
 test("arquivo vazio tem ZERO linhas, e qualquer ponteiro para ele falha", () => {
-  const repo = mkdtempSync(path.join(tmpdir(), "mgr-prov-vazio-"));
+  const repo = tempDir("mgr-prov-vazio-");
   writeFileSync(path.join(repo, "vazio.js"), "");
   const resultado = checkPointer(repo, { pointer: { path: "vazio.js", line: 1 } });
   assert.equal(resultado.outcome, POINTER_NO_LINE);

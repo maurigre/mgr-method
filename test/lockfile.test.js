@@ -1,14 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
   diff, emptyLockfile, lockfilePath, readLockfile, removeSkill, replacedByEngine, upsertSkill,
   writeLockfile, LOCKFILE_NAME, LOCKFILE_VERSION,
 } from "../src/lockfile.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
-const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-lock-"));
+const diretorioTemporario = () => tempDir("mgr-lock-");
 
 const MGR_ORIGIN = { name: "mgr", url: "https://raw.example/mgr/index.json", trusted: true };
 const COMPANY_ORIGIN = { name: "empresa", url: "https://registry.empresa.dev/index.json", trusted: false };

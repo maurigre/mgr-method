@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
   GITIGNORE_BLOCK,
@@ -15,8 +14,9 @@ import { mkdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { consentToGitignore } from "../src/prompts.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
-const diretorioTemporario =() => mkdtempSync(path.join(os.tmpdir(), "mgr-gitignore-"));
+const diretorioTemporario =() => tempDir("mgr-gitignore-");
 
 const arquivoDe = (repo) => path.join(repo, ".gitignore");
 

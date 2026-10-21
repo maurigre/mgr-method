@@ -25,8 +25,8 @@
   "scripts": {
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "node --test \"test/**/*.test.js\"",
-    "coverage": "node --test --experimental-test-coverage --test-coverage-lines=95 --test-coverage-include='src/**' --test-coverage-include='bin/**' --test-coverage-include='commitlint.config.js' --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=lcov.info",
+    "test": "node --test \"test/**/*.test.js\" && node scripts/check-tmp.mjs",
+    "coverage": "node --test --experimental-test-coverage --test-coverage-lines=95 --test-coverage-include='src/**' --test-coverage-include='bin/**' --test-coverage-include='commitlint.config.js' --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=lcov.info && node scripts/check-tmp.mjs",
     "validate": "node bin/mgr.js validate",
     "build": "node scripts/build.mjs",
     "prepack": "npm run build",

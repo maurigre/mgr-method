@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execute, planInstall, runtimeRef } from "../src/installer.js";
@@ -10,6 +10,7 @@ import { resolveRuntime } from "../src/builder.js";
 import { RUNTIME_FILES, RUNTIME_TOKEN } from "../src/catalog.js";
 import { MODEL_CORE_RUNTIME } from "../src/manifest.js";
 import { fileURLToPath } from "node:url";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const PKG_ROOT_FOR_TESTS = fileURLToPath(new URL("../", import.meta.url));
 const MGR_BIN = path.resolve(import.meta.dirname, "..", "bin", "mgr.js");
@@ -20,7 +21,7 @@ const ENTRY_REL = [...RUNTIME_REL, "bin", "mgr-runtime.js"];
 const ENTRY_REF = ".mgr-core/runtime/bin/mgr-runtime.js";
 
 function installBoth() {
-  const repo = mkdtempSync(path.join(os.tmpdir(), "mgr-runtime-"));
+  const repo = tempDir("mgr-runtime-");
   execute(planInstall(["claude-code", "copilot"], "project", repo, { all: true }));
   return repo;
 }
@@ -73,7 +74,7 @@ test("should copy every runtime file byte for byte into the core runtime", () =>
 });
 
 test("should resolve the runtime token to a root-relative path that exists when using --skills-dir", () => {
-  const repo = mkdtempSync(path.join(os.tmpdir(), "mgr-runtime-custom-"));
+  const repo = tempDir("mgr-runtime-custom-");
   try {
     const skillsDir = path.join(repo, "minhas-skills");
     execute(planInstall([], "project", repo, { skillsDir, names: ["spec-init"] }));
@@ -101,7 +102,7 @@ test("should leave no stale file behind in the core runtime when reinstalling", 
 });
 
 test("should resolve the runtime path relative to the repo with slashes in project scope", () => {
-  const repo = path.join(os.tmpdir(), "mgr-ref-repo");
+  const repo = tempDir("mgr-ref-repo-");
   assert.equal(runtimeRef("project", repo), ENTRY_REF);
 });
 
@@ -137,7 +138,7 @@ test("should leave no runtime token in any installed SKILL.md", () => {
 });
 
 test("should leave one core runtime and no per-engine copy after a project install with both engines", () => {
-  const repo = mkdtempSync(path.join(os.tmpdir(), "mgr-runtime-cli-"));
+  const repo = tempDir("mgr-runtime-cli-");
   try {
     const run = runMgr(["install", "--engine", "both", "--scope", "project", "--all-skills", "-y", "--user-language", "en", repo]);
     assert.equal(run.status, 0, run.stderr);
@@ -160,8 +161,8 @@ test("should leave one core runtime and no per-engine copy after a project insta
 });
 
 test("should install the runtime under the global home and reference it by absolute path when installing globally", () => {
-  const home = mkdtempSync(path.join(os.tmpdir(), "mgr-runtime-home-"));
-  const projeto = mkdtempSync(path.join(os.tmpdir(), "mgr-runtime-home-cwd-"));
+  const home = tempDir("mgr-runtime-home-");
+  const projeto = tempDir("mgr-runtime-home-cwd-");
   try {
     const run = runMgr(["install", "--engine", "both", "--scope", "global", "--all-skills", "-y", "--user-language", "en", projeto], { HOME: home }, projeto);
     assert.equal(run.status, 0, run.stderr);

@@ -15,9 +15,9 @@
 // runner. Verde aqui NAO prova verde la; vermelho aqui prova vermelho la.
 
 import { execFileSync, execSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
-import os from "node:os";
+import { cpSync, existsSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
 import path from "node:path";
+import { tempDir } from "./lib/tmp.mjs";
 
 const RAIZ = process.cwd();
 
@@ -76,7 +76,7 @@ function removeArvore(destino) {
 // caminho de erro tambem e daqui. Sem isso, uma falha entre o `worktree add` e o `return` deixava
 // arvore registrada em `.git/worktrees` e diretorio temporario orfaos.
 function montaArvore() {
-  const destino = mkdtempSync(path.join(os.tmpdir(), "mgr-limpo-"));
+  const destino = tempDir("mgr-limpo-");
   console.log(`  criando a arvore em ${destino}`);
   execFileSync("git", ["worktree", "add", "-q", "--detach", destino, "HEAD"], { cwd: RAIZ });
   console.log("  arvore criada no HEAD");

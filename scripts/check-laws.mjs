@@ -43,8 +43,8 @@
 // naquela task — acusou perda de uma invariante que estava íntegra, só porque a string de busca
 // omitia dois asteriscos. Verificador que dá falso positivo é tão perigoso quanto o que dá falso
 // negativo: os dois ensinam a ignorá-lo.
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tempDir } from "./lib/tmp.mjs";
 import path from "node:path";
 
 export const LAWS_TOKEN = "{{MGR_LAWS}}";
@@ -659,7 +659,7 @@ function selfTest() {
   // LAW-5 tem de disparar no self-test: sem isso ela ficava escrita e nunca exercitada pelo
   // próprio script — foi assim que ela passou a existir sem ser alcançável por `main`.
   console.log("self-test: criando a arvore da LAW-5 em disco");
-  const arvore = mkdtempSync(path.join(tmpdir(), "mgr-law5-"));
+  const arvore = tempDir("mgr-law5-");
   mkdirSync(path.join(arvore, "spec-create"), { recursive: true });
   writeFileSync(path.join(arvore, "spec-create", "SKILL.md"), `x ${LAWS_TOKEN}\n`, "utf8");
   console.log(`self-test: arvore da LAW-5 criada em ${arvore}`);
@@ -680,7 +680,7 @@ function selfTest() {
   const esperados = ["LAW-1", "LAW-2", "LAW-3", "LAW-5", "LAW-6", "RUL-1", "RUL-2", "RUL-3", "RUL-4", "RUL-5"];
 
   console.log("self-test: criando a arvore temporaria das conferencias de regra");
-  const arvoreDeRegras = mkdtempSync(path.join(tmpdir(), "mgr-rules-"));
+  const arvoreDeRegras = tempDir("mgr-rules-");
   console.log(`self-test: arvore das conferencias de regra criada em ${arvoreDeRegras}`);
 
   problems.push(

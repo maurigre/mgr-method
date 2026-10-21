@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, mkdirSync, writeFileSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "../src/plan-parser.js";
 import { choose, nextTask } from "../src/plan-next.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const RAIZ = fileURLToPath(new URL("..", import.meta.url));
 const FIXTURES = path.join(RAIZ, "test", "fixtures", "plans");
@@ -86,7 +86,7 @@ test("plano declarado e sem nenhuma task", () => {
 });
 
 test("nextTask descobre o plano no repositório e devolve caminho relativo", () => {
-  const repo = mkdtempSync(path.join(tmpdir(), "mgr-next-"));
+  const repo = tempDir("mgr-next-");
   mkdirSync(path.join(repo, "specs", "demo"), { recursive: true });
   writeFileSync(path.join(repo, "specs", "demo", "04-plan.md"),
     readFileSync(path.join(FIXTURES, "com-estado.md"), "utf8"));
@@ -98,7 +98,7 @@ test("nextTask descobre o plano no repositório e devolve caminho relativo", () 
 });
 
 test("nextTask sem plano nenhum devolve no-plan, sem lançar", () => {
-  const repo = mkdtempSync(path.join(tmpdir(), "mgr-next-"));
+  const repo = tempDir("mgr-next-");
   const decisao = nextTask(repo, {});
   assert.equal(decisao.outcome, "no-plan");
   assert.equal(decisao.file, null);

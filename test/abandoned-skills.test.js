@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { abandonedSkills, detectPrior, execute, keepDeclared, planInstall, splitKept, update } from "../src/installer.js";
 import { CLASS_ARCHITECTURE, CLASS_LANGUAGE, CLASS_UNCLASSIFIED } from "../src/catalog.js";
-import { mkdtempSync, rmSync } from "node:fs";
-import os from "node:os";
+import { rmSync } from "node:fs";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const REPO = path.join(path.sep, "tmp", "repo-que-nao-existe-em-disco");
 const DIR = path.join(REPO, ".claude", "skills");
@@ -77,7 +77,7 @@ test("primeira instalacao: prior nulo ou sem skills devolve lista vazia", () => 
   assert.deepEqual(abandonedSkills({ prior: {}, plan: planoCom(["spec-init"]), exists: sempre }), []);
 });
 
-const repoTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-abandon-"));
+const repoTemporario = () => tempDir("mgr-abandon-");
 
 const instala = (repo, opcoes) => execute(planInstall(["claude-code"], "project", repo, { userLanguage: "en", ...opcoes }));
 

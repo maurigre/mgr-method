@@ -1,14 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { RUNTIME_DIR_NAME } from "../src/bundle.js";
 import { MANIFEST_NAME } from "../src/manifest.js";
 import { repoRoot } from "../src/artifacts.js";
 import { projectRoot } from "../src/project-root.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
-const temporario = () => mkdtempSync(path.join(tmpdir(), "mgr-root-"));
+const temporario = () => tempDir("mgr-root-");
 
 const comMarcador = (dir) => {
   mkdirSync(path.join(dir, RUNTIME_DIR_NAME), { recursive: true });

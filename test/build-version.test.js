@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { cpSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ENV = { ...process.env, LC_ALL: "C" };
@@ -34,7 +34,7 @@ function lerBuildVersion(preambulo) {
 }
 
 test("should print the package version from a dist built into a copy of the repo", () => {
-  const copia = mkdtempSync(path.join(os.tmpdir(), "mgr-build-"));
+  const copia = tempDir("mgr-build-");
   try {
     copyRepo(copia);
     const build = runNode(copia, ["scripts/build.mjs"]);
@@ -50,7 +50,7 @@ test("should print the package version from a dist built into a copy of the repo
 });
 
 test("should refuse --version with exit 1 and both versions when package.json changed without rebuild", () => {
-  const copia = mkdtempSync(path.join(os.tmpdir(), "mgr-build-"));
+  const copia = tempDir("mgr-build-");
   try {
     copyRepo(copia);
     const build = runNode(copia, ["scripts/build.mjs"]);
@@ -69,7 +69,7 @@ test("should refuse --version with exit 1 and both versions when package.json ch
 });
 
 test("should print the runtime version without a warning when the manifest matches", () => {
-  const projeto = mkdtempSync(path.join(os.tmpdir(), "mgr-runtime-"));
+  const projeto = tempDir("mgr-runtime-");
   try {
     instalarProjeto(projeto);
     const runtime = path.join(projeto, ".mgr-core", "runtime", "bin", "mgr-runtime.js");
@@ -84,7 +84,7 @@ test("should print the runtime version without a warning when the manifest match
 });
 
 test("should warn on stderr with both versions and exit 0 when the manifest version differs", () => {
-  const projeto = mkdtempSync(path.join(os.tmpdir(), "mgr-runtime-"));
+  const projeto = tempDir("mgr-runtime-");
   try {
     instalarProjeto(projeto);
     const runtime = path.join(projeto, ".mgr-core", "runtime", "bin", "mgr-runtime.js");

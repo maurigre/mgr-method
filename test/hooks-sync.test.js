@@ -1,14 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { planOwnedHooks, syncOwnedHooks } from "../src/hooks.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const COMANDO = 'node "/projeto/.claude/skills/_shared/mgr/bin/mgr-runtime.js"';
 
 function comArquivo(hooks, fn) {
-  const repo = mkdtempSync(path.join(os.tmpdir(), "mgr-hooks-sync-"));
+  const repo = tempDir("mgr-hooks-sync-");
   try {
     mkdirSync(path.join(repo, ".claude"), { recursive: true });
     writeFileSync(path.join(repo, ".claude", "settings.local.json"), JSON.stringify({ hooks }, null, 2) + "\n", "utf8");

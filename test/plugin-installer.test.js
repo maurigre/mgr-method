@@ -1,8 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
   add, assertSafePath, CANCELLED_EXIT_CODE, classifyTarget, download, installedPluginNames,
@@ -12,6 +11,7 @@ import {
 import { aggregateChecksum, sha256 } from "../src/plugin.js";
 import { addRegistry } from "../src/registry.js";
 import { readLockfile, LOCKFILE_NAME } from "../src/lockfile.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const INDEX_URL = "https://raw.example/mgr/index.json";
 
@@ -73,7 +73,7 @@ function stubRegistry(skills, { registry = "mgr", indexUrl = INDEX_URL } = {}) {
 }
 
 function project() {
-  const repo = mkdtempSync(path.join(os.tmpdir(), "mgr-plugin-install-"));
+  const repo = tempDir("mgr-plugin-install-");
   const coreDir = path.join(repo, ".mgr-core");
   const targets = [
     { engine: "claude-code", dir: path.join(repo, ".claude", "skills") },

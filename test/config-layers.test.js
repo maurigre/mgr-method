@@ -1,14 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execute, planInstall } from "../src/installer.js";
 import { PERSONAL_KEYS, TEAM_KEYS, misplacedTeamKeys, previewAgents, readAgents, readInitials, readPersonal, writeInitials, writePersonal } from "../src/registry.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
-const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-config-layers-"));
+const diretorioTemporario = () => tempDir("mgr-config-layers-");
 
 test("should read projectId from the personal layer", () => {
   const coreDir = diretorioTemporario();
@@ -131,7 +131,7 @@ test("should report no misplaced key when config.json has no projectId", () => {
 });
 
 // --- P1.2: o install grava só o que foi respondido ---
-const repoTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-p12-"));
+const repoTemporario = () => tempDir("mgr-p12-");
 const instalar = (repo, opts = {}) => {
   const plan = planInstall(["claude-code"], "project", repo, { all: true, ...opts });
   return { plan, result: execute(plan) };
@@ -211,8 +211,8 @@ const MGR_BIN_P117 = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
 const RUNTIME_P117 = path.join(".mgr-core", "runtime", "bin", "mgr-runtime.js");
 
 const projetoInstaladoP117 = () => {
-  const project = mkdtempSync(path.join(os.tmpdir(), "mgr-p117-projeto-"));
-  const home = mkdtempSync(path.join(os.tmpdir(), "mgr-p117-home-"));
+  const project = tempDir("mgr-p117-projeto-");
+  const home = tempDir("mgr-p117-home-");
   const probe = spawnSync("git", ["-C", project, "rev-parse", "--is-inside-work-tree"], { encoding: "utf8" });
   assert.equal(probe.error, undefined, "git must be runnable to prove the temp dir is outside a repository");
   assert.notEqual(probe.status, 0, "the temp dir must not be inside a git work tree");
@@ -306,8 +306,8 @@ test("should report absent origin as JSON with exit 0", async () => {
 test("should report the recorded origin after install", async () => {
   const { origin } = await import("../src/commands/origin.js");
   const { getMessages } = await import("../src/messages.js");
-  const project = mkdtempSync(path.join(os.tmpdir(), "mgr-p118-projeto-"));
-  const home = mkdtempSync(path.join(os.tmpdir(), "mgr-p118-home-"));
+  const project = tempDir("mgr-p118-projeto-");
+  const home = tempDir("mgr-p118-home-");
   const probe = spawnSync("git", ["-C", project, "rev-parse", "--is-inside-work-tree"], { encoding: "utf8" });
   assert.equal(probe.error, undefined, "git must be runnable to prove the temp dir is outside a repository");
   assert.notEqual(probe.status, 0, "the temp dir must not be inside a git work tree");
@@ -440,8 +440,8 @@ test("should not warn about projectId when only initials is in config.json", asy
     { config: { projectId: "x" }, avisa: true },
   ];
   for (const { config, avisa } of casos) {
-    const project = mkdtempSync(path.join(os.tmpdir(), "mgr-p13-projeto-"));
-    const home = mkdtempSync(path.join(os.tmpdir(), "mgr-p13-home-"));
+    const project = tempDir("mgr-p13-projeto-");
+    const home = tempDir("mgr-p13-home-");
     const probe = spawnSync("git", ["-C", project, "rev-parse", "--is-inside-work-tree"], { encoding: "utf8" });
     assert.equal(probe.error, undefined, "git must be runnable to prove the temp dir is outside a repository");
     assert.notEqual(probe.status, 0, "the temp dir must not be inside a git work tree");

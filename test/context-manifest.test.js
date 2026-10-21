@@ -1,17 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import {
-  existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { Buffer } from "node:buffer";
 import {
   MAX_ENTRIES, REFERENCED, SPOOL_FORMAT, UNREADABLE, entryFor, manifestPath, read, write,
 } from "../src/context-manifest.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
-const diretorioTemporario = () => mkdtempSync(path.join(tmpdir(), "mgr-ctx-"));
+const diretorioTemporario = () => tempDir("mgr-ctx-");
 
 // Registros com a forma REAL do transcript, apurada em disco em 2026-09-13. Não é forma inventada:
 // os campos de `compactMetadata` são os oito que os três boundaries deste projeto carregam.

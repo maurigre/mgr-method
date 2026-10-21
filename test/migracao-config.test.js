@@ -1,17 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { needsConfigMigration, resolveProjectId, runtimeMigration } from "../src/installer.js";
 import { layoutPorMotor } from "./fixtures/layout-por-motor.js";
 import { MODEL_CORE_RUNTIME, MODEL_LAYERED, MODEL_RUNTIME, writeManifest } from "../src/manifest.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 test("should write the core-runtime model on a fresh manifest", () => {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "mgr-migracao-config-"));
+  const dir = tempDir("mgr-migracao-config-");
   try {
     writeManifest(dir, { version: "0.0.0-test" });
     const written = JSON.parse(readFileSync(path.join(dir, "manifest.json"), "utf8"));
@@ -60,8 +60,8 @@ test("should require nothing when there is no prior install", () => {
 const BIN = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
 const ambiente = (home) => ({ ...process.env, LC_ALL: "C", HOME: home });
 const cenario = (fn) => {
-  const repo = mkdtempSync(path.join(os.tmpdir(), "mgr-repo-"));
-  const home = mkdtempSync(path.join(os.tmpdir(), "mgr-home-"));
+  const repo = tempDir("mgr-repo-");
+  const home = tempDir("mgr-home-");
   try {
     fn(repo, home);
   } finally {
@@ -174,7 +174,7 @@ const comoF1 = (repo, home) => {
 const atualizar = (repo, home) => spawnSync("node", [BIN, "update", repo], { env: ambiente(home), encoding: "utf8" });
 
 test("should resolve projectId as flag then personal then manifest then env then folder", () => {
-  const repo = mkdtempSync(path.join(os.tmpdir(), "mgr-fontes-"));
+  const repo = tempDir("mgr-fontes-");
   try {
     const core = path.join(repo, ".mgr-core");
     mkdirSync(core, { recursive: true });

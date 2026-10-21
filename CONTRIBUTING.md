@@ -12,3 +12,8 @@ inventadas. Use `arch-hexagonal` como referência de formato.
 
 ## Antes do PR
 - `npm test` verde · CHANGELOG atualizado · decisão estrutural → ADR.
+- Diretório temporário em teste ou script só por `tempDir(prefixo)` de `scripts/lib/tmp.mjs`: ele
+  cria sob `<tmp do sistema>/mgr-method/<pid>-XXXXXX/` e apaga ao fim do processo. O lint reprova
+  o `mkdtemp` direto, e o `npm test` falha se sobrar algo. Para investigar uma falha,
+  `MGR_KEEP_TMP=1` preserva a pasta e imprime o caminho (o check continua falhando até você
+  apagá-la).

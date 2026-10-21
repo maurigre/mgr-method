@@ -6,9 +6,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MGR_BIN = path.join(PACKAGE_ROOT, "bin", "mgr.js");
@@ -59,7 +59,7 @@ const collectStrings = (value) => {
   return [];
 };
 
-const makeTemp = (label) => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), `mgr-e2e-${label}-`)));
+const makeTemp = (label) => fs.realpathSync(tempDir(`mgr-e2e-${label}-`));
 
 const assertOutsideGit = (dir) => {
   const probe = spawnSync("git", ["-C", dir, "rev-parse", "--is-inside-work-tree"], { encoding: "utf8" });

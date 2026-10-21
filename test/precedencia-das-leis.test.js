@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import os from "node:os";
 import path from "node:path";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const LEIS = fileURLToPath(new URL("../shared/laws/execution-laws.md", import.meta.url));
 
@@ -65,7 +65,7 @@ test("a linha da escada tem os cinco niveis, NA ORDEM, com os dois caminhos no n
 const BIN = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
 
 test("as clausulas novas da L0.1 chegam a arvore INSTALADA, e nenhum token sobra", () => {
-  const repo = mkdtempSync(path.join(os.tmpdir(), "mgr-precedencia-"));
+  const repo = tempDir("mgr-precedencia-");
   try {
     const instalado = spawnSync(process.execPath, [BIN, "install", "--engine", "claude-code", "--user-language", "en", "-y", repo], { encoding: "utf8" });
     assert.equal(instalado.status, 0, `install falhou: ${instalado.stderr}`);

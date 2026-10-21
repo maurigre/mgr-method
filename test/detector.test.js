@@ -1,15 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
-import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
   collectSuggestions, detect, hookReport, lawsPreamble, MAX_SCAN_BYTES, PATH_MARKERS,
   SERVICE_MARKERS, suggest,
 } from "../src/detector.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
-const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-detector-"));
+const diretorioTemporario = () => tempDir("mgr-detector-");
 
 const escrever = (repo, relative, conteudo = "") => {
   const file = path.join(repo, relative);

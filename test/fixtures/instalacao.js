@@ -7,12 +7,12 @@
 //
 // A fixture instala de verdade e planta cada defeito, entao o que os testes afirmam e o que a
 // fixture declara, em qualquer maquina.
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import os from "node:os";
 import path from "node:path";
 import { Buffer } from "node:buffer";
+import { tempDir } from "../../scripts/lib/tmp.mjs";
 
 const BIN = fileURLToPath(new URL("../../bin/mgr.js", import.meta.url));
 
@@ -28,7 +28,7 @@ export const HOOK_QUEBRADO = "/nao/existe/mgr.js";
  * reprovava so ali. Fixture que depende do ambiente nao e fixture.
  */
 export function instalacaoLimpa({ arch = "layered", language = "java", userLanguage = "pt-BR" } = {}) {
-  const repo = mkdtempSync(path.join(os.tmpdir(), "mgr-doctor-"));
+  const repo = tempDir("mgr-doctor-");
   execFileSync("node", [BIN, "install", "--engine", "claude-code", "--language", language,
     "--arch", arch, "--user-language", userLanguage, "--project-id", "fixture", "-y", repo],
   { encoding: "utf8", cwd: repo });
@@ -41,7 +41,7 @@ export function instalacaoLimpa({ arch = "layered", language = "java", userLangu
  * Cria estrutura em `.claude/skills` e `.github/skills`.
  */
 export function instalacaoLimpaDoisMotores({ arch = "layered", language = "java", userLanguage = "pt-BR" } = {}) {
-  const repo = mkdtempSync(path.join(os.tmpdir(), "mgr-doctor-"));
+  const repo = tempDir("mgr-doctor-");
   execFileSync("node", [BIN, "install", "--engine", "both", "--language", language,
     "--arch", arch, "--user-language", userLanguage, "--project-id", "fixture", "-y", repo],
   { encoding: "utf8", cwd: repo });

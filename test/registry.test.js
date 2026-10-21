@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
-import os from "node:os";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import {
   addRegistry, CONFIGURED, configPath, DEFAULT, fetchIndex, ORIGINS, RESERVED_AGENT_KEYS, listRegistries, readAgents, readConfig, readDetectionMode,
@@ -9,8 +8,9 @@ import {
 } from "../src/registry.js";
 import { AGENTS, INTENTS, REVIEW_GATE } from "../src/catalog.js";
 import { fileURLToPath } from "node:url";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
-const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-registry-"));
+const diretorioTemporario = () => tempDir("mgr-registry-");
 
 const INDEX_URL = "https://raw.githubusercontent.com/maurigre/mgr-registry/main/index.json";
 

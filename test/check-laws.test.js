@@ -1,14 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { CHARTER_TOKEN, CORE_ROLES, LAWS_TOKEN, SHARED_TREE_NAME, checkCharter, checkCharterResolved, checkLadder, checkLaws, checkResolved, parseCharter, parseLaws, resolveAdr, parseSections, checkRuleForce, checkIdCensus, extractDefinedIds, checkSkillRuleForceReferences, RULE_SOURCES, ID_BASELINE } from "../scripts/check-laws.mjs";
 import { existsSync } from "node:fs";
 import { SHARED_DIR, LAWS_INSTALLED } from "../src/catalog.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
-const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-laws-"));
+const diretorioTemporario = () => tempDir("mgr-laws-");
 const ponteirosOk = Object.fromEntries(
   Object.keys(CORE_ROLES).map((skill) => [skill, { hasPointer: true, declaresRole: true }]),
 );
@@ -161,7 +161,7 @@ test("shouldKeepTheRealCharterIntactWithSevenPrinciples", () => {
 });
 
 const ARVORE_INSTALADA = () => {
-  const repo = mkdtempSync(path.join(os.tmpdir(), "mgr-carta-"));
+  const repo = tempDir("mgr-carta-");
   const dir = path.join(repo, ".claude", "skills");
   mkdirSync(path.join(dir, "_shared", "laws"), { recursive: true });
   mkdirSync(path.join(dir, "_shared", "charter"), { recursive: true });
@@ -197,7 +197,7 @@ test("shouldProveIndependenceFromProcessWorkingDirectory", () => {
   const { dir } = ARVORE_INSTALADA();
   rmSync(path.join(dir, "_shared", "charter", "core-principles.md"));
 
-  const chamariz = mkdtempSync(path.join(os.tmpdir(), "mgr-chamariz-"));
+  const chamariz = tempDir("mgr-chamariz-");
   mkdirSync(path.join(chamariz, ".claude", "skills", "_shared", "charter"), { recursive: true });
   writeFileSync(path.join(chamariz, ".claude", "skills", "_shared", "charter", "core-principles.md"), "arquivo");
 
@@ -214,7 +214,7 @@ test("shouldProveIndependenceFromProcessWorkingDirectory", () => {
 });
 
 test("shouldIgnoreATreeWithNoInstalledLaws", () => {
-  assert.deepEqual(checkCharterResolved(mkdtempSync(path.join(os.tmpdir(), "mgr-vazio-"))), [],
+  assert.deepEqual(checkCharterResolved(tempDir("mgr-vazio-")), [],
     "arvore sem leis instaladas nao e defeito da carta: nao ha o que conferir");
 });
 
@@ -465,7 +465,7 @@ test("shouldNotReproveEmptyExtractionWhenTheBaselineIsZero", () => {
 });
 
 test("shouldReproveAbsentSource", () => {
-  const problems = checkSkillRuleForceReferences(path.join(mkdtempSync(path.join(os.tmpdir(), "mgr-rul5-")), "vazio"));
+  const problems = checkSkillRuleForceReferences(path.join(tempDir("mgr-rul5-"), "vazio"));
   assert.equal(problems.length, 4, "the four declared arch skills must each be reported as absent");
   for (const problem of problems) {
     assert.match(problem, /^RUL-5 arch-(clean|hexagonal|onion|layered): SKILL\.md não encontrado/);

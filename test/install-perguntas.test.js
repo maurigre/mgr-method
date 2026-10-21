@@ -196,14 +196,14 @@ test("should report no-model-engine instead of malformed for a bare value and no
 // --- Borda do install (P1.6): processos filhos, fora de git, sem importar nada do núcleo ---
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const MGR_BIN = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "bin", "mgr.js");
 
 function tempOutsideGit(label) {
-  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), `mgr-p16-${label}-`)));
+  const dir = fs.realpathSync(tempDir(`mgr-p16-${label}-`));
   const probe = spawnSync("git", ["-C", dir, "rev-parse", "--is-inside-work-tree"], { encoding: "utf8" });
   assert.equal(probe.error, undefined, "git must be runnable to prove the temp dir is outside a repository");
   assert.notEqual(probe.status, 0, "the temp dir must not be inside a git work tree");

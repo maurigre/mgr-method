@@ -6,10 +6,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripVTControlCharacters } from "node:util";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MGR_BIN = path.join(PACKAGE_ROOT, "bin", "mgr.js");
@@ -18,7 +18,7 @@ const PERSONAL_ID = "dev-a-7f3";
 
 const baseEnv = (home) => ({ ...process.env, LC_ALL: "C", HOME: home });
 
-const makeTemp = (label) => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), `mgr-oraculo-f2-${label}-`)));
+const makeTemp = (label) => fs.realpathSync(tempDir(`mgr-oraculo-f2-${label}-`));
 
 function run(command, args, { cwd, input = "", home }) {
   return spawnSync(command, args, { cwd, input, encoding: "utf8", timeout: TIMEOUT_MS, env: baseEnv(home) });

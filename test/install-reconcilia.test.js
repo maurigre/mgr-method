@@ -1,15 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import os from "node:os";
 import path from "node:path";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const BIN = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
 const SKILLS = path.join(".claude", "skills");
 
-const repoTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-reconcilia-"));
+const repoTemporario = () => tempDir("mgr-reconcilia-");
 
 // Subprocesso nao herda terminal: e justamente o caminho sem consentimento possivel que estes casos
 // precisam exercitar, e que nenhum stub alcanca.

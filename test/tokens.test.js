@@ -1,14 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { NO_BUDGET, OVER_BUDGET, WITHIN_BUDGET, summarize, verdict } from "../src/tokens.js";
+import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const RAIZ = fileURLToPath(new URL("..", import.meta.url));
 const FIXTURE = path.join(RAIZ, "test", "fixtures", "transcripts", "exemplo.jsonl");
-const diretorioTemporario = () => mkdtempSync(path.join(os.tmpdir(), "mgr-tokens-"));
+const diretorioTemporario = () => tempDir("mgr-tokens-");
 
 // A conta manual da fixture, fixada na P0.2: input+output = 213, cache_read = 7916.
 const TOTAL_DA_FIXTURE = 213;

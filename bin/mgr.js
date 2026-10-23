@@ -12,7 +12,8 @@ import { specNext, specStatus, specValidate } from "../src/commands/spec.js";
 import { detectHook, precompactHook, suggestionsFor } from "../src/commands/hooks.js";
 import { escreverSync, lerPayload, modificados } from "./hook-io.js";
 import { projectRoot } from "../src/project-root.js";
-import { LOCAL_CONFIG_NAME, ORIGINS, misplacedTeamKeys, readAgents, readOrigin, readPersonal } from "../src/registry.js";
+import { LOCAL_CONFIG_NAME, ORIGINS, misplacedTeamKeys, readAgents, readOrigin, readPersonal, readRuntimeVersioning } from "../src/registry.js";
+import { indexedFiles } from "./git-index.js";
 import * as engineRegistry from "../src/engines/index.js";
 import * as tokens from "../src/tokens.js";
 import * as audit from "../src/audit.js";
@@ -20,11 +21,15 @@ import { doctor } from "../src/commands/doctor.js";
 import { sddCheck } from "../src/commands/sdd-check.js";
 import { initials } from "../src/commands/initials.js";
 import { origin } from "../src/commands/origin.js";
-import { buildRuntime, gateSummary, inheritingModel } from "../src/builder.js";
+import {
+  refuseInvalidRuntimeVersioning, planRuntimeLine, reportGitIndex, reportRuntimeChoice, reportRuntimeIgnoreAfter, reportRuntimeIgnoreBefore,
+  posixRelative, runtimeVersioning,
+} from "../src/commands/runtime-versioning.js";
+import { buildRuntime, gateSummary, inheritingModel, runtimeIgnoreEffect, runtimeIgnoreState } from "../src/builder.js";
 import { validateAll } from "../src/validator.js";
 import { printBanner } from "../src/banner.js";
 import { PERSONAL_LINES, planGitignore, removeGitignoreBlock, writeGitignoreBlock } from "../src/gitignore.js";
-import { GITIGNORE_DECLINE, GITIGNORE_WRITE, collectInstallAnswers, consentEach, consentToGitignore, consentToBlock, BLOCK_WRITE, BLOCK_DECLINE, updateOutcome, consentToRemove, detectUserLanguage, removalMode, removalOutcome, CANCELLED, OUTCOME_KEPT_BY_CHOICE, OUTCOME_KEPT_NO_CONSENT, OUTCOME_REMOVED, REMOVE } from "../src/prompts.js";
+import { GITIGNORE_DECLINE, GITIGNORE_WRITE, askRuntimeVersioning, collectInstallAnswers, consentEach, consentToGitignore, consentToBlock, BLOCK_WRITE, BLOCK_DECLINE, updateOutcome, consentToRemove, detectUserLanguage, removalMode, removalOutcome, CANCELLED, OUTCOME_KEPT_BY_CHOICE, OUTCOME_KEPT_NO_CONSENT, OUTCOME_REMOVED, REMOVE } from "../src/prompts.js";
 import { getMessages } from "../src/messages.js";
 import { instructionsToRemove, planInstructions, removeInstructionBlock, writeInstructionBlock } from "../src/instructions.js";
 import {
@@ -47,7 +52,7 @@ const PLUGIN_COMMANDS = ["add", "remove", "registry"];
 // resolveria o repo como `<cwd>/validate`, o manifesto não seria encontrado e o `userLanguage` do
 // projeto seria descartado — quebrando, só para o comando novo, a precedência
 // flag > manifesto > locale que os demais respeitam.
-const SUBCOMMAND_COMMANDS = ["spec", "agents", "tokens", "precompact", "origin"];
+const SUBCOMMAND_COMMANDS = ["spec", "agents", "tokens", "precompact", "origin", "runtime-versioning"];
 const isTTY = process.stdin.isTTY && process.stdout.isTTY;
 
 // Tabela de mensagens da CLI. Começa pelo locale; o main refina com a precedência
@@ -113,6 +118,7 @@ async function cmdInstall(flags, positional) {
   const optional = [];
   let answeredModels = {};
   let answeredOrigin = null;
+  let answeredRuntimeVersioning = null;
   const recordedOriginOf = (core) => {
     const lida = readOrigin(core);
     return lida.state === "recorded" ? lida.origin : null;
@@ -130,6 +136,7 @@ async function cmdInstall(flags, positional) {
         configured: agents.sources,
         enabledIntents: catalogo.INTENTS.filter((intent) => agents.policies[intent].enabled !== false),
         originRecorded: Boolean(flags.origin) || recordedOriginOf(core) !== null,
+        runtimeVersioningRecorded: readRuntimeVersioning(core).state !== "absent",
       };
     };
     const answers = await collectInstallAnswers(
@@ -144,6 +151,7 @@ async function cmdInstall(flags, positional) {
     optional.push(...answers.optional);
     answeredModels = answers.models;
     answeredOrigin = answers.origin;
+    answeredRuntimeVersioning = answers.runtimeVersioning;
     M = getMessages(userLanguage);
   }
   // Sem TTY/-y e sem flag: herda o locale — nunca grava null em instalação nova
@@ -177,6 +185,8 @@ async function cmdInstall(flags, positional) {
   // Lido cedo de propósito: modo de detecção inválido falha ANTES de escrever qualquer coisa.
   const core = installer.coreDir(scope, repo);
   const detectionMode = readDetectionMode(core);
+  // DT-11: valor gravado invalido recusa ANTES de escrever; sobrescreve-lo viraria o padrao em silencio.
+  refuseInvalidRuntimeVersioning({ scope, core, repo, M });
 
   // Avisos de camada em stderr: o que foi ignorado nunca some em silêncio (DT-2).
   const localFile = warnLayers(core, repo);
@@ -193,7 +203,7 @@ async function cmdInstall(flags, positional) {
   }
 
   const replaced = replacedByEngine(readLockfile(repo));
-  const plan = installer.planInstall(engines, scope, repo, { skillsDir, language, architecture, userLanguage, optional, all: flags.allSkills, projectId, replaced, models, origin });
+  const plan = installer.planInstall(engines, scope, repo, { skillsDir, language, architecture, userLanguage, optional, all: flags.allSkills, projectId, replaced, models, origin, runtimeVersioning: answeredRuntimeVersioning });
   const motoresComHook = hookEngines(plan, flags);
   // O que esta instalacao deixa de DECLARAR aparece no plano antes de qualquer escrita, inclusive
   // no --dry-run. O calculo vive no nucleo; aqui fica so a cola (CONSTITUTION secao 2.2), e o modo
@@ -214,6 +224,13 @@ async function cmdInstall(flags, positional) {
       .map((engine) => ({ engine, rewrite: planOwnedHooks(engine, plan.repo, { command: runtimeCommand(plan.scope, plan.repo) }).rewrite }))
       .filter(({ rewrite }) => rewrite.length)
     : [];
+  // DT-5: o efeito no arquivo de ignorar sai do estado do disco ANTES da escrita, para a linha de
+  // depois dizer o que de fato aconteceu.
+  const { efeito: efeitoIgnore, arquivoIgnore, relRuntime } = runtimeEffectOf(plan);
+  const linhasIgnoreAntes = [];
+  if (plan.scope === "project") {
+    reportRuntimeIgnoreBefore({ effect: efeitoIgnore, rel: arquivoIgnore, M, out: (t) => linhasIgnoreAntes.push(t) });
+  }
   p.note(
     [
       M.planProject(plan.projectId, plan.scope),
@@ -239,6 +256,9 @@ async function cmdInstall(flags, positional) {
         rewrite.map((evento) => M.hookCommandToRewrite(path.relative(plan.repo, hookFilePath(engine, plan.repo)), evento))),
       // O runtime também é escrita em diretório do usuário: aparece no plano antes da confirmação.
       M.planRuntime(pathsForDisplay([installer.runtimeDir(plan.scope, plan.repo)], plan.scope, plan.repo), catalogo.RUNTIME_FILES.length + 1),
+      ...(plan.scope === "project"
+        ? [planRuntimeLine({ runtimeVersioning: plan.runtimeVersioning, M }), ...linhasIgnoreAntes]
+        : []),
       ...(plan.legacyRuntime.remove.length ? [M.legacyRuntimeToRemove(pathsForDisplay(plan.legacyRuntime.remove, plan.scope, plan.repo))] : []),
       ...(plan.legacyRuntime.keep.length ? [M.legacyRuntimeKept(pathsForDisplay(plan.legacyRuntime.keep, plan.scope, plan.repo))] : []),
       // O agente também mora em diretório do usuário: ele vê modelo e esforço por motor
@@ -284,6 +304,11 @@ async function cmdInstall(flags, positional) {
   s.stop(M.installedAt(res.targets.map((t) => t.dir).join(" · ")));
   if (res.migrated) p.log.info(M.migrationInfo(res.migrated.removed.length));
   p.log.success(M.runtimeWritten(pathsForDisplay([res.runtime.dir], plan.scope, plan.repo), res.runtime.files));
+  // LOG-1: a linha de depois do arquivo de ignorar e a escolha saem logo apos a escrita do runtime.
+  if (plan.scope === "project") {
+    reportRuntimeIgnoreAfter({ effect: efeitoIgnore, rel: arquivoIgnore, M, out: (t) => p.log.success(t) });
+  }
+  reportRuntimeChoice({ runtimeVersioning: plan.runtimeVersioning, M, out: (t) => (plan.runtimeVersioning.source === "answered" ? p.log.success(t) : p.log.info(t)) });
   if (res.legacyRuntimeRemoved.length) p.log.success(M.legacyRuntimeRemoved(pathsForDisplay(res.legacyRuntimeRemoved, plan.scope, plan.repo)));
   // Os quatro caminhos saem 0: recusar a remocao nunca transforma a instalacao em erro. Escrita em
   // diretorio do usuario e anunciada, e o que NAO saiu tambem e — em silencio, viraria orfa.
@@ -340,6 +365,11 @@ async function cmdInstall(flags, positional) {
   }
 
   if (detectionMode === "suggest") await proposeDetected(plan.repo, plan.scope, plan.targets);
+
+  // DT-8: a leitura do git fica no fim, depois de todas as escritas (lockfile e sugestoes aceitas).
+  if (plan.runtimeVersioning.value === "unversioned") {
+    reportGitIndex({ repo: plan.repo, relDir: relRuntime, gitIndex: indexedFiles, M, info: (t) => p.log.info(t), warn: (t) => p.log.warn(t) });
+  }
   p.outro(pc.green(M.done));
   return 0;
 }
@@ -679,6 +709,24 @@ const cmdPrecompact = (flags) => precompactHook({ ...commandIo(flags, []), proc:
 // `mgr origin` — delegação à cola testável em src/commands/origin.js (despacha `set` lá dentro).
 const cmdOrigin = (flags, positional) => origin(commandIo(flags, positional));
 
+// `mgr runtime-versioning` — cola em src/commands/runtime-versioning.js. O git e o .gitignore da raiz
+// são da borda (DT-7, DT-8): entram injetados.
+const cmdRuntimeVersioning = (flags, positional) => {
+  const io = commandIo(flags, positional);
+  return runtimeVersioning({ ...io, gitIndex: indexedFiles, rootIgnoredLines: () => planGitignore(io.root).teamIgnoredLines });
+};
+
+// DT-5/DT-6: o cálculo do runtime que o install e o update compartilham, sem escrita. O efeito sai do
+// estado do disco ANTES da escrita, para a linha de depois dizer o que de fato aconteceu.
+function runtimeEffectOf(plan) {
+  const dirRuntime = installer.runtimeDir(plan.scope, plan.repo);
+  return {
+    efeito: runtimeIgnoreEffect({ state: runtimeIgnoreState(dirRuntime), ignoreFile: plan.runtimeIgnore }),
+    arquivoIgnore: posixRelative(plan.repo, path.join(dirRuntime, catalogo.RUNTIME_IGNORE_FILE)),
+    relRuntime: posixRelative(plan.repo, dirRuntime),
+  };
+}
+
 // `mgr tokens` — quanto o fluxo consumiu (ADR-0017). O PRIMEIRO transcript é o da conversa; os
 // demais são os dos agentes que ela subiu. Medir só a conversa contaria a economia e esconderia o
 // custo, porque agente não compartilha contexto.
@@ -808,8 +856,11 @@ async function cmdUpdate(flags, positional) {
   // Passo 1 (DT-11): config inválida falha ANTES de qualquer escrita; o que a camada ignorou vai a stderr.
   const core = installer.coreDir(scope, repo);
   // Só o que o update CONSOME falha cedo: a política de agentes, que ele usa para gravar os arquivos
-  // de agente. Chave alheia (ex.: `detectionMode`) não é lida, porque o update não toca no config (X-17).
+  // de agente. Chave alheia (ex.: `detectionMode`) não é lida. O update só grava no config a escolha
+  // do runtime, e só quando a pessoa responde (DT-6); o resto do config ele não toca (X-17).
   readAgents(core);
+  // DT-11: valor gravado invalido recusa ANTES de qualquer escrita; sobrescreve-lo viraria o padrao em silencio.
+  refuseInvalidRuntimeVersioning({ scope, core, repo, M });
   const localFile = warnLayers(core, repo);
 
   // Passo 2: o plano. Nada é escrito até o `installer.update`.
@@ -844,8 +895,12 @@ async function cmdUpdate(flags, positional) {
   for (const bloqueada of planned.occupied.blocked) console.log(M.enteringBlockedByPlugin(relOf(bloqueada), bloqueada.name));
   // D-13: o .gitignore também é convergido no update, só no escopo project e só sem o bloco gerenciado;
   // o plano o anuncia antes de perguntar ou gravar.
-  const precisaGitignore = scope === "project" && planGitignore(repo).state !== "present";
+  const gitignorePlan = scope === "project" ? planGitignore(repo) : null;
+  const precisaGitignore = Boolean(gitignorePlan) && gitignorePlan.state !== "present";
   if (precisaGitignore) console.log(M.planGitignore);
+  // DT-6: a novidade, so no escopo project e com a escolha ainda nao gravada.
+  const perguntaRuntime = scope === "project" && readRuntimeVersioning(core).state === "absent";
+  if (perguntaRuntime) console.log(M.runtimeVersioningNew(bundle.readVersion()));
   // L-5: o evento de hook que será gravado é anunciado AQUI, por cálculo sem escrita (`planOwnedHooks`).
   const motoresReais = [...new Set(planned.plan.targets.map((t) => t.engine).filter((e) => installer.ENGINES.includes(e)))];
   const instrPlan = scope === "project" ? planInstructions(repo, { engines: motoresReais }) : SEM_INSTRUCOES;
@@ -880,12 +935,34 @@ async function cmdUpdate(flags, positional) {
     if (decisaoBloco === CANCELLED) bail();
     decisoesInstr.push({ item, decisao: decisaoBloco });
   }
+  const respostaRuntime = perguntaRuntime
+    ? await askRuntimeVersioning(CLACK, { mode: removalMode({ isTTY, yes: flags.yes }), msg: M })
+    : null;
+  if (respostaRuntime === CANCELLED) bail();
+  const escolhaRespondida = respostaRuntime?.source === "answered" ? respostaRuntime.value : null;
+
+  // DT-6: a linha do plano e a do efeito, ANTES da escrita (LOG-1), calculadas sem escrever.
+  const planoRuntime = scope === "project"
+    ? installer.withRuntimeVersioning(planned.plan, escolhaRespondida)
+    : null;
+  const calculoRuntime = planoRuntime && runtimeEffectOf(planoRuntime);
+  if (calculoRuntime) {
+    const escolha = planoRuntime.runtimeVersioning;
+    if (escolha.source !== "recorded") console.log(planRuntimeLine({ runtimeVersioning: escolha, M }));
+    const { efeito, arquivoIgnore } = calculoRuntime;
+    reportRuntimeIgnoreBefore({ effect: efeito, rel: arquivoIgnore, M, out: (t) => console.log(t) });
+  }
 
   // Passo 5: execução. Só as abandonadas mantidas voltam ao manifesto (`mantidas`); órfã nunca esteve nele.
   const skipEntering = installer.skippedByConsent(planned, part);
-  const res = installer.applyUpdate(planned, { aRemover: part.aRemover, mantidas: part.mantidas, skipEntering });
+  const res = installer.applyUpdate(planned, { aRemover: part.aRemover, mantidas: part.mantidas, skipEntering, runtimeVersioning: escolhaRespondida });
   if (res.removed.length) console.log(pc.dim(M.removedSkills(res.removed.map((alvo) => path.relative(repo, alvo)))));
   if (migration.runtime !== "none") console.log(pc.dim(M.runtimeWritten(pathsForDisplay([res.runtime.dir], scope, repo), res.runtime.files)));
+  if (calculoRuntime) {
+    const dim = (t) => console.log(pc.dim(t));
+    reportRuntimeIgnoreAfter({ effect: calculoRuntime.efeito, rel: calculoRuntime.arquivoIgnore, M, out: dim });
+    reportRuntimeChoice({ runtimeVersioning: planoRuntime.runtimeVersioning, M, out: dim });
+  }
   if (res.legacyRuntimeRemoved.length) console.log(pc.dim(M.legacyRuntimeRemoved(pathsForDisplay(res.legacyRuntimeRemoved, scope, repo))));
 
   // DT-12: converge os hooks SEMPRE; só arquivo onde o MGR já tem entrada (sem entrada, nada é impresso).
@@ -907,6 +984,12 @@ async function cmdUpdate(flags, positional) {
       console.log(pc.dim(M.instructionsWritten(item.file)));
     } else if (decisaoBloco === BLOCK_DECLINE) console.log(pc.dim(M.instructionsDeclined(item.file)));
   }
+  if (calculoRuntime) {
+    const escolha = planoRuntime.runtimeVersioning;
+    if (escolha.source === "answered" && escolha.value === "versioned") {
+      for (const linha of gitignorePlan.teamIgnoredLines) console.log(pc.yellow(M.gitignoreTeamIgnored(linha)));
+    }
+  }
   if (res.migrated) console.log(pc.dim(M.updateMigrated));
   console.log(pc.green(M.updateDone(scope, res.skills.length, res.targets.map((t) => t.dir).join(" · "))));
 
@@ -925,6 +1008,11 @@ async function cmdUpdate(flags, positional) {
     console.log(M.restoring(LOCKFILE_NAME));
     const restored = await restoreLockedPlugins(repo, res.targets, (message) => console.warn(message));
     if (restored) console.log(pc.green(M.restoreDone(restored.restored.length)));
+  }
+
+  // DT-8: a leitura do git fica no fim, depois de todas as escritas (inclusive o lockfile).
+  if (calculoRuntime && planoRuntime.runtimeVersioning.value === "unversioned") {
+    reportGitIndex({ repo, relDir: calculoRuntime.relRuntime, gitIndex: indexedFiles, M, info: (t) => console.log(pc.dim(t)), warn: (t) => console.log(pc.yellow(t)) });
   }
 
   // Passo 6: o exit sai do que ficou divergente. `keptAbandoned` exclui o que não tem mais fonte (já em
@@ -1086,6 +1174,7 @@ async function main() {
       case "spec": return cmdSpec(flags, positional);
       case "agents": return cmdAgents(flags, positional);
       case "origin": return cmdOrigin(flags, positional);
+      case "runtime-versioning": return cmdRuntimeVersioning(flags, positional);
       case "tokens": return cmdTokens(flags, positional);
       case "list": return await cmdList(flags, positional);
       case "version": case "--version": case "-v":

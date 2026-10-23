@@ -34,10 +34,12 @@ export function detectUserLanguage(env = {}) {
 // engineDescriptors: { [id]: descritor } — `documentedModels` e `capabilities` (default: src/engines)
 // configured: `readAgents(core).sources` — modelo já `configured` não é perguntado
 // originRecorded: a origem já está no config — não é perguntada
+// runtimeVersioningRecorded: a escolha do runtime já está no config — não é perguntada (DT-5)
 // enabledIntents: intenções LIGADAS (DT-7); desligada não é perguntada (default: todas)
 // flagModels: `{ [intent]: { [engine]: id } }` já dado por flag — não é perguntado
-// Devolve `models: { [intent]: { [engine]: id } }` (só o que foi respondido) e `origin`
-// ("greenfield" | "brownfield" | null, null quando pulada).
+// Devolve `models: { [intent]: { [engine]: id } }` (só o que foi respondido), `origin`
+// ("greenfield" | "brownfield" | null, null quando pulada) e `runtimeVersioning`
+// ("versioned" | "unversioned" | null, null quando não respondida).
 export async function collectInstallAnswers(ask, current = {}, {
   repo = ".",
   allSkills = false,
@@ -46,6 +48,7 @@ export async function collectInstallAnswers(ask, current = {}, {
   engineDescriptors = defaultEngineDescriptors(),
   configured = {},
   originRecorded = false,
+  runtimeVersioningRecorded = false,
   enabledIntents = catalog.INTENTS,
   flagModels: flagModelsOption = {},
   contextFor = null,
@@ -61,6 +64,7 @@ export async function collectInstallAnswers(ask, current = {}, {
     optional: [],
     models: {},
     origin: null,
+    runtimeVersioning: null,
   };
 
   if (!out.engines.length) {
@@ -164,8 +168,10 @@ export async function collectInstallAnswers(ask, current = {}, {
   // Motores e escopo já são conhecidos aqui (respondidos ou vindos de flag): só agora o contexto das
   // perguntas de modelo e origem pode ser lido sem adivinhar (E-9).
   if (contextFor) {
-    ({ flagModels = {}, configured = {}, enabledIntents = catalog.INTENTS, originRecorded = false } =
-      contextFor(out.engines, out.scope));
+    ({
+      flagModels = {}, configured = {}, enabledIntents = catalog.INTENTS, originRecorded = false,
+      runtimeVersioningRecorded = false,
+    } = contextFor(out.engines, out.scope));
   }
 
   for (const engine of out.engines) {
@@ -208,6 +214,14 @@ export async function collectInstallAnswers(ask, current = {}, {
     });
     if (ask.isCancel(origin)) return CANCELLED;
     out.origin = origin === SKIP_CHOICE ? null : origin;
+  }
+
+  // Só no escopo do projeto: o runtime global não tem arquivo de ignorar (RN-1). Pergunta depois da
+  // origem e só sem escolha gravada. Esta função só roda com terminal (bin/mgr.js), então o modo é `ask`.
+  if (out.scope === "project" && !runtimeVersioningRecorded) {
+    const escolha = await askRuntimeVersioning(ask, { mode: REMOVAL_ASK, msg });
+    if (escolha === CANCELLED) return CANCELLED;
+    out.runtimeVersioning = escolha.source === "answered" ? escolha.value : null;
   }
 
   return out;
@@ -263,6 +277,23 @@ export async function consentToBlock(ask, { mode, message }) {
 
 export async function consentToGitignore(ask, { mode = REMOVAL_NO_CONSENT, msg = getMessages("en") } = {}) {
   return consentToBlock(ask, { mode, message: msg.qGitignoreBlock });
+}
+
+// Escolha do versionamento do runtime (DT-5). Só o modo `ask` pergunta, com o `select` da §4.3 e
+// `unversioned` como padrão. `assumed` (-y) e `no-consent` devolvem `default` sem chamar o `ask`:
+// o padrão vale e não é gravado. Cancelar devolve `CANCELLED`.
+export async function askRuntimeVersioning(ask, { mode = REMOVAL_NO_CONSENT, msg = getMessages("en") } = {}) {
+  if (mode !== REMOVAL_ASK) return { source: "default" };
+  const value = await ask.select({
+    message: msg.qRuntimeVersioning,
+    options: [
+      { value: "unversioned", label: msg.runtimeUnversionedOption },
+      { value: "versioned", label: msg.runtimeVersionedOption },
+    ],
+    initialValue: "unversioned",
+  });
+  if (ask.isCancel(value)) return CANCELLED;
+  return { source: "answered", value };
 }
 
 export async function consentToRemove(ask, abandoned = [], { mode = REMOVAL_NO_CONSENT, msg = getMessages("en") } = {}) {

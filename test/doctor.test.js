@@ -493,11 +493,11 @@ test("a derivacao do gate de review esta travada contra o instalador", () => {
   }
 });
 
-test("CHECKS tem exatamente 11 entradas com id unico", () => {
-  assert.equal(CHECKS.length, 11, "registro de verificacoes tem onze entradas e nada mais");
+test("CHECKS tem exatamente 12 entradas com id unico", () => {
+  assert.equal(CHECKS.length, 12, "registro de verificacoes tem doze entradas e nada mais");
   const ids = CHECKS.map(({ id }) => id);
   const idsUnicos = new Set(ids);
-  assert.equal(idsUnicos.size, 11, "cada id do registro deve ser unico");
+  assert.equal(idsUnicos.size, 12, "cada id do registro deve ser unico");
   assert.ok(ids.includes("runtime-version"), "a verificacao nova esta no registro");
 });
 
@@ -1069,11 +1069,11 @@ test("skill declarada com corpo divergente mantém a remediação no diagnose", 
   }
 });
 
-test("CHECKS tem exatamente onze entradas com id único", () => {
-  assert.equal(CHECKS.length, 11, "registro tem onze entradas de verificacoes");
+test("CHECKS tem exatamente doze entradas com id único", () => {
+  assert.equal(CHECKS.length, 12, "registro tem doze entradas de verificacoes");
   const ids = CHECKS.map(({ id }) => id);
   const idsUnicos = new Set(ids);
-  assert.equal(idsUnicos.size, 11, "cada id do registro deve ser único");
+  assert.equal(idsUnicos.size, 12, "cada id do registro deve ser único");
 });
 
 test("toda entrada de CHECKS tem remediacoes com pelo menos um item", () => {
@@ -1083,11 +1083,11 @@ test("toda entrada de CHECKS tem remediacoes com pelo menos um item", () => {
   }
 });
 
-test("soma de todas as condicoes em remediacoes e exatamente vinte e tres", () => {
+test("soma de todas as condicoes em remediacoes e exatamente vinte e seis", () => {
   const totalCondicoes = CHECKS.reduce((soma, entrada) => soma + entrada.remediacoes.length, 0);
-  assert.equal(totalCondicoes, 23,
-    "dezessete da tabela D-2, duas de runtime-version e as quatro da DT-14 da F2 (marcada, "
-    + "distribuida-sem-marca e as duas skill-orfa-sem-prova)");
+  assert.equal(totalCondicoes, 26,
+    "dezessete da tabela D-2, duas de runtime-version, as quatro da DT-14 da F2 (marcada, "
+    + "distribuida-sem-marca e as duas skill-orfa-sem-prova) e as tres de runtime-versioning");
 });
 
 test("todo item de remediacao tem condicao, fix e prova obrigatorios", () => {

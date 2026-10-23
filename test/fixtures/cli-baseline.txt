@@ -22,7 +22,10 @@ skills (8): spec-init, spec-create, spec-execute, adr-create, code-analyzer,
 diagnosing-bugs, configure-agents, arch-hexagonal hooks →
 .claude/settings.local.json (detecção por sessão e hand-off antes da
 compactação, por motor) Runtime do MGR → .mgr-core/runtime (50 arquivos,
-legível, só Node) agentes → .claude/agents (um agente por intenção; a revisão
+legível, só Node) Runtime do MGR no git → não versionado (padrão, não
+gravado): .mgr-core/runtime/.gitignore ignora a pasta
+.mgr-core/runtime/.gitignore → será gravado (o runtime do MGR fica fora do
+versionamento) agentes → .claude/agents (um agente por intenção; a revisão
 roda no próprio) drafting: mgr-draft claude-code: modelo=herda o modelo da
 sessão esforço=high execution: mgr-task claude-code: modelo=herda o modelo da
 sessão esforço=low review: mgr-review claude-code: modelo=herda o modelo da
@@ -33,16 +36,21 @@ o benefício. leis → .claude/skills/_shared/laws/execution-laws.md (leis de
 execução: fonte única, apontada por toda skill do CORE) preâmbulo de sessão:
 ligado (as leis centrais entram antes da primeira mensagem) Skills instaladas
 em <REPO>/.claude/skills. runtime do MGR gravado em .mgr-core/runtime (50
-arquivos) agente mgr-draft gravado em .claude/agents/mgr-draft.md agente
-mgr-task gravado em .claude/agents/mgr-task.md agente mgr-review gravado em
-.claude/agents/mgr-review.md Nenhum modelo gravado para: drafting, execution,
-review. Esses agentes herdam o modelo da sessão. Para declarar: `mgr agents
-set <intenção> --model <id>` (ou a skill configure-agents). Origem do projeto
-não gravada: o revisor a trata como desconhecida. Para gravar: `mgr origin set
-greenfield|brownfield` (o spec-init também pergunta). hooks gravados em
-.claude/settings.local.json: SessionStart · PreCompact arquivos pessoais do
-MGR ignorados em .gitignore (bloco gerenciado) Pronto! Comece com /spec-init e
-depois /spec-create por feature.
+arquivos) .mgr-core/runtime/.gitignore gravado: o runtime do MGR está fora do
+versionamento Runtime do MGR no git → não versionado (padrão aplicado sem
+pergunta; não gravado). Para gravar uma escolha: mgr runtime-versioning set
+versioned|unversioned agente mgr-draft gravado em .claude/agents/mgr-draft.md
+agente mgr-task gravado em .claude/agents/mgr-task.md agente mgr-review
+gravado em .claude/agents/mgr-review.md Nenhum modelo gravado para: drafting,
+execution, review. Esses agentes herdam o modelo da sessão. Para declarar:
+`mgr agents set <intenção> --model <id>` (ou a skill configure-agents). Origem
+do projeto não gravada: o revisor a trata como desconhecida. Para gravar: `mgr
+origin set greenfield|brownfield` (o spec-init também pergunta). hooks
+gravados em .claude/settings.local.json: SessionStart · PreCompact arquivos
+pessoais do MGR ignorados em .gitignore (bloco gerenciado) git: conferindo se
+.mgr-core/runtime está no índice (git ls-files, só leitura) git: não é um
+repositório git, ou o git não está disponível; conferência pulada Pronto!
+Comece com /spec-init e depois /spec-create por feature.
 
 $ mgr status <REPO>
 [project] MGR v<VERSION> — claude-code — self-contained-core-runtime projeto:
@@ -57,4 +65,12 @@ modelo da sessão esforço=max leis: preâmbulo de sessão: ligado (as leis
 centrais entram antes da primeira mensagem) em: <TS>
 
 $ mgr update <REPO>
-Re-sincronizado (project): 8 skills em <REPO>/.claude/skills.
+Novidade da v<VERSION>: você escolhe se o runtime do MGR (.mgr-core/runtime/)
+vai para o git; o padrão é não versionar. Runtime do MGR no git → não
+versionado (padrão, não gravado): .mgr-core/runtime/.gitignore ignora a pasta
+Runtime do MGR no git → não versionado (padrão aplicado sem pergunta; não
+gravado). Para gravar uma escolha: mgr runtime-versioning set
+versioned|unversioned Re-sincronizado (project): 8 skills em
+<REPO>/.claude/skills. git: conferindo se .mgr-core/runtime está no índice
+(git ls-files, só leitura) git: não é um repositório git, ou o git não está
+disponível; conferência pulada

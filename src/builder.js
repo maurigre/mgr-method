@@ -2,6 +2,7 @@
 // Modelo autossuficiente por motor: o conteúdo completo das skills é escrito DIRETO na pasta
 // do motor (.claude/skills ou .github/skills). Sem lançadores; o runtime é uma cópia única em
 // `.mgr-core/runtime/` (ADR-0025), e cada motor pode ser removido sem afetar o outro nem o runtime.
+import { Buffer } from "node:buffer";
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import * as bundle from "./bundle.js";
@@ -148,7 +149,18 @@ export function installEngine(engineSkillsDir, skills, { archRulesRef, lawsRules
 
 // Copia o runtime legível para o diretório final recebido (`.mgr-core/runtime/`): árvore espelhada
 // com um package.json gerado, sem `name`. A raiz do pacote vem de `bundle.pkgDir`.
-export function installRuntime(dir, { version }) {
+// `ignoreFile` é união discriminada (DT-4): "write" grava o `.gitignore` do runtime como ÚLTIMA
+// escrita; "omit" não o grava. Valor fora disso lança antes de tocar em disco.
+const IGNORE_FILE_VALUES = ["write", "omit"];
+
+function exigirIgnoreFile(origem, ignoreFile) {
+  if (!IGNORE_FILE_VALUES.includes(ignoreFile)) {
+    throw new Error(`${origem}: ignoreFile must be "write" or "omit", got ${String(ignoreFile)}`);
+  }
+}
+
+export function installRuntime(dir, { version, ignoreFile }) {
+  exigirIgnoreFile("installRuntime", ignoreFile);
   const pkgRoot = path.dirname(bundle.pkgDir("src"));
   rmSync(dir, { recursive: true, force: true });
   for (const rel of catalog.RUNTIME_FILES) {
@@ -158,7 +170,56 @@ export function installRuntime(dir, { version }) {
   }
   const manifest = { private: true, type: "module", version };
   writeFileSync(path.join(dir, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  if (ignoreFile === "write") writeRuntimeIgnore(dir);
   return { dir, files: catalog.RUNTIME_FILES.length + 1 };
+}
+
+// Arquivo de ignorar aninhado do runtime (DT-4): a pasta inteira fica fora do git quando gravado.
+const runtimeIgnorePath = (dir) => path.join(dir, catalog.RUNTIME_IGNORE_FILE);
+
+// Grava o conteúdo fixo da §4.4 e devolve o caminho escrito.
+export function writeRuntimeIgnore(dir) {
+  const file = runtimeIgnorePath(dir);
+  writeFileSync(file, catalog.RUNTIME_IGNORE_CONTENT, "utf8");
+  return file;
+}
+
+// Remove o arquivo de ignorar, se existir. `force` evita erro na ausência; a checagem prévia
+// é o que distingue "removed" de "absent" para a borda imprimir a linha certa.
+export function removeRuntimeIgnore(dir) {
+  const file = runtimeIgnorePath(dir);
+  const outcome = existsSync(file) ? "removed" : "absent";
+  rmSync(file, { force: true });
+  return { outcome };
+}
+
+// Estado do arquivo de ignorar em relação ao texto da §4.4. Comparação byte a byte: um arquivo
+// editado à mão, mesmo que quase igual, é "outdated".
+export function runtimeIgnoreState(dir) {
+  if (!existsSync(dir)) return "no-runtime";
+  const file = runtimeIgnorePath(dir);
+  if (!existsSync(file)) return "absent";
+  const atual = readFileSync(file);
+  return atual.equals(Buffer.from(catalog.RUNTIME_IGNORE_CONTENT, "utf8")) ? "current" : "outdated";
+}
+
+// Efeito sobre o arquivo de ignorar, pela tabela da DT-4. Pura: a borda só consulta e executa.
+export function runtimeIgnoreEffect({ state, ignoreFile }) {
+  exigirIgnoreFile("runtimeIgnoreEffect", ignoreFile);
+  if (ignoreFile === "write") {
+    if (state === "outdated") return "rewrite";
+    if (state === "current") return "none";
+    return "write";
+  }
+  if (state === "current" || state === "outdated") return "remove";
+  return "none";
+}
+
+// DES-2: a escolha do time vira a instrução ao instalador. Pura; valor fora do enum lança.
+export function runtimeIgnoreFileFor(value) {
+  if (value === "unversioned") return "write";
+  if (value === "versioned") return "omit";
+  throw new Error(`runtimeIgnoreFileFor: value must be ${catalog.RUNTIME_VERSIONING.join(" | ")}, got ${String(value)}`);
 }
 
 // Marcador de posse no arquivo do agente. `.claude/agents/` e `.github/agents/` são diretórios

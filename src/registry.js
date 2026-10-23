@@ -6,7 +6,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { EFFORT_LEVELS, parseSkillName } from "./plugin.js";
-import { AGENTS, INHERIT, INTENTS, LAWS_SHARED } from "./catalog.js";
+import { AGENTS, INHERIT, INTENTS, LAWS_SHARED, RUNTIME_VERSIONING } from "./catalog.js";
 import * as engines from "./engines/index.js";
 
 export const CONFIG_NAME = "config.json";
@@ -275,6 +275,34 @@ export function writeOrigin(coreDir, valor) {
   return { antes, depois: valor };
 }
 
+// Escolha do time sobre versionar o runtime (DT-1, DT-2). Read-modify-write, como a origem: o que
+// esta na config e preservado. Ausente e um estado proprio, e nao ha terceiro valor gravavel.
+export function runtimeVersioningOf(config) {
+  const value = config.runtimeVersioning;
+  if (value === undefined) return { state: "absent" };
+  return RUNTIME_VERSIONING.includes(value) ? { state: "recorded", value } : { state: "invalid", value };
+}
+
+export function readRuntimeVersioning(coreDir) {
+  return runtimeVersioningOf(readConfig(coreDir));
+}
+
+// Valida ANTES de ler ou gravar. O `antes` tem a mesma forma do `writeOrigin`.
+export function writeRuntimeVersioning(coreDir, value) {
+  if (!RUNTIME_VERSIONING.includes(value)) {
+    throw new Error(`unknown runtime versioning: ${JSON.stringify(value)} (expected ${RUNTIME_VERSIONING.join(" | ")})`);
+  }
+  const config = readConfig(coreDir);
+  const atual = runtimeVersioningOf(config);
+  const antes = atual.state === "absent"
+    ? { estado: "ausente" }
+    : atual.state === "recorded"
+      ? { estado: "gravado", valor: atual.value }
+      : { estado: "invalido", valor: atual.value };
+  writeConfig(coreDir, { ...config, runtimeVersioning: value });
+  return { antes, depois: value };
+}
+
 // De onde veio cada valor da política: o que o autor escreveu, ou o default do catálogo.
 //
 // Existe porque a saída do `mgr agents` tem de dizer a ORIGEM, não só o valor — sem isso o autor
@@ -408,6 +436,7 @@ export function readLawsPreamble(coreDir) {
 export const PERSONAL_KEYS = Object.freeze(["projectId", "initials"]);
 export const TEAM_KEYS = Object.freeze([
   "agents", "reviewGate", "origin", "registries", "detectionMode", "lawsPreamble", "architecture", "language", "userLanguage",
+  "runtimeVersioning",
 ]);
 
 const localConfigPath = (coreDir) => path.join(coreDir, LOCAL_CONFIG_NAME);

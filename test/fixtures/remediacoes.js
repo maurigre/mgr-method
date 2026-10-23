@@ -33,6 +33,8 @@ import {
   alterarCorpoEmShared,
   apagarRuntime,
   alterarVersaoDoRuntime,
+  caminhoDoRuntime,
+  removerArquivoDoRuntime,
 } from "./instalacao.js";
 import { diagnose } from "../../src/doctor.js";
 import * as catalog from "../../src/catalog.js";
@@ -387,6 +389,13 @@ function copiaComoOrfa(repo, nome) {
   return destino;
 }
 
+// Grava a escolha do time no config do core, preservando as outras chaves (o `valor` pode ser invalido de proposito).
+function gravaRuntimeVersioning(repo, valor) {
+  const config = path.join(repo, ".mgr-core", "config.json");
+  const atual = existsSync(config) ? JSON.parse(readFileSync(config, "utf8")) : {};
+  writeFileSync(config, JSON.stringify({ ...atual, runtimeVersioning: valor }, null, 2), "utf8");
+}
+
 // Poe `# mgr-managed-skill: <nome>` como ultima linha do frontmatter, em texto literal (nao importa o
 // `markSkill` do src: planta que usa o codigo sob prova confirma o codigo com ele mesmo).
 function marcaLiteral(arquivo, nome) {
@@ -700,5 +709,39 @@ export const casosDeTeste = [
     identifica: (achado) =>
       achado.check === "runtime-version" &&
       achado.severity === "warning",
+  },
+  {
+    id: "runtime-versioning",
+    condicao: "nao-versionado-sem-arquivo",
+    planta: (repo) => {
+      removerArquivoDoRuntime(repo, catalog.RUNTIME_IGNORE_FILE);
+    },
+    identifica: (achado) =>
+      achado.check === "runtime-versioning" &&
+      achado.severity === "defect" &&
+      achado.file.endsWith(`/${catalog.RUNTIME_IGNORE_FILE}`),
+  },
+  {
+    id: "runtime-versioning",
+    condicao: "versionado-com-arquivo",
+    planta: (repo) => {
+      gravaRuntimeVersioning(repo, "versioned");
+      writeFileSync(caminhoDoRuntime(repo, catalog.RUNTIME_IGNORE_FILE), catalog.RUNTIME_IGNORE_CONTENT, "utf8");
+    },
+    identifica: (achado) =>
+      achado.check === "runtime-versioning" &&
+      achado.severity === "defect" &&
+      achado.file.endsWith(`/${catalog.RUNTIME_IGNORE_FILE}`),
+  },
+  {
+    id: "runtime-versioning",
+    condicao: "valor-invalido",
+    planta: (repo) => {
+      gravaRuntimeVersioning(repo, "Versioned");
+    },
+    identifica: (achado) =>
+      achado.check === "runtime-versioning" &&
+      achado.severity === "defect" &&
+      achado.file.endsWith("/config.json"),
   },
 ];

@@ -11,9 +11,9 @@ import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import * as bundle from "./bundle.js";
-import { installAgents, installEngine, installRuntime, isOurAgent, isOurSkill, lockedDirsOf, orphanClass } from "./builder.js";
+import { installAgents, installEngine, installRuntime, isOurAgent, isOurSkill, lockedDirsOf, orphanClass, runtimeIgnoreFileFor } from "./builder.js";
 import * as engineDescriptors from "./engines/index.js";
-import { previewAgents, readAgents, readPersonal, writeAgentPolicy, writeOrigin, writePersonal } from "./registry.js";
+import { previewAgents, readAgents, readPersonal, readRuntimeVersioning, writeAgentPolicy, writeOrigin, writePersonal, writeRuntimeVersioning } from "./registry.js";
 import { readManifest, writeManifest, writeEnv, readEnvProjectId, MODEL_RUNTIME, MODEL_LAYERED, MODEL_CORE_RUNTIME } from "./manifest.js";
 import * as catalog from "./catalog.js";
 
@@ -118,7 +118,7 @@ export function resolveProjectId({ flag, coreDir: core, prior, repo }) {
 }
 
 export function planInstall(engines, scope, repo, opts = {}) {
-  const { skillsDir = null, language = null, architecture = null, userLanguage = null, optional = [], all = false, names = null, projectId = null, replaced = {}, models = {}, origin = null } = opts;
+  const { skillsDir = null, language = null, architecture = null, userLanguage = null, optional = [], all = false, names = null, projectId = null, replaced = {}, models = {}, origin = null, runtimeVersioning = null } = opts;
   const skills = names || (all ? bundle.skillNames() : catalog.selectSkills({ language, architecture, optional }));
   // Skill substituída por plugin sai do conjunto DAQUELE motor (ADR-0008): sem isso o
   // instalador escreveria a skill do método para o restore sobrescrever logo em seguida,
@@ -143,11 +143,30 @@ export function planInstall(engines, scope, repo, opts = {}) {
   //
   // `previewAgents` sobrepõe as respostas de modelo em memória: o plano mostra o que `execute` gravará.
   const agents = previewAgents(coreDir(scope, repo), models);
-  return {
+  const base = {
     engines: skillsDir ? ["custom"] : engines, scope, repo, targets, skills, replaced, language, architecture, userLanguage,
     projectId: pid, agents, answers: { models, origin }, optional, all,
     legacyRuntime: legacyRuntimeDirs({ prior, targets, scope, repo }),
   };
+  return withRuntimeVersioning(base, runtimeVersioning);
+}
+
+// DT-3: a escolha efetiva tem uma unica resolucao. `recorded` e o retorno de `runtimeVersioningOf`;
+// o estado `invalid` nunca chega aqui (recusado antes, DT-11).
+export function resolveRuntimeVersioning({ scope, answered, recorded }) {
+  if (scope === "global") return { source: "not-applicable" };
+  if (answered) return { source: "answered", value: answered };
+  if (recorded?.state === "recorded") return { source: "recorded", value: recorded.value };
+  return { source: "default", value: catalog.RUNTIME_VERSIONING_DEFAULT };
+}
+
+// DT-3: devolve um plano NOVO (DES-8) com a escolha resolvida e o efeito no arquivo de ignorar.
+export function withRuntimeVersioning(plan, answered) {
+  const recorded = readRuntimeVersioning(coreDir(plan.scope, plan.repo));
+  const resolved = resolveRuntimeVersioning({ scope: plan.scope, answered: answered ?? null, recorded });
+  // Escopo global resolve para `not-applicable`, sem valor: o arquivo nunca e gravado la (RN-1).
+  const runtimeIgnore = resolved.source === "not-applicable" ? "omit" : runtimeIgnoreFileFor(resolved.value);
+  return { ...plan, runtimeVersioning: resolved, runtimeIgnore };
 }
 
 // Migra do modelo antigo (runtime-launcher): remove lançadores e o conteúdo de skills/shared
@@ -196,6 +215,7 @@ export function execute(plan, { abandoned = [], remove = rmSync } = {}) {
     if (Object.keys(model ?? {}).length) writeAgentPolicy(core, intent, { model });
   }
   if (origin) writeOrigin(core, origin);
+  if (plan.runtimeVersioning?.source === "answered") writeRuntimeVersioning(core, plan.runtimeVersioning.value);
   // Ordem da spec §3: config do time -> camada pessoal -> skills/runtime/agentes -> manifesto -> .env.
   // projectId é pessoal (DT-1): vai para config.local.json; o manifesto não o grava mais.
   writePersonal(core, { projectId: plan.projectId });
@@ -208,7 +228,7 @@ export function execute(plan, { abandoned = [], remove = rmSync } = {}) {
   const agentChanges = [];
   const gateWarnings = [];
   // Uma cópia só, antes do laço: nenhuma SKILL.md reescrita aponta para um runtime que ainda não existe.
-  const runtime = installRuntime(runtimeDir(plan.scope, plan.repo), { version: bundle.readVersion() });
+  const runtime = installRuntime(runtimeDir(plan.scope, plan.repo), { version: bundle.readVersion(), ignoreFile: plan.runtimeIgnore });
   for (const t of plan.targets) {
     const ref = t.engine === "custom" ? undefined : archRulesRef(t.dir, plan.scope, plan.repo);
     const engineId = t.engine === "custom" ? undefined : t.engine;
@@ -518,8 +538,9 @@ export function uninstall(scope, repo) {
 }
 
 // O PLANO do update: nada é escrito aqui (o consentimento da borda vem entre o plano e a execução).
-// `lockfile` chega já lido. `models` vazio e `origin` nulo: o update não pergunta nenhum dos dois, e
-// com isso o `execute` não reescreve o `config.json` do time.
+// `lockfile` chega já lido. `models` vazio e `origin` nulo: o update não pergunta nenhum dos dois. O
+// `config.json` do time só é escrito quando a pessoa responde, num terminal, à escolha do runtime
+// (DT-6): `applyUpdate` recebe a resposta e o `execute` grava só a fonte `answered`.
 export function planUpdate(scope, repo, { replaced = {}, lockfile = null, projectId = null } = {}) {
   const prior = readManifest(coreDir(scope, repo));
   if (!prior) throw new Error("nenhuma instalação MGR encontrada — rode `mgr install` antes");
@@ -566,9 +587,9 @@ export function planUpdate(scope, repo, { replaced = {}, lockfile = null, projec
 // Executa o plano JÁ DECIDIDO pelo chamador: `aRemover` e `mantidas` vêm do consentimento item a item.
 // A ordem (remover antes de gravar o manifesto) é a do `execute`. `mantidas` sem fonte neste pacote
 // saem do conjunto e voltam em `semFonte`, para a borda anunciar.
-export function applyUpdate(planned, { aRemover = [], mantidas = [], remove = rmSync, skipEntering = [] } = {}) {
+export function applyUpdate(planned, { aRemover = [], mantidas = [], remove = rmSync, skipEntering = [], runtimeVersioning = null } = {}) {
   const { mantidas: mantem, semFonte } = splitKept(mantidas);
-  const kept = keepDeclared(planned.plan, mantem);
+  const kept = withRuntimeVersioning(keepDeclared(planned.plan, mantem), runtimeVersioning);
   // Substituicao recusada ou bloqueada: o nome sai do plano ANTES do `execute`, para a pasta do
   // usuario ficar intacta e a skill nao ser declarada.
   const skip = new Set(skipEntering);

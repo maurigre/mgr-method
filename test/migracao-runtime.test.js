@@ -504,7 +504,8 @@ test("should list the team-ignored line of .gitignore and add no other .gitignor
     const out = stripVTControlCharacters(run.stdout + run.stderr);
     const corrido = (texto) => texto.replace(/[│┌└┐┘─╮╯╭╰◇◆]/g, " ").replace(/\s+/g, " ");
     assert.ok(corrido(out).includes(corrido(getMessages("en").gitignoreTeamIgnored(".mgr-core/"))), out);
-    assert.equal(out.split("\n").some((linha) => linha.includes(".gitignore") && /runtime/i.test(linha)), false, out);
+    const semAninhado = (linha) => linha.replaceAll(".mgr-core/runtime/.gitignore", "");
+    assert.equal(out.split("\n").some((linha) => semAninhado(linha).includes(".gitignore") && /runtime/i.test(linha)), false, out);
     for (const lang of ["en", "pt-BR"]) {
       const m = getMessages(lang);
       const textos = [m.runtimeRelocated("v", "d"), m.legacyRuntimeToRemove("d"), m.legacyRuntimeRemoved("d"), m.legacyRuntimeKept("d")];

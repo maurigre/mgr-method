@@ -101,7 +101,7 @@ test("should refuse an empty or non-string projectId on read and on write", () =
 test("should fix the team and personal key lists of DT-2", () => {
   assert.deepEqual([...PERSONAL_KEYS], ["projectId", "initials"]);
   assert.deepEqual([...TEAM_KEYS].sort(), [
-    "agents", "architecture", "detectionMode", "language", "lawsPreamble", "origin", "registries", "reviewGate", "userLanguage",
+    "agents", "architecture", "detectionMode", "language", "lawsPreamble", "origin", "registries", "reviewGate", "runtimeVersioning", "userLanguage",
   ]);
 });
 

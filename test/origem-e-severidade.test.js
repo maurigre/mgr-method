@@ -143,13 +143,13 @@ test("negativo: com config existente e sem origem, o update nao acrescenta a cha
   }
 });
 
-test("a origem ausente nao muda o doctor: 11 verificacoes e o mesmo exit code", () => {
+test("a origem ausente nao muda o doctor: 12 verificacoes e o mesmo exit code", () => {
   const repo = repoTemporario();
   try {
     instala(repo, "--arch", "hexagonal");
     const r = cli(["doctor", repo], repo);
     assert.equal(r.code, 0);
-    assert.match(r.out, /11 checks/);
+    assert.match(r.out, /12 checks/);
   } finally {
     rmSync(repo, { recursive: true, force: true });
   }

@@ -150,6 +150,13 @@ export const RUNTIME_FILES = [
   "src/spec-validator.js",
 ];
 
+// Escolha do time sobre versionar o runtime (DT-1, DT-2). Ausente na config vale o padrao.
+export const RUNTIME_VERSIONING = Object.freeze(["versioned", "unversioned"]);
+export const RUNTIME_VERSIONING_DEFAULT = "unversioned";
+// Arquivo de ignorar aninhado, relativo a runtimeDir (DT-4). O texto e o da spec §4.4, com \n no fim.
+export const RUNTIME_IGNORE_FILE = ".gitignore";
+export const RUNTIME_IGNORE_CONTENT = "# mgr-method: derived from runtimeVersioning in .mgr-core/config.json; install and update rewrite this file\n*\n";
+
 // Gate de validação (ADR-0010): a política padrão do agente que revisa. Mora aqui porque o
 // catálogo já é o lugar que sabe coisas SOBRE as skills.
 //

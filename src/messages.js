@@ -374,6 +374,39 @@ const en = ({ invocation, lifecycle }) => ({
   gitignoreTeamIgnored: (line) => `.gitignore line "${line}" ignores the team config (.mgr-core/config.json): the model policy and the origin will not travel with the repository.`,
   gitignoreRemoved: (file) => `managed block removed from ${file}`,
 
+  // §4.2 da spec runtime-fora-do-versionamento: escolha do time sobre versionar o runtime.
+  qRuntimeVersioning: "Version the MGR runtime (.mgr-core/runtime/) with the project?",
+  runtimeUnversionedOption: `no — keep it out of version control (default; ${lifecycle} update restores it)`,
+  runtimeVersionedOption: "yes — commit it with the project",
+  planRuntimeUnversioned: (source) => `MGR runtime in git → not versioned (${source}): .mgr-core/runtime/.gitignore ignores the folder`,
+  planRuntimeVersioned: (source) => `MGR runtime in git → versioned (${source}): no ignore file in .mgr-core/runtime/`,
+  runtimeSourceAnswered: "answered; recorded in .mgr-core/config.json",
+  runtimeSourceRecorded: "recorded in .mgr-core/config.json",
+  runtimeSourceDefault: "default, not recorded",
+  runtimeVersioningNew: (version) => `New in v${version}: you choose whether the MGR runtime (.mgr-core/runtime/) goes to git; the default is not versioned.`,
+  runtimeIgnoreToWrite: (file) => `${file} → will be written (the MGR runtime stays out of version control)`,
+  runtimeIgnoreToRewrite: (file) => `${file} → differs from what the method writes and will be rewritten`,
+  runtimeIgnoreToRemove: (file) => `${file} → will be removed (the team chose to version the MGR runtime)`,
+  runtimeIgnoreWritten: (file) => `${file} written: the MGR runtime is out of version control`,
+  runtimeIgnoreRemoved: (file) => `${file} removed: the next git add includes .mgr-core/runtime/ (the MGR never runs git add)`,
+  runtimeChoiceRecorded: (value) => `MGR runtime in git: ${value} recorded in .mgr-core/config.json`,
+  runtimeDefaultApplied: `MGR runtime in git → not versioned (default applied without asking; not recorded). To record a choice: ${lifecycle} runtime-versioning set versioned|unversioned`,
+  gitIndexChecking: (dir) => `git: checking whether ${dir} is in the index (git ls-files, read only)`,
+  gitIndexListed: (dir, n) => `git: ${dir} has ${n} file(s) in the index`,
+  gitIndexNone: (dir) => `git: ${dir} is not in the index`,
+  gitIndexUnavailable: "git: not a git repository, or git is not available; check skipped",
+  runtimeTracked: (dir) => `${dir} is already versioned: an ignore file does not remove from git what is already there. To stop versioning it without deleting it from disk, run it yourself from the project root: git rm -r --cached ${dir} (the MGR never runs this command)`,
+  rvRecorded: (value) => `MGR runtime in git: ${value} (.mgr-core/config.json)`,
+  rvNotRecorded: `MGR runtime in git: not recorded — the default applies (unversioned). To record: ${lifecycle} runtime-versioning set versioned|unversioned`,
+  rvInvalid: (value) => `MGR runtime in git: invalid value ${value} in .mgr-core/config.json (expected versioned | unversioned)`,
+  rvInvalidRefused: (file, value) => `${file}: runtimeVersioning ${value} is not versioned | unversioned; nothing was written. Fix it with ${lifecycle} runtime-versioning set versioned|unversioned`,
+  rvSetNeedsValue: (valid) => `${lifecycle} runtime-versioning set needs a value (${valid})`,
+  rvUnknown: (value, valid) => `unknown runtime versioning: ${value} (expected ${valid})`,
+  rvNoInstall: (dir) => `no MGR installation in this project (${dir}/manifest.json): the choice exists only in project scope; nothing was written`,
+  rvWriting: (dir) => `Writing the MGR runtime versioning choice to ${dir}/config.json`,
+  rvWritten: (before, after) => `MGR runtime in git: ${before} -> ${after}`,
+  rvRuntimeAbsent: (dir) => `${dir} is not on disk: the next ${lifecycle} update writes it following this choice`,
+
   planInstructions: (file) => `${file} → MGR managed block pointing every session to docs/sdd/CONSTITUTION.md`,
   qInstructionsBlock: (file) => `Add the MGR managed block to ${file} (every session starts pointing to the constitution)?`,
   instructionsWriting: (file) => `writing the MGR managed block to ${file}`,
@@ -443,6 +476,9 @@ Usage: mgr <command> [options]
   origin set       records whether the project was born from the method or is
                    legacy (<greenfield|brownfield>); it does not run ${lifecycle} update
   origin [--json]  reads the recorded origin: recorded, absent or invalid (exit 1)
+  runtime-versioning set  records whether the MGR runtime (.mgr-core/runtime/) goes to git
+                   (<versioned|unversioned>) and applies it to the ignore file now
+  runtime-versioning [--json]  reads the recorded choice: recorded, absent or invalid (exit 1)
   precompact       writes the hand-off before the engine compacts the context
                    (--hook <engine>); called by the hook, not by hand
   tokens           how much the flow consumed: pass the conversation
@@ -825,6 +861,39 @@ const ptBR = ({ invocation, lifecycle }) => ({
   gitignoreTeamIgnored: (line) => `A linha "${line}" do .gitignore ignora a config do time (.mgr-core/config.json): a política de modelo e a origem não vão viajar com o repositório.`,
   gitignoreRemoved: (file) => `bloco gerenciado removido de ${file}`,
 
+  // §4.2 da spec runtime-fora-do-versionamento: escolha do time sobre versionar o runtime.
+  qRuntimeVersioning: "Versionar o runtime do MGR (.mgr-core/runtime/) junto com o projeto?",
+  runtimeUnversionedOption: `não — fica fora do versionamento (padrão; o ${lifecycle} update o restaura)`,
+  runtimeVersionedOption: "sim — vai para o git junto com o projeto",
+  planRuntimeUnversioned: (source) => `Runtime do MGR no git → não versionado (${source}): .mgr-core/runtime/.gitignore ignora a pasta`,
+  planRuntimeVersioned: (source) => `Runtime do MGR no git → versionado (${source}): sem arquivo de ignorar em .mgr-core/runtime/`,
+  runtimeSourceAnswered: "respondido; gravado em .mgr-core/config.json",
+  runtimeSourceRecorded: "gravado em .mgr-core/config.json",
+  runtimeSourceDefault: "padrão, não gravado",
+  runtimeVersioningNew: (version) => `Novidade da v${version}: você escolhe se o runtime do MGR (.mgr-core/runtime/) vai para o git; o padrão é não versionar.`,
+  runtimeIgnoreToWrite: (file) => `${file} → será gravado (o runtime do MGR fica fora do versionamento)`,
+  runtimeIgnoreToRewrite: (file) => `${file} → difere do que o método grava e será reescrito`,
+  runtimeIgnoreToRemove: (file) => `${file} → será removido (o time escolheu versionar o runtime do MGR)`,
+  runtimeIgnoreWritten: (file) => `${file} gravado: o runtime do MGR está fora do versionamento`,
+  runtimeIgnoreRemoved: (file) => `${file} removido: o próximo git add passa a incluir .mgr-core/runtime/ (o MGR nunca roda git add)`,
+  runtimeChoiceRecorded: (value) => `Runtime do MGR no git: ${value} gravado em .mgr-core/config.json`,
+  runtimeDefaultApplied: `Runtime do MGR no git → não versionado (padrão aplicado sem pergunta; não gravado). Para gravar uma escolha: ${lifecycle} runtime-versioning set versioned|unversioned`,
+  gitIndexChecking: (dir) => `git: conferindo se ${dir} está no índice (git ls-files, só leitura)`,
+  gitIndexListed: (dir, n) => `git: ${dir} tem ${n} arquivo(s) no índice`,
+  gitIndexNone: (dir) => `git: ${dir} não está no índice`,
+  gitIndexUnavailable: "git: não é um repositório git, ou o git não está disponível; conferência pulada",
+  runtimeTracked: (dir) => `${dir} já está versionado: arquivo de ignorar não tira do git o que já está lá. Para deixar de versioná-lo sem apagá-lo do disco, rode você mesmo, na raiz do projeto: git rm -r --cached ${dir} (o MGR nunca roda esse comando)`,
+  rvRecorded: (value) => `Runtime do MGR no git: ${value} (.mgr-core/config.json)`,
+  rvNotRecorded: `Runtime do MGR no git: sem registro — vale o padrão (unversioned). Para gravar: ${lifecycle} runtime-versioning set versioned|unversioned`,
+  rvInvalid: (value) => `Runtime do MGR no git: valor inválido ${value} em .mgr-core/config.json (esperado versioned | unversioned)`,
+  rvInvalidRefused: (file, value) => `${file}: runtimeVersioning ${value} não é versioned | unversioned; nada foi gravado. Corrija com ${lifecycle} runtime-versioning set versioned|unversioned`,
+  rvSetNeedsValue: (valid) => `${lifecycle} runtime-versioning set precisa de um valor (${valid})`,
+  rvUnknown: (value, valid) => `versionamento de runtime desconhecido: ${value} (esperado ${valid})`,
+  rvNoInstall: (dir) => `nenhuma instalação MGR neste projeto (${dir}/manifest.json): a escolha só existe no escopo project; nada foi gravado`,
+  rvWriting: (dir) => `Gravando a escolha de versionamento do runtime do MGR em ${dir}/config.json`,
+  rvWritten: (before, after) => `Runtime do MGR no git: ${before} -> ${after}`,
+  rvRuntimeAbsent: (dir) => `${dir} não está em disco: o próximo ${lifecycle} update o grava conforme esta escolha`,
+
   planInstructions: (file) => `${file} → bloco gerenciado do MGR apontando toda sessão para docs/sdd/CONSTITUTION.md`,
   qInstructionsBlock: (file) => `Gravar o bloco gerenciado do MGR em ${file} (toda sessão começa apontando para a constituição)?`,
   instructionsWriting: (file) => `gravando o bloco gerenciado do MGR em ${file}`,
@@ -894,6 +963,9 @@ Uso: mgr <comando> [opções]
   origin set       registra se o projeto nasceu do método ou é legado
                    (<greenfield|brownfield>); não roda o ${lifecycle} update
   origin [--json]  lê a origem gravada: recorded, absent ou invalid (sai 1)
+  runtime-versioning set  registra se o runtime do MGR (.mgr-core/runtime/) vai para o git
+                   (<versioned|unversioned>) e aplica na hora o arquivo de ignorar
+  runtime-versioning [--json]  lê a escolha gravada: recorded, absent ou invalid (sai 1)
   precompact       grava o hand-off antes de o motor compactar o contexto
                    (--hook <motor>); chamado pelo hook, não à mão
   tokens           quanto o fluxo consumiu: passe o transcript da conversa e,

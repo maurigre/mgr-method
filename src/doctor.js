@@ -3,9 +3,10 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import * as bundle from "./bundle.js";
 import * as catalog from "./catalog.js";
 import * as engineDescriptors from "./engines/index.js";
-import { lockedDirsOf, orphanClass, routeReviewSkill } from "./builder.js";
+import { lockedDirsOf, orphanClass, routeReviewSkill, runtimeIgnoreState } from "./builder.js";
 import { diff } from "./lockfile.js";
 import { MODEL_CORE_RUNTIME } from "./manifest.js";
+import { CONFIG_NAME, runtimeVersioningOf } from "./registry.js";
 
 // Verificacoes de integridade da instalacao (U2 do programa de superioridade).
 //
@@ -347,6 +348,50 @@ function runtimeVersion({ dirDoRuntime, dirExists, entryExists, copyVersion, man
   })];
 }
 
+// Valor que `diagnose` usa como escolha quando o `config.json` existe e nao le (DT-10).
+const CONFIG_ILEGIVEL = "config.json ilegivel";
+
+/**
+ * Arquivo de ignorar do runtime contra a escolha do time (DT-10).
+ *
+ * Pura: recebe a escolha ja lida e o estado do arquivo. As tres condicoes sao exclusivas, entao no maximo
+ * um achado. `valor-invalido` nao tem remediacao: o valor e decisao do time, e nenhum comando o escolhe.
+ */
+export function runtimeVersioningCheck({ choice, ignoreState, file, configFile }) {
+  if (choice.state === "invalid") {
+    return [achado({
+      check: "runtime-versioning",
+      severity: DEFECT,
+      file: configFile,
+      expected: "runtimeVersioning: versioned | unversioned, ou ausente",
+      found: choice.value === CONFIG_ILEGIVEL ? CONFIG_ILEGIVEL : `valor ${JSON.stringify(choice.value)}`,
+      fix: NO_FIX,
+    })];
+  }
+  const naoVersionado = choice.state === "absent" || (choice.state === "recorded" && choice.value === "unversioned");
+  if (naoVersionado && ignoreState !== "current") {
+    return [achado({
+      check: "runtime-versioning",
+      severity: DEFECT,
+      file,
+      expected: "o arquivo de ignorar como o metodo o grava (runtimeVersioning: unversioned)",
+      found: ignoreState === "absent" ? "ausente" : "difere do que o metodo grava",
+      fix: FIX_UPDATE,
+    })];
+  }
+  if (choice.state === "recorded" && choice.value === "versioned" && ignoreState !== "absent") {
+    return [achado({
+      check: "runtime-versioning",
+      severity: DEFECT,
+      file,
+      expected: "sem arquivo de ignorar (runtimeVersioning: versioned)",
+      found: "presente",
+      fix: FIX_UPDATE,
+    })];
+  }
+  return [];
+}
+
 // Onde o runtime deve estar, pela geracao que o manifesto declara. Projeto ainda nao migrado segue no
 // layout por motor, sem virar defeito por ter o que ele tem.
 export function runtimeLocations(manifest, repo, arvores) {
@@ -576,6 +621,20 @@ export const CHECKS = [
         condicao: "versao-divergente",
         fix: FIX_UPDATE,
         prova: PROVA_FUNCIONA,
+      },
+    ],
+  },
+  {
+    id: "runtime-versioning",
+    cobre: "arquivo de ignorar do runtime que não corresponde à escolha do time",
+    remediacoes: [
+      { condicao: "nao-versionado-sem-arquivo", fix: FIX_UPDATE, prova: PROVA_FUNCIONA },
+      { condicao: "versionado-com-arquivo", fix: FIX_UPDATE, prova: PROVA_FUNCIONA },
+      {
+        condicao: "valor-invalido",
+        fix: NO_FIX,
+        prova: SEM_REMEDIACAO,
+        razao: "o valor é decisão do time: o comando que o grava precisa de um valor que só o time escolhe, e o guarda de remediação executa a string declarada",
       },
     ],
   },
@@ -955,6 +1014,21 @@ export function diagnose(repo, { packageVersion, sources } = {}) {
         };
       });
     achados.push(...runtimeBodies({ files }));
+  }
+
+  // DT-10: so com as 4 condicoes. O escudo de versao vale como no corpo (`:896`): projeto que nao rodou o
+  // `update` desta versao nao tem o arquivo, e acusa-lo seria alarme falso no caso normal (RN-3).
+  const runtimeDoCore = path.join(coreDir, ...catalog.CORE_RUNTIME_DIR);
+  if (manifesto.model === MODEL_CORE_RUNTIME && manifesto.scope === "project"
+    && existsSync(runtimeDoCore) && manifesto.version === versaoDoPacote) {
+    const configFile = path.join(coreDir, CONFIG_NAME);
+    const configLido = existsSync(configFile) ? leJson(configFile) : {};
+    achados.push(...runtimeVersioningCheck({
+      choice: configLido === null ? { state: "invalid", value: CONFIG_ILEGIVEL } : runtimeVersioningOf(configLido),
+      ignoreState: runtimeIgnoreState(runtimeDoCore),
+      file: path.relative(repo, path.join(runtimeDoCore, catalog.RUNTIME_IGNORE_FILE)),
+      configFile: path.relative(repo, configFile),
+    }));
   }
 
   const arquivoDeHook = path.join(repo, ".claude", "settings.local.json");

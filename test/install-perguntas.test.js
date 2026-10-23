@@ -42,7 +42,7 @@ test("should offer the documented claude-code models plus other and skip with sk
     ["sonnet", "opus", "haiku", "fable", "other", "skip"],
   );
   assert.equal(modelo.initialValue, "skip");
-  for (const chamada of chamadas.filter((c) => c.message !== msg.qOrigin)) {
+  for (const chamada of chamadas.filter((c) => ![msg.qOrigin, msg.qRuntimeVersioning].includes(c.message))) {
     assert.equal(chamada.initialValue, "skip", chamada.message);
   }
 });

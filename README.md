@@ -90,10 +90,24 @@ own content outside the block is kept byte for byte, and writing it again never 
 constitution stays in `docs/sdd/`. When an engine leaves the installation its block is kept and
 announced; `uninstall` removes the block and deletes the file only if nothing else was in it.
 
+> **Runtime in git: your team's choice (ADR-0028).** In project scope, `install` asks whether the runtime
+> goes to git; the default is **not versioned**, and `-y` or no terminal applies the default without
+> recording it. Not versioned means a `.gitignore` inside `.mgr-core/runtime/` that ignores the folder; the
+> root `.gitignore` is not touched. The choice is recorded in `.mgr-core/config.json` and can be revised
+> at any time with `mgr runtime-versioning set versioned|unversioned` (`mgr runtime-versioning` reads it).
+> If the runtime is already in the index, the MGR only reads git (`git ls-files`) and shows
+> `git rm -r --cached .mgr-core/runtime` for you to run; it never runs git commands that write. With the
+> runtime not versioned, SonarQube, in its default behavior, leaves it out of the analysis: "Your SonarQube
+> analysis will automatically exclude files that are ignored by your source code control system"
+> ([SonarQube Server 2026.4](https://docs.sonarsource.com/sonarqube-server/2026.4/project-administration/adjusting-analysis/setting-analysis-scope/other-adjustments),
+> consulted on 2026-10-21). A fresh clone comes without the runtime: run `update` before the skills.
+> In a project with no recorded choice, `update` announces the choice; in a terminal it asks and records
+> the answer in `.mgr-core/config.json`, and with `-y` or no terminal it applies the default without
+> recording it. A `runtimeVersioning` value other than `versioned` or `unversioned` in that file makes
+> `install` and `update` exit 1 before writing anything.
+
 > **One runtime per scope (ADR-0025).** The runtime lives in `.mgr-core/runtime/`, one copy shared by
-> every engine and by the `--skills-dir` folder (in global scope, `~/.mgr-core/runtime/`). It travels
-> with the versioned `.mgr-core/`, because the managed block only ignores the personal layer. If your
-> project's lint, tests or typecheck scan that folder, you may need to ignore it (`.mgr-core/runtime/**`).
+> every engine and by the `--skills-dir` folder (in global scope, `~/.mgr-core/runtime/`).
 > Installations in the previous layout (`<engine>/skills/_shared/mgr/`) are migrated by `install` and
 > `update`, announced first; the old copy is removed only from the folders the plan reinstalls.
 > The skills call the runtime by explicit path. If it is missing, they **stop** and show the restore
@@ -210,6 +224,7 @@ exists without a row here, or a row without a check, fails the build.
 | `broken-hook` | absolute path in `settings.local.json` |
 | `lockfile-drift` | `lockfile.diff()` |
 | `missing-shared` | the `_shared/` sources the installed set requires, against the disk |
+| `runtime-versioning` | the runtime ignore file `.mgr-core/runtime/.gitignore` against the team's choice in `.mgr-core/config.json` (not versioned without the file, or versioned with it → defect; invalid value → defect without automatic fix); only with the manifest at the package version |
 | `runtime-version` | the project runtime `.mgr-core/runtime/` (in the previous layout, `<engine>/skills/_shared/mgr/`) and its generated `package.json` against the manifest (missing → defect; other version → warning); each runtime file's body is checked by `divergent-body` |
 
 

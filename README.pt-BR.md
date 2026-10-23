@@ -94,10 +94,24 @@ seu conteúdo fora do bloco fica byte a byte, e gravar de novo nunca o duplica. 
 `docs/sdd/`. Quando um motor sai da instalação, o bloco dele fica e é anunciado; o `uninstall` remove o
 bloco e só apaga o arquivo se não havia mais nada nele.
 
+> **Runtime no git: escolha do time (ADR-0028).** No escopo project, o `install` pergunta se o runtime vai
+> para o git; o padrão é **não versionado**, e `-y` ou a falta de terminal aplicam o padrão sem gravá-lo.
+> Não versionado é um `.gitignore` dentro de `.mgr-core/runtime/` que ignora a pasta; o `.gitignore` da
+> raiz não é tocado. A escolha fica gravada em `.mgr-core/config.json` e pode ser revista a qualquer
+> momento com `mgr runtime-versioning set versioned|unversioned` (`mgr runtime-versioning` a lê). Se o
+> runtime já estiver no índice, o MGR só lê o git (`git ls-files`) e mostra
+> `git rm -r --cached .mgr-core/runtime` para você rodar; ele nunca roda comando git que escreva. Com o
+> runtime não versionado, o SonarQube, no comportamento padrão, o deixa fora da análise: "Your SonarQube analysis will
+> automatically exclude files that are ignored by your source code control system"
+> ([SonarQube Server 2026.4](https://docs.sonarsource.com/sonarqube-server/2026.4/project-administration/adjusting-analysis/setting-analysis-scope/other-adjustments),
+> consultada em 2026-10-21). Um clone novo chega sem o runtime: rode o `update` antes das skills.
+> Num projeto sem escolha gravada, o `update` anuncia a escolha; num terminal ele pergunta e grava a
+> resposta em `.mgr-core/config.json`, e com `-y` ou sem terminal aplica o padrão sem gravá-lo. Um
+> `runtimeVersioning` diferente de `versioned` e `unversioned` nesse arquivo faz o `install` e o `update`
+> saírem com 1 antes de escrever qualquer coisa.
+
 > **Um runtime por escopo (ADR-0025).** O runtime mora em `.mgr-core/runtime/`, uma cópia compartilhada
-> por todos os motores e pela pasta do `--skills-dir` (no escopo global, `~/.mgr-core/runtime/`). Ele viaja
-> com o `.mgr-core/` versionado, porque o bloco gerenciado só ignora a camada pessoal. Se o lint, os testes
-> ou o typecheck do seu projeto varrerem essa pasta, pode ser preciso ignorá-la (`.mgr-core/runtime/**`).
+> por todos os motores e pela pasta do `--skills-dir` (no escopo global, `~/.mgr-core/runtime/`).
 > Instalações no layout anterior (`<motor>/skills/_shared/mgr/`) são migradas pelo `install` e pelo
 > `update`, com anúncio antes; a cópia antiga só sai das pastas que o plano reinstala.
 > As skills chamam o runtime por caminho explícito. Se ele faltar, elas **param** e mostram o comando
@@ -214,6 +228,7 @@ linha aqui, ou linha sem verificação, quebra o build.
 | `broken-hook` | caminho absoluto em `settings.local.json` |
 | `lockfile-drift` | `lockfile.diff()` |
 | `missing-shared` | as fontes de `_shared/` que o conjunto instalado exige, contra o disco |
+| `runtime-versioning` | o arquivo de ignorar do runtime `.mgr-core/runtime/.gitignore` contra a escolha do time em `.mgr-core/config.json` (não versionado sem o arquivo, ou versionado com ele → defeito; valor inválido → defeito sem correção automática); só com o manifesto na versão do pacote |
 | `runtime-version` | o runtime do projeto `.mgr-core/runtime/` (no layout anterior, `<motor>/skills/_shared/mgr/`) e o seu `package.json` gerado contra o manifesto (ausente → defeito; outra versão → aviso); o corpo de cada arquivo do runtime é conferido por `divergent-body` |
 
 

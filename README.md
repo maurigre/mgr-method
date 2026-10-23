@@ -29,6 +29,13 @@ default answer of both is **skip**, and **no model is ever suggested**. `--model
 `--model-execution` and `--model-review` answer the first without a terminal (a bare value when one engine
 takes a model; `engine=id[,engine=id]` when two do), and `--origin greenfield|brownfield` answers the second.
 
+When a chosen engine takes an effort per agent (today, claude-code), the install also asks the
+**effort** of each intent, once per intent, with **skip** preselected: skipping keeps the catalog default
+(`drafting` high, `execution` low, `review` max) and writes nothing. Without a terminal,
+`--effort-drafting`, `--effort-execution` and `--effort-review` take `low|medium|high|xhigh|max|inherit`
+(ADR-0030). The install refuses, before writing anything, a bare `--effort` or `--model` (they belong to
+`agents set`), a level outside that list, and an effort flag when no chosen engine takes an effort.
+
 Installation is **selective**: the TUI asks for the engines, the scope, the project's
 **programming language** and **architecture**, the **output language** (the language the
 skills use to talk to you and to generate artifacts — suggested from your locale), and an
@@ -47,6 +54,7 @@ npx mgr-method install --user-language pt-BR .   # skills talk and generate arti
 npx mgr-method install --all-skills .            # installs every skill (no selection)
 npx mgr-method install --engine claude-code --model-review <id> --origin brownfield .   # one engine: bare value
 npx mgr-method install --engine claude-code,copilot --model-drafting claude-code=<id>,copilot=<id> .
+npx mgr-method install --engine claude-code --effort-execution medium --effort-review max .
 npx mgr-method install --dry-run
 npx mgr-method status | update | uninstall
 npx mgr-method origin set brownfield   # records the project origin; it calibrates review severity

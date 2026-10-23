@@ -25,6 +25,9 @@ export function parseArgs(argv, { engines }) {
     else if (a === "--out") flags.out = argv[++i];
     else if (a === "--model") flags.model = argv[++i];
     else if (a === "--effort") flags.effort = argv[++i];
+    else if (a === "--effort-drafting") flags.effortDrafting = argv[++i];
+    else if (a === "--effort-execution") flags.effortExecution = argv[++i];
+    else if (a === "--effort-review") flags.effortReview = argv[++i];
     else if (a === "--model-drafting") flags.modelDrafting = argv[++i];
     else if (a === "--model-execution") flags.modelExecution = argv[++i];
     else if (a === "--model-review") flags.modelReview = argv[++i];
@@ -76,4 +79,50 @@ export function resolveModelFlags(flags, { engines, supportsModel }) {
     models[intent] = porMotor;
   }
   return { ok: true, models };
+}
+
+// Intenção de cada flag de esforço do install (DT-2), na mesma ordem das flags de modelo.
+const EFFORT_FLAG_INTENTS = [
+  ["effortDrafting", "drafting"],
+  ["effortExecution", "execution"],
+  ["effortReview", "review"],
+];
+
+// Função pura, sem motor: roda antes das perguntas. A presença é a da chave (`Object.hasOwn`), e não o
+// valor: a flag sem valor no fim da linha cria a chave com `undefined` e tem de ser recusada, não ignorada.
+export function checkEffortFlags(flags, { levels }) {
+  if (Object.hasOwn(flags, "effort")) return { ok: false, reason: "bare-effort" };
+  const efforts = {};
+  for (const [flagName, intent] of EFFORT_FLAG_INTENTS) {
+    if (!Object.hasOwn(flags, flagName)) continue;
+    const value = flags[flagName];
+    if (!levels.includes(value)) {
+      const raw = value === undefined ? "" : value;
+      return { ok: false, reason: "invalid-level", intent, value: raw };
+    }
+    efforts[intent] = value;
+  }
+  return { ok: true, efforts };
+}
+
+// Autoritativa: repete checkEffortFlags e exige um motor escolhido que sustente esforço. Só a intenção
+// declarada entra na recusa, e a primeira na ordem de EFFORT_FLAG_INTENTS é a que aparece.
+export function resolveEffortFlags(flags, { engines, supportsEffort, levels }) {
+  const checked = checkEffortFlags(flags, { levels });
+  if (!checked.ok) return checked;
+  const intent = EFFORT_FLAG_INTENTS.find(([, name]) => Object.hasOwn(checked.efforts, name))?.[1];
+  if (intent !== undefined && engines.filter(supportsEffort).length === 0) {
+    return { ok: false, reason: "no-effort-engine", intent };
+  }
+  return { ok: true, efforts: checked.efforts };
+}
+
+// Flag vence a pergunta (RN-4): a intenção declarada por flag substitui a respondida no terminal.
+export function mergeEfforts(answered, declared) {
+  return { ...answered, ...declared };
+}
+
+// `--model` é do `agents set`; no install ele seria ignorado em silêncio (DT-10). Presença por chave.
+export function checkBareModelFlag(flags) {
+  return Object.hasOwn(flags, "model") ? { ok: false, reason: "bare-model" } : { ok: true };
 }

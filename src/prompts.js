@@ -6,6 +6,7 @@ import * as catalog from "./catalog.js";
 import * as engines from "./engines/index.js";
 import { CONFIGURED } from "./registry.js";
 import { getMessages } from "./messages.js";
+import { EFFORT_LEVELS } from "./plugin.js";
 
 export const CANCELLED = Symbol("cancelled");
 
@@ -37,7 +38,9 @@ export function detectUserLanguage(env = {}) {
 // runtimeVersioningRecorded: a escolha do runtime já está no config — não é perguntada (DT-5)
 // enabledIntents: intenções LIGADAS (DT-7); desligada não é perguntada (default: todas)
 // flagModels: `{ [intent]: { [engine]: id } }` já dado por flag — não é perguntado
-// Devolve `models: { [intent]: { [engine]: id } }` (só o que foi respondido), `origin`
+// flagEfforts: `{ [intent]: nível }` já dado por flag — não é perguntado
+// Devolve `models: { [intent]: { [engine]: id } }` (só o que foi respondido),
+// `efforts: { [intent]: nível }` (só o que foi respondido), `origin`
 // ("greenfield" | "brownfield" | null, null quando pulada) e `runtimeVersioning`
 // ("versioned" | "unversioned" | null, null quando não respondida).
 export async function collectInstallAnswers(ask, current = {}, {
@@ -51,9 +54,11 @@ export async function collectInstallAnswers(ask, current = {}, {
   runtimeVersioningRecorded = false,
   enabledIntents = catalog.INTENTS,
   flagModels: flagModelsOption = {},
+  flagEfforts: flagEffortsOption = {},
   contextFor = null,
 } = {}) {
   let flagModels = flagModelsOption;
+  let flagEfforts = flagEffortsOption;
   const out = {
     engines: current.engines?.length ? current.engines : [],
     scope: current.scope || null,
@@ -63,6 +68,7 @@ export async function collectInstallAnswers(ask, current = {}, {
     projectId: current.projectId || null,
     optional: [],
     models: {},
+    efforts: {},
     origin: null,
     runtimeVersioning: null,
   };
@@ -169,8 +175,8 @@ export async function collectInstallAnswers(ask, current = {}, {
   // perguntas de modelo e origem pode ser lido sem adivinhar (E-9).
   if (contextFor) {
     ({
-      flagModels = {}, configured = {}, enabledIntents = catalog.INTENTS, originRecorded = false,
-      runtimeVersioningRecorded = false,
+      flagModels = {}, flagEfforts = {}, configured = {}, enabledIntents = catalog.INTENTS,
+      originRecorded = false, runtimeVersioningRecorded = false,
     } = contextFor(out.engines, out.scope));
   }
 
@@ -199,6 +205,28 @@ export async function collectInstallAnswers(ask, current = {}, {
         id = (typed || "").trim();
       }
       if (id) out.models[intent] = { ...out.models[intent], [engine]: id };
+    }
+  }
+
+  // Esforço por intenção (não por motor): uma pergunta só, dita para os motores escolhidos que o
+  // aceitam. Sem opção `inherit` (DT-5); `skip` é o default e não grava nada.
+  const capazes = out.engines.filter((e) => engineDescriptors[e]?.capabilities?.agentEffort === true);
+  if (capazes.length) {
+    for (const intent of catalog.INTENTS) {
+      if (!enabledIntents.includes(intent)) continue;
+      if (flagEfforts[intent] !== undefined) continue;
+      if (configured[intent]?.effort === CONFIGURED) continue;
+      const level = await ask.select({
+        message: msg.qEffort(intent, capazes.join(", ")),
+        options: [
+          ...EFFORT_LEVELS.map((nivel) => ({ value: nivel, label: nivel })),
+          { value: SKIP_CHOICE, label: msg.effortSkipLabel(catalog.AGENTS[intent].defaults.effort) },
+        ],
+        initialValue: SKIP_CHOICE,
+      });
+      if (ask.isCancel(level)) return CANCELLED;
+      if (level === SKIP_CHOICE) continue;
+      out.efforts[intent] = level;
     }
   }
 

@@ -192,6 +192,79 @@ test("should not write config.json while previewing the agents", () => {
   assert.deepEqual(previewAgents(core, {}), readAgents(core));
 });
 
+const agenteDe = (repo, nome) => readFileSync(path.join(repo, ".claude", "agents", `${nome}.md`), "utf8");
+
+test("should write only the answered effort and install it in the agent file", () => {
+  const repo = repoTemporario();
+  const { plan } = instalar(repo, { efforts: { drafting: "max" } });
+  assert.equal(plan.agents.policies.drafting.effort, "max");
+  assert.deepEqual(lerConfig(repo).agents, { drafting: { effort: "max" } });
+  assert.ok(agenteDe(repo, "mgr-draft").includes("effort: max"));
+  assert.deepEqual(plan.agents, readAgents(path.join(repo, ".mgr-core")));
+});
+
+test("should write the model and the effort of the same intent together", () => {
+  const repo = repoTemporario();
+  instalar(repo, { models: { drafting: { "claude-code": "opus" } }, efforts: { drafting: "max" } });
+  assert.deepEqual(lerConfig(repo).agents.drafting, { model: { "claude-code": "opus" }, effort: "max" });
+});
+
+test("should preserve the keys already in config.json when writing an effort", () => {
+  const repo = repoTemporario();
+  mkdirSync(path.join(repo, ".mgr-core"), { recursive: true });
+  writeFileSync(configDe(repo), JSON.stringify({ registries: [], chaveDoTime: { a: 1 }, agents: { execution: { effort: "low" } } }));
+  instalar(repo, { efforts: { drafting: "max" } });
+  const config = lerConfig(repo);
+  assert.deepEqual(config.chaveDoTime, { a: 1 });
+  assert.equal(config.agents.execution.effort, "low");
+  assert.equal(config.agents.drafting.effort, "max");
+});
+
+test("should not write config.json while previewing an effort", () => {
+  const core = diretorioTemporario();
+  const preview = previewAgents(core, {}, { review: "max" });
+  assert.equal(preview.policies.review.effort, "max");
+  assert.equal(existsSync(path.join(core, "config.json")), false);
+  assert.throws(() => previewAgents(core, {}, { inexistente: "max" }), /unknown agent intent/);
+  assert.deepEqual(previewAgents(core, {}, {}), readAgents(core));
+});
+
+test("should refuse to preview an effort over an agents entry that is not an object and leave config.json intact", () => {
+  const core = diretorioTemporario();
+  const original = JSON.stringify({ agents: { review: "opus" } });
+  writeFileSync(path.join(core, "config.json"), original);
+  assert.throws(() => previewAgents(core, {}, { review: "max" }), /invalid agents\.review/);
+  assert.equal(readFileSync(path.join(core, "config.json"), "utf8"), original);
+});
+
+test("should refuse to preview an effort when agents in config.json is not an object", () => {
+  const core = diretorioTemporario();
+  writeFileSync(path.join(core, "config.json"), JSON.stringify({ agents: 5 }));
+  assert.throws(() => previewAgents(core, {}, { review: "max" }), /invalid agents: 5/);
+  assert.throws(() => previewAgents(core, { review: { "claude-code": "opus" } }), /invalid agents: 5/);
+});
+
+test("should ignore an effort entry without a level when previewing", () => {
+  const core = diretorioTemporario();
+  assert.deepEqual(previewAgents(core, {}, { review: undefined }), readAgents(core));
+});
+
+test("should not create config.json when the only effort answer is empty", () => {
+  const repo = repoTemporario();
+  const plan = planInstall(["claude-code"], "project", repo, { all: true });
+  execute({ ...plan, answers: { ...plan.answers, efforts: { review: "" } } });
+  assert.equal(existsSync(configDe(repo)), false);
+});
+
+test("should create no config.json and keep the default efforts when none was answered", () => {
+  const repo = repoTemporario();
+  instalar(repo, { models: {}, efforts: {} });
+  assert.equal(existsSync(configDe(repo)), false);
+  assert.ok(agenteDe(repo, "mgr-draft").includes("effort: high"));
+  assert.ok(agenteDe(repo, "mgr-task").includes("effort: low"));
+  assert.ok(agenteDe(repo, "mgr-review").includes("effort: max"));
+});
+
 test("should record optional and allSkills in the manifest", () => {
   const repo = repoTemporario();
   instalar(repo, { all: true, optional: ["x-opcional"] });

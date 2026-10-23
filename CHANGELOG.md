@@ -15,6 +15,12 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Modo scaffold (geração de estrutura de código no greenfield).
 
 ### Adicionado
+- **O esforço de cada intenção se escolhe no `install`, como o modelo (ADR-0030).** Com terminal e um
+  motor que aceita esforço por agente (hoje, o claude-code), o `install` pergunta o esforço uma vez por
+  intenção, com **pular** pré-selecionado, que mantém o padrão do catálogo e não grava nada. Esforço já
+  gravado não é perguntado de novo. Sem terminal, `--effort-drafting`, `--effort-execution` e
+  `--effort-review` aceitam `low|medium|high|xhigh|max|inherit`. O nível vai para
+  `agents.<intenção>.effort` em `.mgr-core/config.json`, e o agente já sai do `install` com ele.
 - **O time escolhe se o runtime do MGR vai para o git (ADR-0028).** No escopo project, o `install`
   pergunta, com padrão **não versionado**; `-y` e a falta de terminal aplicam o padrão sem gravá-lo. Não
   versionado é um `.gitignore` dentro de `.mgr-core/runtime/`, e o `.gitignore` da raiz não muda. A
@@ -40,6 +46,10 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   mudança no contrato dele.
 
 ### Alterado
+- **Quebra de contrato (ADR-0030):** `install` com `--effort` ou `--model` soltos, que saía 0 e ignorava a
+  flag sem aviso, passa a sair 1 antes de escrever qualquer coisa, mostrando a forma por intenção. O mesmo
+  vale para nível de esforço fora da lista e para flag de esforço sem motor escolhido que aceite esforço.
+  As duas flags continuam valendo no `agents set`.
 - **Quebra de contrato:** o `update` passa a gravar `runtimeVersioning` no `config.json` do time, só
   quando a pessoa responde à pergunta num terminal. Num projeto instalado antes desta versão, o primeiro
   `install` ou `update` grava o `.gitignore` do runtime (o padrão), e o `update` anuncia a novidade; arquivos do

@@ -118,7 +118,7 @@ export function resolveProjectId({ flag, coreDir: core, prior, repo }) {
 }
 
 export function planInstall(engines, scope, repo, opts = {}) {
-  const { skillsDir = null, language = null, architecture = null, userLanguage = null, optional = [], all = false, names = null, projectId = null, replaced = {}, models = {}, origin = null, runtimeVersioning = null } = opts;
+  const { skillsDir = null, language = null, architecture = null, userLanguage = null, optional = [], all = false, names = null, projectId = null, replaced = {}, models = {}, efforts = {}, origin = null, runtimeVersioning = null } = opts;
   const skills = names || (all ? bundle.skillNames() : catalog.selectSkills({ language, architecture, optional }));
   // Skill substituída por plugin sai do conjunto DAQUELE motor (ADR-0008): sem isso o
   // instalador escreveria a skill do método para o restore sobrescrever logo em seguida,
@@ -142,10 +142,10 @@ export function planInstall(engines, scope, repo, opts = {}) {
   // duplicado diverge na primeira mudança. Mesma razão que tirou o `readReviewGate` do módulo.
   //
   // `previewAgents` sobrepõe as respostas de modelo em memória: o plano mostra o que `execute` gravará.
-  const agents = previewAgents(coreDir(scope, repo), models);
+  const agents = previewAgents(coreDir(scope, repo), models, efforts);
   const base = {
     engines: skillsDir ? ["custom"] : engines, scope, repo, targets, skills, replaced, language, architecture, userLanguage,
-    projectId: pid, agents, answers: { models, origin }, optional, all,
+    projectId: pid, agents, answers: { models, origin, efforts }, optional, all,
     legacyRuntime: legacyRuntimeDirs({ prior, targets, scope, repo }),
   };
   return withRuntimeVersioning(base, runtimeVersioning);
@@ -210,9 +210,16 @@ export function execute(plan, { abandoned = [], remove = rmSync } = {}) {
   const migrated = migrateOld(plan.scope, plan.repo);
   // Só o que foi respondido é gravado; sem resposta o `config.json` não é criado nem tocado (DT-3).
   const core = coreDir(plan.scope, plan.repo);
-  const { models = {}, origin = null } = plan.answers ?? {};
-  for (const [intent, model] of Object.entries(models)) {
-    if (Object.keys(model ?? {}).length) writeAgentPolicy(core, intent, { model });
+  const { models = {}, origin = null, efforts = {} } = plan.answers ?? {};
+  const intents = new Set([
+    ...Object.keys(models).filter((intent) => Object.keys(models[intent] ?? {}).length),
+    ...Object.keys(efforts),
+  ]);
+  for (const intent of intents) {
+    const patch = {};
+    if (Object.keys(models[intent] ?? {}).length) patch.model = models[intent];
+    if (efforts[intent]) patch.effort = efforts[intent];
+    if (Object.keys(patch).length) writeAgentPolicy(core, intent, patch);
   }
   if (origin) writeOrigin(core, origin);
   if (plan.runtimeVersioning?.source === "answered") writeRuntimeVersioning(core, plan.runtimeVersioning.value);

@@ -5,9 +5,12 @@ Deciders: Mauri Reis
 
 ## Status
 
-Proposed. Responde ao gatilho de revisao do ADR-0025 ("a fatia runtime-fora-do-versionamento decidir o
-versionamento de `.mgr-core/runtime/`"). Revoga, no contrato da CLI, a frase "o `update` nao toca no
-`config.json` do time" no caso descrito na decisao 4.
+Accepted
+
+> Aceito pelo autor em 2026-10-22, com a fatia runtime-fora-do-versionamento (PR #49). Responde ao
+> gatilho de revisao do ADR-0025 ("a fatia runtime-fora-do-versionamento decidir o versionamento de
+> `.mgr-core/runtime/`"). Revoga, no contrato da CLI, a frase "o `update` nao toca no `config.json`
+> do time" no caso descrito na decisao 4.
 
 ## Context
 

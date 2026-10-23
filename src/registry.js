@@ -355,16 +355,19 @@ export function readAgents(coreDir) {
 // sobreposto em memória ao config lido, com o mesmo merge de dois níveis do `writeAgentPolicy` e a
 // MESMA leitura/validação do `readAgents` (`agentsFromConfig`), para o plano que a pessoa confirma
 // ser a política que será escrita. Intenção desconhecida em `models` falha como no escritor.
-export function previewAgents(coreDir, models = {}) {
+// `efforts` (`{ [intent]: nível }`) sobrepõe só o `effort`, com a mesma regra de intenção desconhecida;
+// o nível inválido é recusado pela validação do `agentsFromConfig`, não aqui.
+export function previewAgents(coreDir, models = {}, efforts = {}) {
   const config = readConfig(coreDir);
   const answered = Object.entries(models ?? {}).filter(([, byEngine]) => isPlainObject(byEngine) && Object.keys(byEngine).length > 0);
-  for (const [intent] of answered) {
+  const answeredEfforts = Object.entries(efforts ?? {}).filter(([, level]) => level !== undefined);
+  for (const [intent] of [...answered, ...answeredEfforts]) {
     if (!INTENTS.includes(intent)) {
       throw new Error(`unknown agent intent: ${JSON.stringify(intent)} (expected ${INTENTS.join(" | ")})`);
     }
   }
   // `agents` que não é objeto não recebe sobreposição: segue intacto para a validação recusá-lo.
-  if (!answered.length || (config.agents !== undefined && !isPlainObject(config.agents))) {
+  if ((!answered.length && !answeredEfforts.length) || (config.agents !== undefined && !isPlainObject(config.agents))) {
     return agentsFromConfig(config);
   }
   const agents = { ...(config.agents ?? {}) };
@@ -373,6 +376,11 @@ export function previewAgents(coreDir, models = {}) {
     // Valor de `agents.<intent>` que não é objeto também segue intacto, para a validação recusar.
     if (!isPlainObject(atual)) continue;
     agents[intent] = { ...atual, model: { ...(isPlainObject(atual.model) ? atual.model : {}), ...byEngine } };
+  }
+  for (const [intent, level] of answeredEfforts) {
+    const atual = agents[intent] ?? {};
+    if (!isPlainObject(atual)) continue;
+    agents[intent] = { ...atual, effort: level };
   }
   return agentsFromConfig({ ...config, agents });
 }

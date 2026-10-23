@@ -3,7 +3,7 @@
 // mensagem exata da pergunta, e pergunta inesperada derruba o teste em vez de receber valor padrão.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { collectInstallAnswers } from "../src/prompts.js";
+import { collectInstallAnswers, CANCELLED } from "../src/prompts.js";
 import { getMessages } from "../src/messages.js";
 import { parseArgs, resolveModelFlags } from "../src/cli-args.js";
 
@@ -61,6 +61,7 @@ test("should record nothing for skip", async () => {
   const out = await collectInstallAnswers(ask, jaRespondido(["claude-code", "copilot"]), opcoesSemDefault);
 
   assert.deepEqual(out.models, {});
+  assert.deepEqual(out.efforts, {});
   assert.equal(out.origin, null);
 });
 
@@ -372,6 +373,135 @@ test("should warn about an unrecognized key in config.local.json on install", ()
   );
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stderr, /config\.local\.json: projectid is not a recognized key and was ignored\./);
+});
+
+const perguntaEsforco = (intent, engines = "claude-code") => msg.qEffort(intent, engines);
+const mensagensDeEsforco = (chamadas) =>
+  ["drafting", "execution", "review"].map((intent) => perguntaEsforco(intent)).filter((m) => chamadas.some((c) => c.message === m));
+const eEsforco = (c) => ["drafting", "execution", "review"].some((i) => c.message === perguntaEsforco(i));
+
+test("should ask one effort select per intent with the six values, skip label and skip preselected", async () => {
+  const { ask, chamadas } = stubAsk(() => "skip");
+  await collectInstallAnswers(ask, jaRespondido(["claude-code"]), opcoesSemDefault);
+
+  const defaults = { drafting: "high", execution: "low", review: "max" };
+  for (const intent of ["drafting", "execution", "review"]) {
+    const perguntas = chamadas.filter((c) => c.message === perguntaEsforco(intent));
+    assert.equal(perguntas.length, 1, intent);
+    assert.equal(perguntas[0].tipo, "select");
+    assert.deepEqual(
+      perguntas[0].options.map((opcao) => opcao.value),
+      ["low", "medium", "high", "xhigh", "max", "skip"],
+      intent,
+    );
+    assert.equal(perguntas[0].options.at(-1).label, msg.effortSkipLabel(defaults[intent]), intent);
+    assert.equal(perguntas[0].initialValue, "skip", intent);
+  }
+});
+
+test("should ask the effort questions after every model question and before the origin", async () => {
+  const { ask, chamadas } = stubAsk(() => "skip");
+  await collectInstallAnswers(ask, jaRespondido(["claude-code"]), opcoesSemDefault);
+
+  const mensagens = chamadas.map((c) => c.message);
+  const ultimoModelo = Math.max(...["drafting", "execution", "review"].map((i) => mensagens.indexOf(perguntaModelo(i, "claude-code"))));
+  const indicesEsforco = chamadas.map((c, i) => (eEsforco(c) ? i : -1)).filter((i) => i >= 0);
+  assert.equal(indicesEsforco.length, 3);
+  assert.ok(Math.min(...indicesEsforco) > ultimoModelo, "esforço depois de todos os modelos");
+  assert.ok(Math.max(...indicesEsforco) < mensagens.indexOf(msg.qOrigin), "esforço antes da origem");
+});
+
+test("should not ask any effort question when only copilot is chosen", async () => {
+  const { ask, chamadas } = stubAsk(() => "skip");
+  const out = await collectInstallAnswers(ask, jaRespondido(["copilot"]), opcoesSemDefault);
+
+  assert.equal(chamadas.filter((c) => c.options?.some((opcao) => opcao.value === "xhigh")).length, 0);
+  assert.deepEqual(mensagensDeEsforco(chamadas), []);
+  assert.deepEqual(out.efforts, {});
+});
+
+test("should ask exactly three effort questions naming only claude-code when copilot is also chosen", async () => {
+  const { ask, chamadas } = stubAsk(() => "skip");
+  await collectInstallAnswers(ask, jaRespondido(["claude-code", "copilot"]), opcoesSemDefault);
+
+  const esforco = chamadas.filter((c) => ["drafting", "execution", "review"].some((i) => c.message === perguntaEsforco(i, "claude-code")));
+  assert.equal(esforco.length, 3);
+  for (const intent of ["drafting", "execution", "review"]) {
+    assert.ok(!chamadas.some((c) => c.message === perguntaEsforco(intent, "claude-code, copilot")), intent);
+    assert.ok(!chamadas.some((c) => c.message === perguntaEsforco(intent, "copilot")), intent);
+  }
+});
+
+test("should record the answered effort levels per intent", async () => {
+  const { ask } = stubAsk((message) => {
+    if (message === perguntaEsforco("drafting")) return "xhigh";
+    if (message === perguntaEsforco("review")) return "medium";
+    return "skip";
+  });
+  const out = await collectInstallAnswers(ask, jaRespondido(["claude-code"]), opcoesSemDefault);
+
+  assert.deepEqual(out.efforts, { drafting: "xhigh", review: "medium" });
+});
+
+test("should not ask the effort of an intent whose effort is already configured", async () => {
+  const configured = { drafting: { effort: "configured" } };
+  const { ask, chamadas } = stubAsk(() => "skip");
+  await collectInstallAnswers(ask, jaRespondido(["claude-code"]), { ...opcoesSemDefault, configured });
+
+  const perguntadas = chamadas.map((c) => c.message);
+  assert.ok(!perguntadas.includes(perguntaEsforco("drafting")), "drafting já configurado");
+  assert.ok(perguntadas.includes(perguntaEsforco("execution")));
+  assert.ok(perguntadas.includes(perguntaEsforco("review")));
+});
+
+test("should not ask the effort of an intent given by flag", async () => {
+  const { ask, chamadas } = stubAsk(() => "skip");
+  await collectInstallAnswers(ask, jaRespondido(["claude-code"]), { ...opcoesSemDefault, flagEfforts: { review: "max" } });
+
+  const perguntadas = chamadas.map((c) => c.message);
+  assert.ok(!perguntadas.includes(perguntaEsforco("review")), "review veio por flag");
+  assert.ok(perguntadas.includes(perguntaEsforco("drafting")));
+  assert.ok(perguntadas.includes(perguntaEsforco("execution")));
+});
+
+test("should not ask the effort of an intent given by flag through contextFor", async () => {
+  const { ask, chamadas } = stubAsk(() => "skip");
+  ask.multiselect = async () => ["claude-code"];
+  const contextFor = () => ({
+    flagModels: {},
+    flagEfforts: { review: "max" },
+    configured: {},
+    enabledIntents: ["drafting", "execution", "review"],
+    originRecorded: false,
+  });
+  await collectInstallAnswers(ask, { scope: "project", userLanguage: "en", projectId: "projeto" }, { repo: ".", allSkills: true, msg, contextFor });
+
+  const perguntadas = chamadas.map((c) => c.message);
+  assert.ok(!perguntadas.includes(perguntaEsforco("review")), "review veio por flag");
+  assert.ok(perguntadas.includes(perguntaEsforco("drafting")));
+  assert.ok(perguntadas.includes(perguntaEsforco("execution")));
+});
+
+test("should not ask the effort of an intent that is disabled", async () => {
+  const { ask, chamadas } = stubAsk(() => "skip");
+  await collectInstallAnswers(ask, jaRespondido(["claude-code"]), {
+    ...opcoesSemDefault,
+    enabledIntents: ["drafting", "review"],
+  });
+
+  const perguntadas = chamadas.map((c) => c.message);
+  assert.ok(perguntadas.includes(perguntaEsforco("drafting")));
+  assert.ok(perguntadas.includes(perguntaEsforco("review")));
+  assert.ok(!perguntadas.includes(perguntaEsforco("execution")), "execution desligada não é perguntada");
+});
+
+test("should return CANCELLED when an effort question is cancelled", async () => {
+  const cancelado = Symbol("cancel");
+  const { ask } = stubAsk((message) => (message === perguntaEsforco("execution") ? cancelado : "skip"));
+  ask.isCancel = (valor) => valor === cancelado;
+  const out = await collectInstallAnswers(ask, jaRespondido(["claude-code"]), opcoesSemDefault);
+
+  assert.equal(out, CANCELLED);
 });
 
 test("should exit 1 with the no-model-engine message when only a skills dir is chosen", () => {

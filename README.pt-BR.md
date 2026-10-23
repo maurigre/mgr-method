@@ -34,6 +34,13 @@ padrão das duas é **pular**, e **nenhum modelo é sugerido**. `--model-draftin
 `--model-review` respondem a primeira sem terminal (valor solto quando um motor aceita modelo;
 `motor=id[,motor=id]` quando dois aceitam), e `--origin greenfield|brownfield` responde a segunda.
 
+Quando um motor escolhido aceita esforço por agente (hoje, o claude-code), a instalação também pergunta
+o **esforço** de cada intenção, uma vez por intenção, com **pular** pré-selecionado: pular mantém o
+padrão do catálogo (`drafting` high, `execution` low, `review` max) e não grava nada. Sem terminal,
+`--effort-drafting`, `--effort-execution` e `--effort-review` aceitam `low|medium|high|xhigh|max|inherit`
+(ADR-0030). A instalação recusa, antes de escrever qualquer coisa, `--effort` ou `--model` soltos (são do
+`agents set`), nível fora dessa lista e flag de esforço quando nenhum motor escolhido aceita esforço.
+
 A instalação é **seletiva**: o TUI pergunta os motores, o escopo, a **linguagem** e a
 **arquitetura** do projeto, o **idioma de saída** (sugerido a partir do seu locale) e um
 `MGR_PROJECT_ID`. Só as skills que o projeto usa são copiadas — o núcleo (`spec-init`,
@@ -51,6 +58,7 @@ npx mgr-method install --user-language pt-BR .   # skills conversam e geram arte
 npx mgr-method install --all-skills .            # instala todas as skills (sem seleção)
 npx mgr-method install --engine claude-code --model-review <id> --origin brownfield .   # um motor: valor solto
 npx mgr-method install --engine claude-code,copilot --model-drafting claude-code=<id>,copilot=<id> .
+npx mgr-method install --engine claude-code --effort-execution medium --effort-review max .
 npx mgr-method install --dry-run
 npx mgr-method status | update | uninstall
 npx mgr-method origin set brownfield   # registra a origem do projeto; calibra a severidade da review

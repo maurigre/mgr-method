@@ -447,6 +447,12 @@ const en = ({ invocation, lifecycle }) => ({
   personalKeysUnknown: (file, keys) => `${file}: ${keys} is not a recognized key and was ignored.`,
   confirmReplaceOne: (rel, name) => `Replace ${rel} (not installed by mgr-method) with the shipped ${name}?`,
   modelFlagEngineNotChosen: (intent, engine, chosen) => `--model-${intent}: engine ${engine} was not chosen for this install (chosen: ${chosen})`,
+  qEffort: (intent, engines) => `Effort for ${intent} (${engines})`,
+  effortSkipLabel: (level) => `skip — keeps the default (${level})`,
+  effortFlagBare: (levels) => `--effort is not an install flag: declare the effort per intent with --effort-drafting, --effort-execution or --effort-review <${levels}> (--effort belongs to agents set)`,
+  effortFlagInvalid: (intent, value, levels) => `--effort-${intent}: "${value}" is not an effort level (expected ${levels})`,
+  effortFlagNoEffortEngine: (intent, list) => `--effort-${intent}: none of the chosen engines (${list}) takes an effort`,
+  modelFlagBare: () => `--model is not an install flag: declare the model per intent with --model-drafting, --model-execution or --model-review <id> (--model belongs to agents set)`,
 
   help: `MGR — Método Governado por Rastreabilidade (Traceability-Governed Method)
 
@@ -934,6 +940,12 @@ const ptBR = ({ invocation, lifecycle }) => ({
   personalKeysUnknown: (file, keys) => `${file}: ${keys} não é chave reconhecida e foi ignorada.`,
   confirmReplaceOne: (rel, name) => `Substituir ${rel} (não instalada pelo mgr-method) pela ${name} do pacote?`,
   modelFlagEngineNotChosen: (intent, engine, chosen) => `--model-${intent}: o motor ${engine} não foi escolhido nesta instalação (escolhidos: ${chosen})`,
+  qEffort: (intent, engines) => `Esforço para ${intent} (${engines})`,
+  effortSkipLabel: (level) => `pular — fica o padrão (${level})`,
+  effortFlagBare: (levels) => `--effort não é flag do install: declare o esforço por intenção com --effort-drafting, --effort-execution ou --effort-review <${levels}> (o --effort é do agents set)`,
+  effortFlagInvalid: (intent, value, levels) => `--effort-${intent}: "${value}" não é um nível de esforço (esperado ${levels})`,
+  effortFlagNoEffortEngine: (intent, list) => `--effort-${intent}: nenhum dos motores escolhidos (${list}) aceita esforço`,
+  modelFlagBare: () => `--model não é flag do install: declare o modelo por intenção com --model-drafting, --model-execution ou --model-review <id> (o --model é do agents set)`,
 
   help: `MGR — Método Governado por Rastreabilidade
 

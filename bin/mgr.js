@@ -43,7 +43,8 @@ import {
 import { diff as lockfileDiff, readLockfile, replacedByEngine, LOCKFILE_NAME } from "../src/lockfile.js";
 import { detect } from "../src/detector.js";
 import { hookFilePath, planOwnedHooks, removeHook, rewriteOwnedHooks, runtimeCommand, syncOwnedHooks, writeHook, writtenEvents } from "../src/hooks.js";
-import { parseArgs, resolveModelFlags } from "../src/cli-args.js";
+import { checkBareModelFlag, checkEffortFlags, mergeEfforts, parseArgs, resolveEffortFlags, resolveModelFlags } from "../src/cli-args.js";
+import { EFFORT_LEVELS } from "../src/plugin.js";
 
 const SCOPES = ["project", "global"];
 // Comandos de skill plugável: o posicional é o nome da skill/registry, nunca o repositório.
@@ -80,6 +81,16 @@ const hookEngines = (plan, flags) => (flags.noHooks
   : plan.targets.map((target) => target.engine).filter((engine) => installer.ENGINES.includes(engine)));
 
 const engineSupportsModel = (id) => engineRegistry.ids().includes(id) && engineRegistry.get(id).capabilities.agentModel === true;
+const engineSupportsEffort = (id) => engineRegistry.ids().includes(id) && engineRegistry.get(id).capabilities.agentEffort === true;
+// Níveis aceitos pelas flags --effort-<intenção>: os do plugin mais `inherit`, que tira o campo do agente.
+const effortFlagLevels = [...EFFORT_LEVELS, catalogo.INHERIT];
+const effortFlagLevelsText = effortFlagLevels.join(" | ");
+// Texto único de cada recusa das flags de esforço: a recusa precoce e a autoritativa usam o mesmo.
+const effortRefusalText = ({ reason, intent, value }, engines) => ({
+  "bare-effort": () => M.effortFlagBare(effortFlagLevelsText),
+  "invalid-level": () => M.effortFlagInvalid(intent, value, effortFlagLevelsText),
+  "no-effort-engine": () => M.effortFlagNoEffortEngine(intent, engines.join(", ")),
+}[reason]());
 
 // Avisos de camada em stderr (DT-2), compartilhados por install e update. Devolve o caminho relativo do
 // arquivo pessoal, que as mensagens de migração citam.
@@ -97,6 +108,16 @@ async function cmdInstall(flags, positional) {
   // Validado ANTES de qualquer escrita: com origem desconhecida nada é criado (CA-4).
   if (flags.origin !== undefined && !ORIGINS.includes(flags.origin)) {
     console.error(pc.red(M.errorPrefix(M.originUnknown(flags.origin, ORIGINS.join(" | ")))));
+    process.exit(1);
+  }
+  // --model sem intenção e flags de esforço malformadas também recusam ANTES de qualquer escrita.
+  if (!checkBareModelFlag(flags).ok) {
+    console.error(pc.red(M.errorPrefix(M.modelFlagBare())));
+    process.exit(1);
+  }
+  const checkedEfforts = checkEffortFlags(flags, { levels: effortFlagLevels });
+  if (!checkedEfforts.ok) {
+    console.error(pc.red(M.errorPrefix(effortRefusalText(checkedEfforts, []))));
     process.exit(1);
   }
   printBanner(M);
@@ -117,6 +138,7 @@ async function cmdInstall(flags, positional) {
   let projectId = flags.projectId || null;
   const optional = [];
   let answeredModels = {};
+  let answeredEfforts = {};
   let answeredOrigin = null;
   let answeredRuntimeVersioning = null;
   const recordedOriginOf = (core) => {
@@ -131,8 +153,10 @@ async function cmdInstall(flags, positional) {
       const core = installer.coreDir(chosenScope, repo);
       const agents = readAgents(core);
       const resolved = resolveModelFlags(flags, { engines: chosenEngines, supportsModel: engineSupportsModel });
+      const effortsByFlag = resolveEffortFlags(flags, { engines: chosenEngines, supportsEffort: engineSupportsEffort, levels: effortFlagLevels });
       return {
         flagModels: resolved.ok ? resolved.models : {},
+        flagEfforts: effortsByFlag.ok ? effortsByFlag.efforts : {},
         configured: agents.sources,
         enabledIntents: catalogo.INTENTS.filter((intent) => agents.policies[intent].enabled !== false),
         originRecorded: Boolean(flags.origin) || recordedOriginOf(core) !== null,
@@ -150,6 +174,7 @@ async function cmdInstall(flags, positional) {
     ({ engines, scope, language, architecture, userLanguage, projectId } = answers);
     optional.push(...answers.optional);
     answeredModels = answers.models;
+    answeredEfforts = answers.efforts;
     answeredOrigin = answers.origin;
     answeredRuntimeVersioning = answers.runtimeVersioning;
     M = getMessages(userLanguage);
@@ -180,6 +205,13 @@ async function cmdInstall(flags, positional) {
   for (const [intent, byEngine] of Object.entries(resolvedModels.models)) {
     models[intent] = { ...models[intent], ...byEngine };
   }
+  // As flags de esforço seguem a mesma regra: validadas antes de qualquer escrita; flag vence a pergunta.
+  const resolvedEfforts = resolveEffortFlags(flags, { engines: motoresDoPlano, supportsEffort: engineSupportsEffort, levels: effortFlagLevels });
+  if (!resolvedEfforts.ok) {
+    console.error(pc.red(M.errorPrefix(effortRefusalText(resolvedEfforts, motoresDoPlano))));
+    process.exit(1);
+  }
+  const efforts = mergeEfforts(answeredEfforts, resolvedEfforts.efforts);
   const origin = flags.origin ?? answeredOrigin;
 
   // Lido cedo de propósito: modo de detecção inválido falha ANTES de escrever qualquer coisa.
@@ -203,7 +235,7 @@ async function cmdInstall(flags, positional) {
   }
 
   const replaced = replacedByEngine(readLockfile(repo));
-  const plan = installer.planInstall(engines, scope, repo, { skillsDir, language, architecture, userLanguage, optional, all: flags.allSkills, projectId, replaced, models, origin, runtimeVersioning: answeredRuntimeVersioning });
+  const plan = installer.planInstall(engines, scope, repo, { skillsDir, language, architecture, userLanguage, optional, all: flags.allSkills, projectId, replaced, models, efforts, origin, runtimeVersioning: answeredRuntimeVersioning });
   const motoresComHook = hookEngines(plan, flags);
   // O que esta instalacao deixa de DECLARAR aparece no plano antes de qualquer escrita, inclusive
   // no --dry-run. O calculo vive no nucleo; aqui fica so a cola (CONSTITUTION secao 2.2), e o modo

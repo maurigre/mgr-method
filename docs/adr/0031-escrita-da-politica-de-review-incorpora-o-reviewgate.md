@@ -5,7 +5,10 @@ Deciders: Mauri Reis
 
 ## Status
 
-Proposed. Refina a decisao 2 do ADR-0017, sem edita-lo.
+Accepted
+
+> Aceito pelo autor em 2026-11-11, com a fatia review-gate-preservado-na-escrita (PR #51). Refina a
+> decisao 2 do ADR-0017, sem edita-lo.
 
 ## Context
 

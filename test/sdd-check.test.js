@@ -24,7 +24,7 @@ const coletor = () => {
   return { io, out, err };
 };
 
-const M = {
+const msg = {
   sddCheckNoDir: () => "M:no-dir",
   sddCheckNoConstitution: () => "M:no-constitution",
   sddCheckEmpty: () => "M:empty",
@@ -78,7 +78,7 @@ test("should write the no-dir text to stderr and exit 1 when docs/sdd does not e
   const raiz = temporario();
   const { io, out, err } = coletor();
 
-  assert.equal(sddCheck({ root: raiz, io, M }), 1);
+  assert.equal(sddCheck({ root: raiz, io, M: msg }), 1);
   assert.deepEqual(err, ["M:no-dir"]);
   assert.deepEqual(out, []);
 });
@@ -87,7 +87,7 @@ test("should write the no-constitution text to stderr and exit 1 when CONSTITUTI
   const raiz = comDocs(["01-prd.md"]);
   const { io, out, err } = coletor();
 
-  assert.equal(sddCheck({ root: raiz, io, M }), 1);
+  assert.equal(sddCheck({ root: raiz, io, M: msg }), 1);
   assert.deepEqual(err, ["M:no-constitution"]);
   assert.deepEqual(out, []);
 });
@@ -96,7 +96,7 @@ test("should write the no-review-rules warning to stderr and the ok line to stdo
   const raiz = comDocs(["CONSTITUTION.md"]);
   const { io, out, err } = coletor();
 
-  assert.equal(sddCheck({ root: raiz, io, M }), 0);
+  assert.equal(sddCheck({ root: raiz, io, M: msg }), 0);
   assert.deepEqual(err, [
     "M:no-review-rules",
     "M:missing:00-overview.md",
@@ -117,7 +117,7 @@ test("should write the empty text to stderr and exit 1 when docs/sdd has no mark
   const raiz = temporario();
   const { io, out, err } = coletor();
 
-  assert.equal(sddCheck({ root: raiz, io, M, exists: () => true, listMd: () => [] }), 1);
+  assert.equal(sddCheck({ root: raiz, io, M: msg, exists: () => true, listMd: () => [] }), 1);
   assert.deepEqual(err, ["M:empty"]);
   assert.deepEqual(out, []);
 });
@@ -126,7 +126,7 @@ test("should write only the ok line to stdout and exit 0 when the project is rea
   const raiz = comDocs(SDD_FILES.map(({ file }) => file));
   const { io, out, err } = coletor();
 
-  assert.equal(sddCheck({ root: raiz, io, M }), 0);
+  assert.equal(sddCheck({ root: raiz, io, M: msg }), 0);
   assert.deepEqual(err, []);
   assert.deepEqual(out, [`M:ok:${path.join(raiz, "docs", "sdd")}`]);
 });
@@ -269,7 +269,7 @@ test("should warn about each missing canonical file except the review guide", ()
     "_self-assessment.md",
   ];
 
-  assert.equal(sddCheck({ root: raiz, io, M }), 0);
+  assert.equal(sddCheck({ root: raiz, io, M: msg }), 0);
   assert.deepEqual(err, ["M:no-review-rules", ...ausentes.map((file) => `M:missing:${file}`)]);
   assert.deepEqual(out, [`M:ok:${path.join(raiz, "docs", "sdd")}`]);
 });
@@ -278,7 +278,7 @@ test("should print only valid JSON with the twelve roles and keep exit 0 for a r
   const raiz = comDocs(SDD_FILES.map(({ file }) => file));
   const { io, out, err } = coletor();
 
-  assert.equal(sddCheck({ root: raiz, io, M, flags: { json: true } }), 0);
+  assert.equal(sddCheck({ root: raiz, io, M: msg, flags: { json: true } }), 0);
   assert.deepEqual(err, []);
   assert.equal(out.length, 1);
   const payload = JSON.parse(out[0]);
@@ -294,7 +294,7 @@ test("should print the JSON with ok false and exit 1 when the constitution is mi
   const raiz = comDocs(["01-prd.md"]);
   const { io, out, err } = coletor();
 
-  assert.equal(sddCheck({ root: raiz, io, M, flags: { json: true } }), 1);
+  assert.equal(sddCheck({ root: raiz, io, M: msg, flags: { json: true } }), 1);
   assert.deepEqual(err, []);
   assert.equal(out.length, 1);
   const payload = JSON.parse(out[0]);
@@ -319,11 +319,11 @@ test("should warn about out of list files in text and list every warning code in
   const raiz = comDocs([...arquivos, "README.md"]);
   const texto = coletor();
 
-  assert.equal(sddCheck({ root: raiz, io: texto.io, M }), 0);
+  assert.equal(sddCheck({ root: raiz, io: texto.io, M: msg }), 0);
   assert.deepEqual(texto.err, ["M:no-review-rules", "M:missing:01-stack.md", "M:out:README.md"]);
 
   const json = coletor();
-  assert.equal(sddCheck({ root: raiz, io: json.io, M, flags: { json: true } }), 0);
+  assert.equal(sddCheck({ root: raiz, io: json.io, M: msg, flags: { json: true } }), 0);
   assert.deepEqual(JSON.parse(json.out[0]).warnings, [
     { code: "no-review-rules" },
     { code: "missing-canonical", file: "01-stack.md" },
@@ -345,7 +345,7 @@ test("should describe a docs/sdd that is a plain file as having nothing to list"
   const { io, out, err } = coletor();
 
   assert.deepEqual(describeSdd(raiz).outOfList, []);
-  assert.equal(sddCheck({ root: raiz, io, M, flags: { json: true } }), 1);
+  assert.equal(sddCheck({ root: raiz, io, M: msg, flags: { json: true } }), 1);
   assert.equal(JSON.parse(out[0]).reason, "no-constitution");
   assert.deepEqual(err, []);
 });
@@ -385,12 +385,12 @@ test("should keep showing an unmatched legacy file to spec-init when the constit
   const json = coletor();
   const texto = coletor();
 
-  assert.equal(sddCheck({ root: raiz, io: json.io, M, flags: { json: true } }), 1);
+  assert.equal(sddCheck({ root: raiz, io: json.io, M: msg, flags: { json: true } }), 1);
   const payload = JSON.parse(json.out[0]);
   assert.equal(payload.reason, "no-constitution");
   assert.equal(payload.roles.overview.status, "absent");
   assert.deepEqual(payload.warnings, [{ code: "out-of-list", file: "01-contexto-visao.md" }]);
-  assert.equal(sddCheck({ root: raiz, io: texto.io, M }), 1);
+  assert.equal(sddCheck({ root: raiz, io: texto.io, M: msg }), 1);
   assert.deepEqual(texto.err, ["M:no-constitution"]);
 });
 

@@ -1,32 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { tempDir } from "../scripts/lib/tmp.mjs";
 import { getMessages } from "../src/messages.js";
+import { runMgr, tempOutsideGit as tempOutsideGitIn } from "./helpers/cli.js";
 
 const msg = getMessages("en");
-const MGR_BIN = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "bin", "mgr.js");
 const LEVELS = "low | medium | high | xhigh | max | inherit";
 
-function tempOutsideGit(label) {
-  const dir = fs.realpathSync(tempDir(`mgr-esforco-${label}-`));
-  const probe = spawnSync("git", ["-C", dir, "rev-parse", "--is-inside-work-tree"], { encoding: "utf8" });
-  assert.equal(probe.error, undefined);
-  assert.notEqual(probe.status, 0);
-  return dir;
-}
-
-function runMgr(args, { cwd, home }) {
-  return spawnSync(process.execPath, [MGR_BIN, ...args], {
-    cwd,
-    encoding: "utf8",
-    timeout: 120000,
-    env: { ...process.env, LC_ALL: "C", HOME: home },
-  });
-}
+const tempOutsideGit = (label) => tempOutsideGitIn(label, "mgr-esforco");
 
 function install(extraArgs, { flagsLast = false } = {}) {
   const project = tempOutsideGit("proj");

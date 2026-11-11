@@ -5,7 +5,7 @@
 // do frontmatter ao builder.
 import * as installer from "../installer.js";
 import * as catalogo from "../catalog.js";
-import { CONFIGURED, LOCAL_CONFIG_NAME, misplacedTeamKeys, readAgents, readPersonal, writeAgentPolicy } from "../registry.js";
+import { CONFIGURED, LOCAL_CONFIG_NAME, configPath, misplacedTeamKeys, readAgents, readPersonal, writeAgentPolicy } from "../registry.js";
 import * as engineDescriptors from "../engines/index.js";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -201,8 +201,10 @@ function agentsSet({ root, flags, positional, io, M }) {
   if (flags.effort !== undefined) escrita.effort = flags.effort;
   // Valor inválido sai pelo `throw` do núcleo, capturado no `main` — e nada é gravado.
   io.out(M.agentsSetWriting(intent));
-  const policy = writeAgentPolicy(core, intent, escrita);
+  const { policy, migration } = writeAgentPolicy(core, intent, escrita);
   io.out(M.agentsSetWritten(intent, catalogo.AGENTS[intent].agent));
+  // ADR-0031: o anúncio da migração sai logo depois da escrita, no mesmo fluxo do `set`.
+  if (migration.state === "migrated") io.out(M.reviewGateMigrated(migration, path.relative(root, configPath(core))));
 
   // `effort` vale para a INTENÇÃO inteira: mostrar só o motor do `--engine` esconderia que ele
   // passou a valer nos outros também. Com `--model` sozinho, mostra-se só onde se escreveu.

@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import {
   addRegistry, CONFIGURED, configPath, DEFAULT, fetchIndex, ORIGINS, RESERVED_AGENT_KEYS, listRegistries, readAgents, readConfig, readDetectionMode,
-  readLawsPreamble, removeRegistry, writeAgentPolicy, writeOrigin, resolve, validateIndex, writeConfig,
+  readLawsPreamble, removeRegistry, requestOf, writeAgentPolicies, writeAgentPolicy, writeOrigin, resolve, validateIndex, writeConfig,
 } from "../src/registry.js";
 import { AGENTS, INTENTS, REVIEW_GATE } from "../src/catalog.js";
 import { fileURLToPath } from "node:url";
@@ -183,13 +183,25 @@ test("gate desligado é lido como desligado", () => {
 test("enabled que não é booleano reprova", () => {
   const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { enabled: "sim" } });
-  assert.throws(() => readAgents(core), /invalid agents\.review\.enabled: "sim"/);
+  assert.throws(() => readAgents(core), /invalid reviewGate\.enabled: "sim"/);
+});
+
+test("should name reviewGate when the read refuses an invalid alias", () => {
+  const apelido = diretorioTemporario();
+  writeConfig(apelido, { registries: [], reviewGate: { enabled: "sim" } });
+  assert.throws(() => readAgents(apelido), { message: 'invalid reviewGate.enabled: "sim" (expected true | false)' });
+  const chaveNova = diretorioTemporario();
+  writeConfig(chaveNova, { registries: [], agents: { review: { enabled: "sim" } } });
+  assert.throws(() => readAgents(chaveNova), { message: 'invalid agents.review.enabled: "sim" (expected true | false)' });
+  const ambas = diretorioTemporario();
+  writeConfig(ambas, { registries: [], reviewGate: { enabled: false }, agents: { review: { effort: "extreme" } } });
+  assert.throws(() => readAgents(ambas), { message: 'invalid agents.review.effort: "extreme" (expected low | medium | high | xhigh | max | inherit)' });
 });
 
 test("effort fora da escala reprova com o valor na mensagem", () => {
   const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { effort: "extreme" } });
-  assert.throws(() => readAgents(core), /invalid agents\.review\.effort: "extreme"/);
+  assert.throws(() => readAgents(core), /invalid reviewGate\.effort: "extreme"/);
 });
 
 test("effort xhigh é aceito depois da emenda ao ADR-0004", () => {
@@ -222,13 +234,13 @@ test("identificador de modelo do usuário passa verbatim, sem lista fechada", ()
 test("model vazio para um motor reprova", () => {
   const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: { model: { "claude-code": "" } } });
-  assert.throws(() => readAgents(core), /invalid agents\.review\.model\.claude-code/);
+  assert.throws(() => readAgents(core), /invalid reviewGate\.model\.claude-code/);
 });
 
 test("reviewGate que não é objeto reprova", () => {
   const core = diretorioTemporario();
   writeConfig(core, { registries: [], reviewGate: "max" });
-  assert.throws(() => readAgents(core), /invalid agents\.review: "max"/);
+  assert.throws(() => readAgents(core), /invalid reviewGate: "max"/);
 });
 
 test("o gate sobrevive ao addRegistry, como o modo de detecção", () => {
@@ -514,11 +526,11 @@ test("escrever uma intenção não altera as outras", () => {
 test("as chaves vizinhas do config sobrevivem à escrita", () => {
   const core = diretorioTemporario();
   configCheio(core);
-  writeAgentPolicy(core, "review", { effort: "max" });
+  writeAgentPolicy(core, "drafting", { effort: "max" });
   const config = readConfig(core);
   assert.equal(config.registries.length, 1, "registries");
   assert.equal(config.lawsPreamble.enabled, false, "lawsPreamble");
-  assert.deepEqual(config.reviewGate, { effort: "high" }, "o apelido não é reescrito");
+  assert.deepEqual(config.reviewGate, { effort: "high" }, "escrever outra intenção não toca o apelido");
   assert.deepEqual(config.agents.budget, { totalTokens: 900 }, "budget");
 });
 
@@ -555,7 +567,7 @@ test("desfazer uma intenção não desfaz as outras", () => {
 test("a escrita devolve o que passou a valer", () => {
   const core = diretorioTemporario();
   writeConfig(core, { registries: [] });
-  const policy = writeAgentPolicy(core, "execution", { model: { "claude-code": "sonnet" } });
+  const { policy } = writeAgentPolicy(core, "execution", { model: { "claude-code": "sonnet" } });
   assert.equal(policy.model["claude-code"], "sonnet");
   assert.equal(policy.effort, "low", "o que não foi escrito vem do default");
 });
@@ -588,8 +600,272 @@ test("valor inválido reprova ANTES de gravar, e o config não quebra", () => {
 test("identificador de modelo desconhecido é ACEITO — a lista é da conta", () => {
   const core = diretorioTemporario();
   writeConfig(core, { registries: [] });
-  const policy = writeAgentPolicy(core, "drafting", { model: { "claude-code": "modelo-que-so-existe-na-minha-conta" } });
+  const { policy } = writeAgentPolicy(core, "drafting", { model: { "claude-code": "modelo-que-so-existe-na-minha-conta" } });
   assert.equal(policy.model["claude-code"], "modelo-que-so-existe-na-minha-conta");
+});
+
+test("should write the review policy on top of the whole reviewGate and remove the key", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, {
+    registries: [],
+    reviewGate: { enabled: false, model: { "claude-code": "opus" }, effort: "high", nota: "x" },
+  });
+  const { migration } = writeAgentPolicy(core, "review", { model: { copilot: "gpt-5" } });
+  const config = readConfig(core);
+  assert.deepEqual(config.agents.review, {
+    enabled: false, model: { "claude-code": "opus", copilot: "gpt-5" }, effort: "high", nota: "x",
+  });
+  assert.equal(Object.hasOwn(config, "reviewGate"), false);
+  assert.deepEqual(config.registries, []);
+  assert.deepEqual(migration, {
+    state: "migrated",
+    kept: [
+      { field: "enabled", value: false },
+      { field: "model.claude-code", value: "opus" },
+      { field: "effort", value: "high" },
+      { field: "nota", value: "x" },
+    ],
+    replaced: [],
+  });
+  const lido = readAgents(core);
+  assert.equal(lido.policies.review.enabled, false);
+  assert.equal(lido.aliasOverridden, false);
+});
+
+test("should let the requested field win over the same reviewGate field and report kept and replaced", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], reviewGate: { enabled: false, effort: "high" } });
+  const { migration } = writeAgentPolicy(core, "review", { effort: "max" });
+  assert.deepEqual(readConfig(core).agents.review, { enabled: false, effort: "max" });
+  assert.deepEqual(migration, {
+    state: "migrated",
+    kept: [{ field: "enabled", value: false }],
+    replaced: [{ field: "effort", from: "high", to: "max" }],
+  });
+});
+
+test("should migrate an empty reviewGate and report nothing kept", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], reviewGate: {} });
+  const { migration } = writeAgentPolicy(core, "review", { effort: "max" });
+  const config = readConfig(core);
+  assert.deepEqual(config.agents.review, { effort: "max" });
+  assert.equal(Object.hasOwn(config, "reviewGate"), false);
+  assert.deepEqual(migration, { state: "migrated", kept: [], replaced: [] });
+});
+
+test("should keep a hand-written conflict as it is when agents.review already exists", () => {
+  const core = diretorioTemporario();
+  const fixture = configDaFixture("config-conflito.json");
+  writeConfig(core, { registries: [], ...fixture });
+  const { migration } = writeAgentPolicy(core, "review", { effort: "low" });
+  const config = readConfig(core);
+  assert.deepEqual(config.reviewGate, fixture.reviewGate);
+  assert.equal(config.agents.review.effort, "low");
+  assert.equal(config.agents.review.model["claude-code"], "opus");
+  assert.equal(migration.state, "none");
+  assert.equal(readAgents(core).aliasOverridden, true);
+});
+
+test("should write the same bytes as before when there is no reviewGate", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { execution: { effort: "low" } } });
+  const { migration } = writeAgentPolicy(core, "review", { effort: "max" });
+  const esperado = JSON.stringify(
+    { registries: [], agents: { execution: { effort: "low" }, review: { effort: "max" } } }, null, 2,
+  ) + "\n";
+  assert.equal(readFileSync(configPath(core), "utf8"), esperado);
+  assert.equal(migration.state, "none");
+});
+
+const REVIEW_GATE_INVALIDOS = [
+  ["max", 'invalid reviewGate: "max" (expected an object)'],
+  [{ enabled: "sim" }, 'invalid reviewGate.enabled: "sim" (expected true | false)'],
+  [{ effort: "extreme" }, 'invalid reviewGate.effort: "extreme" (expected low | medium | high | xhigh | max | inherit)'],
+  [{ model: "opus" }, 'invalid reviewGate.model: "opus" (expected a map of engine to model, e.g. {"claude-code": "opus"})'],
+];
+
+for (const [caso, mensagem] of REVIEW_GATE_INVALIDOS) {
+  test(`should refuse the invalid reviewGate ${JSON.stringify(caso)} naming it and write nothing`, () => {
+    const core = diretorioTemporario();
+    writeConfig(core, { registries: [], reviewGate: caso });
+    const antes = readFileSync(configPath(core), "utf8");
+    assert.throws(() => writeAgentPolicy(core, "review", { effort: "max" }), { message: mensagem });
+    assert.equal(readFileSync(configPath(core), "utf8"), antes);
+  });
+}
+
+test("should report replaced and kept fields of the reviewGate by what was requested", () => {
+  const migrar = (reviewGate, pedido) => {
+    const core = diretorioTemporario();
+    writeConfig(core, { registries: [], reviewGate });
+    return writeAgentPolicy(core, "review", pedido).migration;
+  };
+  assert.deepEqual(migrar({ enabled: false, effort: "high" }, { model: { "claude-code": "opus" } }), {
+    state: "migrated",
+    kept: [{ field: "enabled", value: false }, { field: "effort", value: "high" }],
+    replaced: [],
+  }, "campo não pedido fica");
+  assert.deepEqual(migrar({ effort: "high" }, { effort: "max" }), {
+    state: "migrated",
+    kept: [],
+    replaced: [{ field: "effort", from: "high", to: "max" }],
+  }, "pedido diferente substitui");
+  assert.deepEqual(migrar({ effort: "high" }, { effort: "high" }), {
+    state: "migrated",
+    kept: [{ field: "effort", value: "high" }],
+    replaced: [],
+  }, "pedido igual fica");
+  assert.deepEqual(migrar({ model: { "claude-code": "opus" } }, { model: { "claude-code": "haiku", copilot: "gpt-5" } }), {
+    state: "migrated",
+    kept: [],
+    replaced: [{ field: "model.claude-code", from: "opus", to: "haiku" }],
+  }, "motor novo não entra em lista nenhuma");
+});
+
+const ESCRITA_SOBRE_NAO_OBJETO = [
+  ["agents", { agents: "x", reviewGate: { enabled: false } }, 'invalid agents: "x" (expected an object)'],
+  ["agents.review", { agents: { review: "x" } }, 'invalid agents.review: "x" (expected an object)'],
+  ["agents number", { agents: 5 }, "invalid agents: 5 (expected an object)"],
+];
+
+for (const [caminho, extra, mensagem] of ESCRITA_SOBRE_NAO_OBJETO) {
+  test(`should refuse to write over a non-object ${caminho} and write nothing`, () => {
+    const core = diretorioTemporario();
+    writeConfig(core, { registries: [], ...extra });
+    const antes = readFileSync(configPath(core), "utf8");
+    assert.throws(() => writeAgentPolicy(core, "review", { effort: "max" }), { message: mensagem });
+    assert.equal(readFileSync(configPath(core), "utf8"), antes);
+  });
+}
+
+test("should refuse an invalid requested effort over a valid reviewGate and keep the file", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], reviewGate: { enabled: false } });
+  const antes = readFileSync(configPath(core), "utf8");
+  assert.throws(() => writeAgentPolicy(core, "review", { effort: "extremo" }), {
+    message: 'invalid agents.review.effort: "extremo" (expected low | medium | high | xhigh | max | inherit)',
+  });
+  assert.equal(readFileSync(configPath(core), "utf8"), antes);
+});
+
+test("should migrate an inherit effort from reviewGate", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], reviewGate: { enabled: false, effort: "inherit" } });
+  const { migration } = writeAgentPolicy(core, "review", { model: { "claude-code": "opus" } });
+  const config = readConfig(core);
+  assert.deepEqual(config.agents.review, { enabled: false, effort: "inherit", model: { "claude-code": "opus" } });
+  assert.equal(Object.hasOwn(config, "reviewGate"), false);
+  assert.deepEqual(migration, {
+    state: "migrated",
+    kept: [{ field: "enabled", value: false }, { field: "effort", value: "inherit" }],
+    replaced: [],
+  });
+});
+
+test("should treat a null agents.review as absent and migrate the reviewGate when writing", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { review: null }, reviewGate: { enabled: false } });
+  const { migration } = writeAgentPolicy(core, "review", { effort: "max" });
+  const config = readConfig(core);
+  assert.deepEqual(config.agents.review, { enabled: false, effort: "max" });
+  assert.equal(Object.hasOwn(config, "reviewGate"), false);
+  assert.deepEqual(migration, { state: "migrated", kept: [{ field: "enabled", value: false }], replaced: [] });
+});
+
+test("should let the write fix the invalid field it replaces", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { review: { effort: "extremo" } } });
+  const { migration } = writeAgentPolicy(core, "review", { effort: "max" });
+  assert.deepEqual(readConfig(core).agents.review, { effort: "max" });
+  assert.deepEqual(migration, { state: "none" });
+});
+
+test("should let a model request fix the invalid model of the engine it replaces", () => {
+  const vazio = diretorioTemporario();
+  writeConfig(vazio, { registries: [], agents: { review: { model: { "claude-code": "" } } } });
+  writeAgentPolicy(vazio, "review", { model: { "claude-code": "opus" } });
+  assert.deepEqual(readConfig(vazio).agents.review, { model: { "claude-code": "opus" } });
+  const nulo = diretorioTemporario();
+  writeConfig(nulo, { registries: [], agents: { review: { model: null } } });
+  writeAgentPolicy(nulo, "review", { model: { "claude-code": "opus" } });
+  assert.deepEqual(readConfig(nulo).agents.review, { model: { "claude-code": "opus" } });
+});
+
+test("should treat a null agents.review as absent when writing without reviewGate", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { review: null } });
+  const { migration } = writeAgentPolicy(core, "review", { effort: "max" });
+  assert.deepEqual(readConfig(core).agents.review, { effort: "max" });
+  assert.deepEqual(migration, { state: "none" });
+});
+
+test("should check the base model shape only when a model is requested", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { review: { enabled: "sim", model: "opus" } } });
+  assert.throws(() => writeAgentPolicy(core, "review", { effort: "max" }), { message: 'invalid agents.review.enabled: "sim" (expected true | false)' });
+});
+
+test("should refuse an empty or repeated list of requests and write nothing", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [] });
+  const antes = readFileSync(configPath(core), "utf8");
+  assert.throws(() => writeAgentPolicies(core, []), { message: "nothing to write for agents (expected at least one intent)" });
+  assert.throws(
+    () => writeAgentPolicies(core, [["review", { model: { "claude-code": "opus" } }], ["review", { effort: "max" }]]),
+    { message: 'agent intent requested twice: "review"' },
+  );
+  assert.equal(readFileSync(configPath(core), "utf8"), antes);
+});
+
+test("should refuse the write when an invalid field stays in the result", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { review: { effort: "extremo" } } });
+  const antes = readFileSync(configPath(core), "utf8");
+  assert.throws(() => writeAgentPolicy(core, "review", { model: { "claude-code": "opus" } }), {
+    message: 'invalid agents.review.effort: "extremo" (expected low | medium | high | xhigh | max | inherit)',
+  });
+  assert.equal(readFileSync(configPath(core), "utf8"), antes);
+});
+
+test("should not report the alias as overridden when agents.review is null", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { review: null }, reviewGate: { enabled: false } });
+  const { policies, aliasOverridden } = readAgents(core);
+  assert.equal(aliasOverridden, false);
+  assert.equal(policies.review.enabled, false);
+});
+
+test("should refuse a request of the wrong type instead of ignoring it", () => {
+  assert.throws(() => requestOf({ review: "opus" }, {}, "review"), { message: 'invalid model request for review: "opus" (expected a map of engine to model)' });
+  assert.throws(() => requestOf({}, { review: 5 }, "review"), { message: "invalid effort request for review: 5 (expected a level name)" });
+  assert.deepEqual(requestOf({ review: {} }, { review: "" }, "review"), {});
+});
+
+test("should refuse to write any intent over a config the read refuses", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], reviewGate: { enabled: "sim" } });
+  const antes = readFileSync(configPath(core), "utf8");
+  assert.throws(() => writeAgentPolicy(core, "drafting", { effort: "max" }), {
+    message: 'invalid reviewGate.enabled: "sim" (expected true | false)',
+  });
+  assert.equal(readFileSync(configPath(core), "utf8"), antes);
+});
+
+test("should refuse a non-map agents.review.model before merging", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { review: { model: "opus" } } });
+  const antes = readFileSync(configPath(core), "utf8");
+  assert.throws(() => writeAgentPolicy(core, "review", { model: { "claude-code": "haiku" } }), {
+    message: 'invalid agents.review.model: "opus" (expected a map of engine to model, e.g. {"claude-code": "opus"})',
+  });
+  assert.equal(readFileSync(configPath(core), "utf8"), antes);
+});
+
+test("should name reviewGate when agents.review is null and the alias is invalid", () => {
+  const core = diretorioTemporario();
+  writeConfig(core, { registries: [], agents: { review: null }, reviewGate: { enabled: "sim" } });
+  assert.throws(() => readAgents(core), { message: 'invalid reviewGate.enabled: "sim" (expected true | false)' });
 });
 
 test("writeOrigin grava a origem e devolve ausente quando a chave nunca existiu", () => {

@@ -4,8 +4,8 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { execute, planInstall } from "../src/installer.js";
-import { PERSONAL_KEYS, TEAM_KEYS, misplacedTeamKeys, previewAgents, readAgents, readInitials, readPersonal, writeInitials, writePersonal } from "../src/registry.js";
+import { execute, planInstall, update } from "../src/installer.js";
+import { PERSONAL_KEYS, TEAM_KEYS, misplacedTeamKeys, previewPlan, readAgents, readInitials, readPersonal, writeInitials, writePersonal } from "../src/registry.js";
 import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const diretorioTemporario = () => tempDir("mgr-config-layers-");
@@ -185,11 +185,11 @@ test("should install agent files from the same policy the plan showed", () => {
 
 test("should not write config.json while previewing the agents", () => {
   const core = diretorioTemporario();
-  const preview = previewAgents(core, { review: { "claude-code": "haiku" } });
+  const preview = previewPlan(core, { review: { "claude-code": "haiku" } }).agents;
   assert.equal(preview.policies.review.model["claude-code"], "haiku");
   assert.equal(existsSync(path.join(core, "config.json")), false);
-  assert.throws(() => previewAgents(core, { inexistente: { "claude-code": "x" } }), /unknown agent intent/);
-  assert.deepEqual(previewAgents(core, {}), readAgents(core));
+  assert.throws(() => previewPlan(core, { inexistente: { "claude-code": "x" } }).agents, /unknown agent intent/);
+  assert.deepEqual(previewPlan(core, {}).agents, readAgents(core));
 });
 
 const agenteDe = (repo, nome) => readFileSync(path.join(repo, ".claude", "agents", `${nome}.md`), "utf8");
@@ -222,31 +222,31 @@ test("should preserve the keys already in config.json when writing an effort", (
 
 test("should not write config.json while previewing an effort", () => {
   const core = diretorioTemporario();
-  const preview = previewAgents(core, {}, { review: "max" });
+  const preview = previewPlan(core, {}, { review: "max" }).agents;
   assert.equal(preview.policies.review.effort, "max");
   assert.equal(existsSync(path.join(core, "config.json")), false);
-  assert.throws(() => previewAgents(core, {}, { inexistente: "max" }), /unknown agent intent/);
-  assert.deepEqual(previewAgents(core, {}, {}), readAgents(core));
+  assert.throws(() => previewPlan(core, {}, { inexistente: "max" }).agents, /unknown agent intent/);
+  assert.deepEqual(previewPlan(core, {}, {}).agents, readAgents(core));
 });
 
 test("should refuse to preview an effort over an agents entry that is not an object and leave config.json intact", () => {
   const core = diretorioTemporario();
   const original = JSON.stringify({ agents: { review: "opus" } });
   writeFileSync(path.join(core, "config.json"), original);
-  assert.throws(() => previewAgents(core, {}, { review: "max" }), /invalid agents\.review/);
+  assert.throws(() => previewPlan(core, {}, { review: "max" }).agents, /invalid agents\.review/);
   assert.equal(readFileSync(path.join(core, "config.json"), "utf8"), original);
 });
 
 test("should refuse to preview an effort when agents in config.json is not an object", () => {
   const core = diretorioTemporario();
   writeFileSync(path.join(core, "config.json"), JSON.stringify({ agents: 5 }));
-  assert.throws(() => previewAgents(core, {}, { review: "max" }), /invalid agents: 5/);
-  assert.throws(() => previewAgents(core, { review: { "claude-code": "opus" } }), /invalid agents: 5/);
+  assert.throws(() => previewPlan(core, {}, { review: "max" }).agents, /invalid agents: 5/);
+  assert.throws(() => previewPlan(core, { review: { "claude-code": "opus" } }).agents, /invalid agents: 5/);
 });
 
 test("should ignore an effort entry without a level when previewing", () => {
   const core = diretorioTemporario();
-  assert.deepEqual(previewAgents(core, {}, { review: undefined }), readAgents(core));
+  assert.deepEqual(previewPlan(core, {}, { review: undefined }).agents, readAgents(core));
 });
 
 test("should not create config.json when the only effort answer is empty", () => {
@@ -263,6 +263,151 @@ test("should create no config.json and keep the default efforts when none was an
   assert.ok(agenteDe(repo, "mgr-draft").includes("effort: high"));
   assert.ok(agenteDe(repo, "mgr-task").includes("effort: low"));
   assert.ok(agenteDe(repo, "mgr-review").includes("effort: max"));
+});
+
+const escreverConfigDoTime = (repo, config) => {
+  mkdirSync(path.join(repo, ".mgr-core"), { recursive: true });
+  writeFileSync(configDe(repo), JSON.stringify(config, null, 2) + "\n", "utf8");
+};
+
+test("should preview the review policy on top of reviewGate without writing and without the alias", () => {
+  const core = diretorioTemporario();
+  const file = path.join(core, "config.json");
+  writeFileSync(file, JSON.stringify({ reviewGate: { enabled: false } }), "utf8");
+  const antes = readFileSync(file, "utf8");
+
+  const preview = previewPlan(core, {}, { review: "max" }).agents;
+
+  assert.equal(preview.policies.review.enabled, false);
+  assert.equal(preview.policies.review.effort, "max");
+  assert.equal(preview.aliasOverridden, false);
+  assert.equal(readFileSync(file, "utf8"), antes);
+});
+
+test("should install an answered review model on top of reviewGate and record what was kept", () => {
+  const repo = repoTemporario();
+  escreverConfigDoTime(repo, { reviewGate: { effort: "high" } });
+
+  const { plan, result } = instalar(repo, { models: { review: { "claude-code": "haiku" } } });
+
+  const config = lerConfig(repo);
+  assert.deepEqual(config.agents.review, { effort: "high", model: { "claude-code": "haiku" } });
+  assert.equal(Object.hasOwn(config, "reviewGate"), false);
+  assert.deepEqual(result.reviewGateMigration, { state: "migrated", kept: [{ field: "effort", value: "high" }], replaced: [] });
+  assert.deepEqual(plan.agents, readAgents(path.join(repo, ".mgr-core")));
+  const agente = agenteDe(repo, "mgr-review");
+  assert.ok(agente.includes("effort: high"));
+  assert.ok(agente.includes("model: haiku"));
+});
+
+test("should leave reviewGate byte for byte when the install answers nothing for review", () => {
+  const repo = repoTemporario();
+  escreverConfigDoTime(repo, { reviewGate: { enabled: false } });
+  const antes = JSON.stringify(lerConfig(repo).reviewGate);
+
+  const { plan, result } = instalar(repo, { efforts: { drafting: "max" } });
+
+  assert.equal(JSON.stringify(lerConfig(repo).reviewGate), antes);
+  assert.equal(result.reviewGateMigration.state, "none");
+  assert.equal(plan.reviewGateMigration.state, "none");
+  assert.deepEqual(plan.agents, readAgents(path.join(repo, ".mgr-core")));
+});
+
+test("should plan and execute a hand-written conflict without migrating", () => {
+  const repo = repoTemporario();
+  const fixture = JSON.parse(readFileSync(fileURLToPath(new URL("./fixtures/agents/config-conflito.json", import.meta.url)), "utf8"));
+  escreverConfigDoTime(repo, { registries: [], ...fixture });
+
+  const { plan, result } = instalar(repo, { efforts: { review: "low" } });
+
+  assert.equal(plan.reviewGateMigration.state, "none");
+  assert.equal(result.reviewGateMigration.state, "none");
+  assert.deepEqual(lerConfig(repo).reviewGate, fixture.reviewGate);
+  assert.equal(readAgents(path.join(repo, ".mgr-core")).aliasOverridden, true);
+});
+
+test("should write the agents keys in the order the answers came", () => {
+  const repo = repoTemporario();
+  instalar(repo, { models: { review: { "claude-code": "opus" } }, efforts: { drafting: "low" } });
+  assert.deepEqual(Object.keys(lerConfig(repo).agents), ["review", "drafting"]);
+  const outro = repoTemporario();
+  instalar(outro, { models: { drafting: { "claude-code": "opus" } }, efforts: { review: "low" } });
+  assert.deepEqual(Object.keys(lerConfig(outro).agents), ["drafting", "review"]);
+});
+
+test("should fix invalid fields of two intents in one install and plan the same", () => {
+  const repo = repoTemporario();
+  escreverConfigDoTime(repo, { agents: { drafting: { effort: "extremo" }, review: { effort: "extremo" } } });
+  const { plan } = instalar(repo, { efforts: { drafting: "max", review: "max" } });
+  assert.deepEqual(lerConfig(repo).agents, { drafting: { effort: "max" }, review: { effort: "max" } });
+  assert.deepEqual(plan.agents, readAgents(path.join(repo, ".mgr-core")));
+});
+
+test("should plan a null agents.review as absent when there is no reviewGate", () => {
+  const repo = repoTemporario();
+  escreverConfigDoTime(repo, { agents: { review: null } });
+  const { agents, reviewGateMigration } = previewPlan(path.join(repo, ".mgr-core"), {}, { review: "low" });
+  assert.equal(agents.policies.review.effort, "low");
+  assert.equal(agents.sources.review.effort, "configured");
+  assert.equal(reviewGateMigration.state, "none");
+});
+
+test("should migrate reviewGate and write another intent in the same install", () => {
+  const repo = repoTemporario();
+  escreverConfigDoTime(repo, { reviewGate: { enabled: false } });
+  const { plan, result } = instalar(repo, { models: { review: { "claude-code": "haiku" } }, efforts: { drafting: "low" } });
+  const config = lerConfig(repo);
+  assert.deepEqual(config.agents, { review: { enabled: false, model: { "claude-code": "haiku" } }, drafting: { effort: "low" } });
+  assert.equal(Object.hasOwn(config, "reviewGate"), false);
+  assert.deepEqual(result.reviewGateMigration, { state: "migrated", kept: [{ field: "enabled", value: false }], replaced: [] });
+  assert.deepEqual(plan.reviewGateMigration, result.reviewGateMigration);
+  assert.deepEqual(plan.agents, readAgents(path.join(repo, ".mgr-core")));
+});
+
+test("should not treat an empty model map as a request in the plan", () => {
+  const repo = repoTemporario();
+  escreverConfigDoTime(repo, { reviewGate: { enabled: false } });
+  const core = path.join(repo, ".mgr-core");
+  const { agents, reviewGateMigration } = previewPlan(core, { review: {} });
+  assert.equal(reviewGateMigration.state, "none");
+  assert.equal(agents.policies.review.enabled, false);
+});
+
+test("should not overlay an empty requested effort in the plan", () => {
+  const core = diretorioTemporario();
+  writeFileSync(path.join(core, "config.json"), JSON.stringify({ reviewGate: { enabled: false } }), "utf8");
+
+  const plan = previewPlan(core, {}, { review: "" });
+
+  assert.equal(plan.reviewGateMigration.state, "none");
+  assert.equal(plan.agents.policies.review.enabled, false);
+});
+
+test("should leave reviewGate byte for byte on update", () => {
+  const repo = repoTemporario();
+  instalar(repo);
+  escreverConfigDoTime(repo, { reviewGate: { enabled: false, effort: "high" } });
+  const antes = readFileSync(configDe(repo), "utf8");
+
+  const result = update("project", repo);
+
+  assert.equal(readFileSync(configDe(repo), "utf8"), antes);
+  assert.equal(result.reviewGateMigration.state, "none");
+});
+
+test("should plan the same review gate migration that execute reports", () => {
+  const repo = repoTemporario();
+  escreverConfigDoTime(repo, { reviewGate: { enabled: false, effort: "high" } });
+
+  const { plan, result } = instalar(repo, { efforts: { review: "max" } });
+
+  assert.equal(plan.reviewGateMigration.state, "migrated");
+  assert.deepEqual(plan.reviewGateMigration, result.reviewGateMigration);
+  assert.deepEqual(result.reviewGateMigration, {
+    state: "migrated",
+    kept: [{ field: "enabled", value: false }],
+    replaced: [{ field: "effort", from: "high", to: "max" }],
+  });
 });
 
 test("should record optional and allSkills in the manifest", () => {
@@ -425,12 +570,12 @@ test("should keep refusing origin with a value but without set", async () => {
 test("should print the human origin text for each of the three states", async () => {
   const { origin } = await import("../src/commands/origin.js");
   const { getMessages } = await import("../src/messages.js");
-  const M = getMessages("en", { invocation: "node X" });
+  const msg = getMessages("en", { invocation: "node X" });
   const root = diretorioTemporario();
   mkdirSync(path.join(root, ".mgr-core"), { recursive: true });
   const ler = () => {
     const out = [];
-    const code = origin({ root, positional: [], flags: {}, io: { out: (linha) => out.push(linha), err: () => {} }, M });
+    const code = origin({ root, positional: [], flags: {}, io: { out: (linha) => out.push(linha), err: () => {} }, M: msg });
     return { code, out };
   };
   assert.deepEqual(ler(), { code: 0, out: ["project origin: not recorded — run node X origin set greenfield|brownfield"] });

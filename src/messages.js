@@ -7,6 +7,16 @@ import * as catalog from "./catalog.js";
 // experiência original. O núcleo não decide idioma: a borda resolve a precedência
 // (flag > manifesto > locale) e passa a tabela pronta via getMessages().
 
+// A montagem do texto da migração do `reviewGate` (ADR-0031) é uma só; cada idioma dá só os rótulos.
+function migrationText({ kept, replaced }, { head, keptLabel, replacedLabel, none }) {
+  const fmt = ({ field, value }) => `${field}=${JSON.stringify(value)}`;
+  const troca = ({ field, from, to }) => `${field} ${JSON.stringify(from)} -> ${JSON.stringify(to)}`;
+  return head
+    + (kept.length ? ` ${keptLabel} ${kept.map(fmt).join(", ")}.` : "")
+    + (replaced.length ? ` ${replacedLabel} ${replaced.map(troca).join(", ")}.` : "")
+    + (!kept.length && !replaced.length ? ` ${none}` : "");
+}
+
 const en = ({ invocation, lifecycle }) => ({
   unknownFlag: (flag) => `unknown flag: ${flag}`,
   unknownCommand: (command) => `unknown command: ${command}\n`,
@@ -235,6 +245,18 @@ const en = ({ invocation, lifecycle }) => ({
   agentsAliasNote:
     "`reviewGate` and `agents.review` are both set: `agents.review` wins. Remove `reviewGate` to "
     + "keep one source.",
+  reviewGateMigrated: (migration, configFile) => migrationText(migration, {
+    head: `\`reviewGate\` was merged into \`agents.review\` and removed from ${configFile}.`,
+    keptLabel: "Kept from it:",
+    replacedLabel: "Replaced:",
+    none: "It declared no field.",
+  }),
+  planReviewGateMigration: (migration, configFile) => migrationText(migration, {
+    head: `\`reviewGate\` will be merged into \`agents.review\` and removed from ${configFile}.`,
+    keptLabel: "Keeps:",
+    replacedLabel: "Replaces:",
+    none: "It declared no field.",
+  }),
   agentsUnknown: (intent, known) => `unknown intent \`${intent}\` (expected ${known})`,
   agentsSetNeedsIntent: (known) => `name the intent to configure (expected ${known})`,
   agentsSetWriting: (intent) => `Writing \`agents.${intent}\` to .mgr-core/config.json`,
@@ -731,6 +753,18 @@ const ptBR = ({ invocation, lifecycle }) => ({
   agentsAliasNote:
     "`reviewGate` e `agents.review` estão os dois escritos: `agents.review` vence. Apague o "
     + "`reviewGate` para ficar com uma fonte só.",
+  reviewGateMigrated: (migration, configFile) => migrationText(migration, {
+    head: `O \`reviewGate\` foi incorporado a \`agents.review\` e removido de ${configFile}.`,
+    keptLabel: "Ficou dele:",
+    replacedLabel: "Substituído:",
+    none: "Ele não declarava nenhum campo.",
+  }),
+  planReviewGateMigration: (migration, configFile) => migrationText(migration, {
+    head: `O \`reviewGate\` será incorporado a \`agents.review\` e removido de ${configFile}.`,
+    keptLabel: "Fica:",
+    replacedLabel: "Substitui:",
+    none: "Ele não declarava nenhum campo.",
+  }),
   agentsUnknown: (intent, known) => `intenção \`${intent}\` desconhecida (esperado ${known})`,
   agentsSetNeedsIntent: (known) => `diga a intenção a configurar (esperado ${known})`,
   agentsSetWriting: (intent) => `Escrevendo \`agents.${intent}\` em .mgr-core/config.json`,

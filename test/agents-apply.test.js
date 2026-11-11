@@ -7,7 +7,7 @@ import { installAgents, AGENT_MARKER } from "../src/builder.js";
 import { readAgents } from "../src/registry.js";
 import { tempDir } from "../scripts/lib/tmp.mjs";
 
-const M = {
+const msg = {
   agentChanged: (agent, engine, field, from, to) => `${agent} (${engine}): ${field} ${from} -> ${to}`,
   agentsApplyMissing: (file, version) => `missing ${file}: npx mgr-method@${version} update`,
   agentsApplyNotOwned: (file) => `not owned ${file}`,
@@ -38,7 +38,7 @@ function run(root) {
   const out = [];
   const err = [];
   const io = { out: (linha) => out.push(linha), err: (linha) => err.push(linha) };
-  const code = agentsApply({ root, cwd: root, flags: {}, positional: [], io, M });
+  const code = agentsApply({ root, cwd: root, flags: {}, positional: [], io, M: msg });
   return { code, out, err };
 }
 

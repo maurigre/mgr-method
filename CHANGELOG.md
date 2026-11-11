@@ -99,6 +99,40 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - **Downgrade:** uma versão anterior rodada sobre a geração nova recopia o runtime por motor e deixa
   `.mgr-core/runtime/` sem uso. O próximo comando da versão nova reloca de novo. A CONSTITUTION 2.7
   cobre só a migração para a frente.
+- **Quebra de contrato (ADR-0031):** a primeira escrita pedida da política de review (`install` com flag
+  ou pergunta de review, e `mgr agents set review`), num config com só `reviewGate`, remove a chave
+  `reviewGate` e grava os campos dela em `agents.review`. Quem lê `reviewGate` direto, sem passar pelo
+  método, deixa de achar a chave. As versões publicadas no npm 0.7.0-beta.8 e 0.7.0-beta.9 só leem `reviewGate` (a chave
+  existe desde a 0.7.0-beta.2, e `agents` só desde a 0.7.0-beta.10); nelas, a chave removida não é achada.
+- **Quebra de contrato (ADR-0031):** `install` com flag de review (`--effort-review`, `--model-review`) e
+  `mgr agents set review` saem com 1, antes de gravar qualquer coisa, quando o `reviewGate` do
+  `.mgr-core/config.json` é inválido e `agents.review` não existe. Antes saíam com 0, porque a escrita mascarava o valor inválido (lido no código).
+- **Quebra de contrato (ADR-0031):** a escrita de qualquer intenção recusa `agents` que não seja
+  objeto (`agents: null` incluído), e `agents.<intenção>` escrito que não seja objeto (`null` em
+  `agents.<intenção>` conta como ausente, como na leitura), e não grava nada. Antes gravava por cima, e uma string virava `{0: "x", ...}` (lido no
+  código).
+- **Quebra de contrato (ADR-0031):** `mgr agents set` sobre um `.mgr-core/config.json` que a leitura
+  recusa por outra parte que não a intenção escrita — por exemplo um `reviewGate` inválido ao escrever
+  `drafting` (medido contra a versão anterior) ou outro `agents.<intenção>` inválido (lido no código)
+  — passa a sair 1 sem gravar nada, onde antes gravava e saía 0. O campo inválido que o próprio
+  pedido substitui, inclusive `model.<motor>`, continua sendo consertado pela escrita, também quando
+  o `install` conserta várias intenções de uma vez (o depois medido na versão nova; o antes, lido no
+  código). No `install` a recusa por outra parte não muda: o
+  plano já recusava esse config (medido para o `reviewGate` inválido).
+
+### Corrigido
+- **`install` com flag de review e `agents set review` religavam o review gate desligado em silêncio
+  (N-10, ADR-0031).** Com só `reviewGate` no `.mgr-core/config.json`, a escrita de `--effort-review`,
+  `--model-review` e `mgr agents set review` religavam o review gate desligado, e o plano mostrava o
+  review ligado (lido no código). Com o review ligado, a resposta à pergunta de review do `install`
+  descartava os campos do `reviewGate` que não foram perguntados (lido no código). Agora a escrita parte do `reviewGate`
+  inteiro, o incorpora a `agents.review`, remove a chave e anuncia, no plano e depois da escrita, o que
+  ficou dele e o que foi substituído.
+- **`mgr agents` dizia que `agents.review` vencia o `reviewGate` quando `agents.review` era `null`
+  (ADR-0031).** A leitura trata `null` como ausente e usa o `reviewGate`, então o aviso era falso.
+  Agora o aviso só sai com `agents.review` escrito, e o `--json` dá `aliasOverridden: false` nesse caso.
+- A leitura passa a nomear `reviewGate`, e não `agents.review`, quando o valor inválido vem do apelido
+  `reviewGate`. A mensagem da recusa é a mesma na leitura e na escrita.
 
 ## [0.7.0-beta.11] - 2026-10-15
 > Estrutura fixa do SDD e política de versionamento na constituição. Pré-release no dist-tag `next`.

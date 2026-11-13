@@ -150,6 +150,12 @@ export function readDetectionMode(coreDir) {
 // Ausente = ligado no default do catálogo. Override PARCIAL completa o default, não o substitui.
 const isPlainObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 
+// A forma do `model` (mapa por motor), com a mensagem que ensina a forma. Uma só, usada pela
+// validação da política e pela base da escrita, que só confere a forma (DT-25, review isolado 4).
+function modelShapeError(label, model) {
+  return new Error(`invalid ${label}.model: ${JSON.stringify(model)} (expected a map of engine to model, e.g. {"claude-code": "opus"})`);
+}
+
 // Resolve UMA política de agente: default do catálogo completado pelo que o usuário escreveu.
 //
 // Extraída de `readReviewGate` quando a política deixou de ser uma só (ADR-0017). O `label` existe
@@ -182,9 +188,7 @@ function resolvePolicy(label, defaults, configured) {
   // `model` é mapa por motor — mesma forma do mgr-manifest.json. String é o erro provável de
   // quem escreve à mão, então a mensagem ensina a forma em vez de só recusar.
   const model = policy.model;
-  if (!isPlainObject(model)) {
-    throw new Error(`invalid ${label}.model: ${JSON.stringify(model)} (expected a map of engine to model, e.g. {"claude-code": "opus"})`);
-  }
+  if (!isPlainObject(model)) throw modelShapeError(label, model);
   for (const [engine, value] of Object.entries(model)) {
     engines.get(engine);
     // O VALOR não é validado contra lista fechada, de propósito: os identificadores são da
@@ -207,39 +211,149 @@ function resolvePolicy(label, defaults, configured) {
   return policy;
 }
 
-// A política de TODAS as intenções (ADR-0017). Fonte única: `agents` no mesmo config, com
-// `reviewGate` como APELIDO de `agents.review` para nenhuma instalação existente quebrar.
-//
-// Quando as duas chaves existem, `agents.review` vence e o conflito volta em `aliasOverridden`
-// para a BORDA avisar. Resolver em silêncio seria escolher pelo autor sem lhe dizer — e ele
-// escreveu os dois valores justamente porque achava que os dois valiam.
 // Escreve a política de UMA intenção, preservando tudo o mais (ADR-0017; esta fatia).
 //
 // O merge do `model` é de DOIS NÍVEIS, pela mesma razão do `resolvePolicy`: declarar um motor não
 // pode apagar o outro que o autor já tinha escrito. E só o campo pedido é tocado — passar `model`
 // não mexe no `effort`, e vice-versa.
 //
-// A validação é a MESMA da leitura, rodada aqui antes de gravar: escrever um valor inválido e só
-// descobrir na próxima leitura deixaria o config quebrado com a mão do próprio método.
-export function writeAgentPolicy(coreDir, intent, { model, effort } = {}) {
-  if (!INTENTS.includes(intent)) {
-    throw new Error(`unknown agent intent: ${JSON.stringify(intent)} (expected ${INTENTS.join(" | ")})`);
-  }
-  if (model === undefined && effort === undefined) {
-    throw new Error(`nothing to write for agents.${intent} (expected model, effort, or both)`);
+// A validação é a MESMA da leitura, rodada antes de gravar (em `writeAgentPolicies`): escrever um
+// valor inválido e só descobrir na próxima leitura deixaria o config quebrado com a mão do método.
+//
+// Quando a política de review vinha só do apelido `reviewGate`, a escrita parte dele e o remove do
+// arquivo (ADR-0031): deixá-lo ao lado de `agents.review` faria a escrita sobrepor o apelido em
+// silêncio, descartando o que o autor havia declarado nele. O retorno diz o que migrou.
+export function writeAgentPolicy(coreDir, intent, request = {}) {
+  const { policies, migration } = writeAgentPolicies(coreDir, [[intent, request]]);
+  return { policy: policies[intent], migration };
+}
+
+// Escreve os pedidos de VÁRIAS intenções numa gravação só (review isolado 4, SP-1): todos são
+// aplicados sobre o config lido UMA vez, pela MESMA regra do plano (`applyRequests`), o resultado
+// final é validado inteiro e só então gravado. Gravar uma intenção por vez validava estados
+// intermediários: um pedido que conserta duas intenções inválidas era recusado na primeira,
+// enquanto o plano, que aplica tudo junto, o aceitava. `requests` é `[[intent, { model, effort }], ...]`,
+// na ordem em que as chaves entram em `agents`; lista vazia e intenção repetida são recusadas.
+export function writeAgentPolicies(coreDir, requests) {
+  if (!requests.length) throw new Error("nothing to write for agents (expected at least one intent)");
+  assertRequestedIntents(requests);
+  for (const [intent, { model, effort } = {}] of requests) {
+    if (model === undefined && effort === undefined) {
+      throw new Error(`nothing to write for agents.${intent} (expected model, effort, or both)`);
+    }
   }
 
   const config = readConfig(coreDir);
-  const agents = { ...(config.agents ?? {}) };
-  const escrita = { ...(agents[intent] ?? {}) };
-  if (model !== undefined) escrita.model = { ...(escrita.model ?? {}), ...model };
-  if (effort !== undefined) escrita.effort = effort;
-
+  const { config: gravado, migration } = applyRequests(config, requests);
   // Valida ANTES de gravar, e devolve o que passou a valer — é o que a borda relata.
-  const policy = resolvePolicy(`agents.${intent}`, AGENTS[intent].defaults, escrita);
-  agents[intent] = escrita;
-  writeConfig(coreDir, { ...config, agents });
-  return policy;
+  const policies = Object.fromEntries(requests.map(([intent]) => (
+    [intent, resolvePolicy(`agents.${intent}`, AGENTS[intent].defaults, gravado.agents[intent])]
+  )));
+  // DT-18: o config FINAL inteiro tem de passar na leitura antes de ser gravado (ex.: outra
+  // intenção inválida que nenhum pedido substitui).
+  agentsFromConfig(gravado);
+  writeConfig(coreDir, gravado);
+  return { policies, migration };
+}
+
+// `agents` tem de ser objeto: UMA recusa, com o mesmo texto, na leitura e na escrita (review isolado 6).
+function assertAgentsObject(agents) {
+  if (agents !== undefined && !isPlainObject(agents)) {
+    throw new Error(`invalid agents: ${JSON.stringify(agents)} (expected an object)`);
+  }
+}
+
+// Intenções pedidas: só as do catálogo, e cada uma uma vez — repetida, o segundo pedido apagaria o
+// primeiro em silêncio. Uma regra para o plano e para a escrita.
+function assertRequestedIntents(requests) {
+  const vistas = new Set();
+  for (const [intent] of requests) {
+    if (!INTENTS.includes(intent)) {
+      throw new Error(`unknown agent intent: ${JSON.stringify(intent)} (expected ${INTENTS.join(" | ")})`);
+    }
+    if (vistas.has(intent)) throw new Error(`agent intent requested twice: ${JSON.stringify(intent)}`);
+    vistas.add(intent);
+  }
+}
+
+// Os pedidos sobre o config (ADR-0031): base de `policyBaseOf`, sobreposição de `overlayRequest`,
+// migração do apelido e remoção do `reviewGate`. UMA regra para o plano e para a escrita (review
+// isolado 5, ST-1), para os dois não divergirem na primeira mudança. Devolve config NOVO.
+function applyRequests(config, requests) {
+  // `agents` que não é objeto é recusado antes de qualquer espalhamento: número e booleano sumiriam
+  // em silêncio (`{ ...5 }` é `{}`), e com eles o `reviewGate` seria removido (ADR-0031).
+  assertAgentsObject(config.agents);
+  const agents = { ...(config.agents ?? {}) };
+  let migration = { state: "none" };
+  for (const [intent, request] of requests) {
+    const { source, base } = policyBaseOf(config, intent, request);
+    agents[intent] = overlayRequest(base, request);
+    if (source === "reviewGate") migration = migrationOf(base, request);
+  }
+  const resultado = { ...config, agents };
+  if (migration.state === "migrated") delete resultado.reviewGate;
+  return { config: resultado, migration };
+}
+
+// A base de onde parte a escrita da política de UMA intenção (ADR-0031), com a precedência da leitura
+// (`agentsFromConfig`): o apelido só vale quando `agents.<intent>` está ausente, e `null` conta como
+// ausente nos dois lados (`??` na leitura). Chamada só por `applyRequests`, que serve o plano e a
+// escrita: é assim que o plano é a política gravada.
+//
+// Da base própria só se valida a FORMA do que a mescla lê: o `model` tem de ser mapa quando um
+// modelo é pedido (string espalhada viraria `{0: "o", ...}`; `null` conta como ausente). Valores e
+// motores valem pelo resultado, validado inteiro antes de gravar: o pedido conserta o campo
+// inválido que substitui (inclusive `model.<motor>`), e o campo inválido que fica é recusado.
+function policyBaseOf(config, intent, { model }) {
+  const propria = config.agents?.[intent];
+  if (propria != null) {
+    if (!isPlainObject(propria)) {
+      throw new Error(`invalid agents.${intent}: ${JSON.stringify(propria)} (expected an object)`);
+    }
+    if (model !== undefined && propria.model != null && !isPlainObject(propria.model)) {
+      throw modelShapeError(`agents.${intent}`, propria.model);
+    }
+    return { source: "agents", base: propria };
+  }
+  if (intent === "review" && config.reviewGate !== undefined) {
+    // Valida com o rótulo REAL antes de mesclar: um `reviewGate` string espalhado em `{ ...base }`
+    // viraria `{0: "m", ...}`, passaria na validação de `agents.review` e seria gravado.
+    resolvePolicy("reviewGate", AGENTS.review.defaults, config.reviewGate);
+    return { source: "reviewGate", base: config.reviewGate };
+  }
+  return { source: "none", base: {} };
+}
+
+// O pedido sobre a base, com o merge de dois níveis do `model`: declarar um motor não apaga o outro.
+// UMA regra para a escrita e para o plano (achado ST-2 do review isolado 2), para os dois não
+// divergirem na primeira mudança. `policyBaseOf` já garantiu que a base é objeto e que o `model`
+// dela, se for lido, é mapa ou ausente; os valores são validados no resultado.
+function overlayRequest(base, { model, effort }) {
+  const sobre = { ...base };
+  if (model !== undefined) sobre.model = { ...(base.model ?? {}), ...model };
+  if (effort !== undefined) sobre.effort = effort;
+  return sobre;
+}
+
+// O que da migração do apelido ficou e o que o pedido substituiu (ADR-0031). Na ordem em que o
+// autor escreveu o `reviewGate`. Pedido igual ao valor do apelido não muda nada, então fica em
+// `kept`. `model` é por motor; motor que o apelido não tinha não é campo dele e não entra em lista.
+function migrationOf(alias, { model, effort }) {
+  const kept = [];
+  const replaced = [];
+  const place = (field, from, requested) => {
+    if (requested === undefined || requested === from) kept.push({ field, value: from });
+    else replaced.push({ field, from, to: requested });
+  };
+  for (const [key, value] of Object.entries(alias)) {
+    // Sem `isPlainObject` (T-5): a base já foi validada, e um `model` não objeto não chega aqui.
+    if (key === "model") {
+      for (const [engine, current] of Object.entries(value)) place(`model.${engine}`, current, model?.[engine]);
+    } else {
+      place(key, value, key === "effort" ? effort : undefined);
+    }
+  }
+  return { state: "migrated", kept, replaced };
 }
 
 // A ORIGEM do projeto: nascido do metodo (`greenfield`) ou legado (`brownfield`). Vive no CONFIG e
@@ -351,45 +465,65 @@ export function readAgents(coreDir) {
   return agentsFromConfig(readConfig(coreDir));
 }
 
-// O que o install VAI gravar, calculado sem gravar (P1.2): `models` (`{ [intent]: { [engine]: id } }`)
+// `previewPlan`, abaixo: o que o install VAI gravar, calculado sem gravar (P1.2): `models` (`{ [intent]: { [engine]: id } }`)
 // sobreposto em memória ao config lido, com o mesmo merge de dois níveis do `writeAgentPolicy` e a
 // MESMA leitura/validação do `readAgents` (`agentsFromConfig`), para o plano que a pessoa confirma
 // ser a política que será escrita. Intenção desconhecida em `models` falha como no escritor.
 // `efforts` (`{ [intent]: nível }`) sobrepõe só o `effort`, com a mesma regra de intenção desconhecida;
-// o nível inválido é recusado pela validação do `agentsFromConfig`, não aqui.
-export function previewAgents(coreDir, models = {}, efforts = {}) {
-  const config = readConfig(coreDir);
-  const answered = Object.entries(models ?? {}).filter(([, byEngine]) => isPlainObject(byEngine) && Object.keys(byEngine).length > 0);
-  const answeredEfforts = Object.entries(efforts ?? {}).filter(([, level]) => level !== undefined);
-  for (const [intent] of [...answered, ...answeredEfforts]) {
-    if (!INTENTS.includes(intent)) {
-      throw new Error(`unknown agent intent: ${JSON.stringify(intent)} (expected ${INTENTS.join(" | ")})`);
-    }
-  }
-  // `agents` que não é objeto não recebe sobreposição: segue intacto para a validação recusá-lo.
-  if ((!answered.length && !answeredEfforts.length) || (config.agents !== undefined && !isPlainObject(config.agents))) {
-    return agentsFromConfig(config);
-  }
-  const agents = { ...(config.agents ?? {}) };
-  for (const [intent, byEngine] of answered) {
-    const atual = agents[intent] ?? {};
-    // Valor de `agents.<intent>` que não é objeto também segue intacto, para a validação recusar.
-    if (!isPlainObject(atual)) continue;
-    agents[intent] = { ...atual, model: { ...(isPlainObject(atual.model) ? atual.model : {}), ...byEngine } };
-  }
-  for (const [intent, level] of answeredEfforts) {
-    const atual = agents[intent] ?? {};
-    if (!isPlainObject(atual)) continue;
-    agents[intent] = { ...atual, effort: level };
-  }
-  return agentsFromConfig({ ...config, agents });
+// nível vazio não é pedido (`requestOf`), e nível fora da escala é recusado pela validação do
+// `agentsFromConfig`.
+// Política e migração do apelido `reviewGate` (ADR-0031) do MESMO cálculo e de UMA leitura do config
+// (achado do review isolado 1, DT-17): duas leituras permitiam ao plano divergir de si mesmo.
+export function previewPlan(coreDir, models = {}, efforts = {}) {
+  const previa = previewOf(readConfig(coreDir), models, efforts);
+  return { agents: agentsFromConfig(previa.config), reviewGateMigration: previa.migration };
 }
 
+// O pedido de UMA intenção, no critério que a escrita usa (DT-17): `model` só com ao menos uma chave,
+// `effort` só string não vazia. Compartilhado por `previewOf` e `execute` para o plano ser a escrita.
+// Tipo errado falha alto em vez de ser ignorado: ignorar faria o plano mostrar uma política sem o
+// pedido que quem chamou acreditou ter feito.
+export function requestOf(models, efforts, intent) {
+  const request = {};
+  const model = models?.[intent];
+  if (model !== undefined) {
+    if (!isPlainObject(model)) {
+      throw new Error(`invalid model request for ${intent}: ${JSON.stringify(model)} (expected a map of engine to model)`);
+    }
+    if (Object.keys(model).length > 0) request.model = model;
+  }
+  const effort = efforts?.[intent];
+  if (effort !== undefined) {
+    if (typeof effort !== "string") {
+      throw new Error(`invalid effort request for ${intent}: ${JSON.stringify(effort)} (expected a level name)`);
+    }
+    if (effort.length > 0) request.effort = effort;
+  }
+  return request;
+}
+
+// Fonte única da prévia (ADR-0031): config sobreposto e migração saem do mesmo cálculo, para o plano
+// que a pessoa confirma ser a escrita. A base de cada intenção é a da escrita (`policyBaseOf`),
+// sobreposta UMA vez por intenção com o pedido de `requestOf`.
+function previewOf(config, models, efforts) {
+  const chaves = new Set([...Object.keys(models ?? {}), ...Object.keys(efforts ?? {})]);
+  const pedidos = [...chaves]
+    .map((intent) => [intent, requestOf(models, efforts, intent)])
+    .filter(([, request]) => Object.keys(request).length > 0);
+  assertRequestedIntents(pedidos);
+  if (!pedidos.length) return { config, migration: { state: "none" } };
+  return applyRequests(config, pedidos);
+}
+
+// A política de TODAS as intenções (ADR-0017). Fonte única: `agents` no mesmo config, com
+// `reviewGate` como APELIDO de `agents.review` para nenhuma instalação existente quebrar.
+//
+// Quando as duas chaves existem (`agents.review` não `null`), `agents.review` vence e o conflito volta em `aliasOverridden`
+// para a BORDA avisar. Resolver em silêncio seria escolher pelo autor sem lhe dizer — e ele
+// escreveu os dois valores justamente porque achava que os dois valiam.
 function agentsFromConfig(config) {
   const configured = config.agents;
-  if (configured !== undefined && !isPlainObject(configured)) {
-    throw new Error(`invalid agents: ${JSON.stringify(configured)} (expected an object)`);
-  }
+  assertAgentsObject(configured);
 
   const desconhecidas = Object.keys(configured ?? {})
     .filter((chave) => !INTENTS.includes(chave) && !RESERVED_AGENT_KEYS.includes(chave));
@@ -403,8 +537,12 @@ function agentsFromConfig(config) {
   for (const intent of INTENTS) {
     // `review` é a única que tem apelido, e o apelido só vale quando a chave nova não fala dela.
     const doApelido = intent === "review" ? config.reviewGate : undefined;
+    // Rótulo do caminho real no config, como promete o `resolvePolicy`: o valor do apelido nomeia `reviewGate`.
+    // `== null` (ADR-0031, DT-19): o `??` de `escrita` já cai no apelido quando `agents.review` é
+    // `null`; o rótulo da mensagem de erro tem de acompanhar, senão nomearia o caminho errado.
+    const vemDoApelido = configured?.[intent] == null && doApelido !== undefined;
     const escrita = configured?.[intent] ?? doApelido;
-    policies[intent] = resolvePolicy(`agents.${intent}`, AGENTS[intent].defaults, escrita);
+    policies[intent] = resolvePolicy(vemDoApelido ? "reviewGate" : `agents.${intent}`, AGENTS[intent].defaults, escrita);
     // O apelido conta como CONFIGURADO: quem escreveu `reviewGate` escolheu aquele valor, e
     // chamá-lo de default diria ao autor que ele não escolheu o que escolheu.
     sources[intent] = sourcesOf(AGENTS[intent].defaults, escrita);
@@ -414,7 +552,7 @@ function agentsFromConfig(config) {
     policies,
     sources,
     budget,
-    aliasOverridden: config.reviewGate !== undefined && configured?.review !== undefined,
+    aliasOverridden: config.reviewGate !== undefined && configured?.review != null,
   };
 }
 

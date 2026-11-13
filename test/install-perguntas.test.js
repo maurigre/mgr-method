@@ -195,30 +195,16 @@ test("should report no-model-engine instead of malformed for a bare value and no
 });
 
 // --- Borda do install (P1.6): processos filhos, fora de git, sem importar nada do núcleo ---
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { tempDir } from "../scripts/lib/tmp.mjs";
+import { runMgr, tempOutsideGit as tempOutsideGitIn } from "./helpers/cli.js";
 
-const MGR_BIN = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "bin", "mgr.js");
-
-function tempOutsideGit(label) {
-  const dir = fs.realpathSync(tempDir(`mgr-p16-${label}-`));
-  const probe = spawnSync("git", ["-C", dir, "rev-parse", "--is-inside-work-tree"], { encoding: "utf8" });
-  assert.equal(probe.error, undefined, "git must be runnable to prove the temp dir is outside a repository");
-  assert.notEqual(probe.status, 0, "the temp dir must not be inside a git work tree");
-  return dir;
-}
+const tempOutsideGit = (label) => tempOutsideGitIn(label, "mgr-p16");
 
 function installProcess(args) {
   const project = tempOutsideGit("proj");
   const home = tempOutsideGit("home");
-  const result = spawnSync(
-    process.execPath,
-    [MGR_BIN, "install", "--scope", "project", "--all-skills", ...args, "-y", project],
-    { cwd: project, encoding: "utf8", timeout: 120000, env: { ...process.env, LC_ALL: "C", HOME: home } },
-  );
+  const result = runMgr(["install", "--scope", "project", "--all-skills", ...args, "-y", project], { cwd: project, home });
   return { project, result };
 }
 
@@ -366,11 +352,7 @@ test("should warn about an unrecognized key in config.local.json on install", ()
   const { project } = installProcess(["--engine", "claude-code"]);
   const home = tempOutsideGit("home2");
   fs.writeFileSync(path.join(project, ".mgr-core", "config.local.json"), JSON.stringify({ projectid: "x" }));
-  const result = spawnSync(
-    process.execPath,
-    [MGR_BIN, "install", "--scope", "project", "--all-skills", "--engine", "claude-code", "-y", project],
-    { cwd: project, encoding: "utf8", timeout: 120000, env: { ...process.env, LC_ALL: "C", HOME: home } },
-  );
+  const result = runMgr(["install", "--scope", "project", "--all-skills", "--engine", "claude-code", "-y", project], { cwd: project, home });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stderr, /config\.local\.json: projectid is not a recognized key and was ignored\./);
 });

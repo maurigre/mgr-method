@@ -12,7 +12,7 @@ import { descartar, instalacaoLimpa } from "./fixtures/instalacao.js";
 import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const BIN = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
-const M = getMessages("en");
+const msg = getMessages("en");
 
 const temporario = () => tempDir("mgr-initials-");
 
@@ -34,17 +34,17 @@ test("should print the three initials states as JSON with exit 0 0 and 1", () =>
   const root = temporario();
   try {
     const ausente = coletor();
-    assert.equal(initials({ root, positional: [], flags: { json: true }, io: ausente.io, M }), 0);
+    assert.equal(initials({ root, positional: [], flags: { json: true }, io: ausente.io, M: msg }), 0);
     assert.deepEqual(JSON.parse(ausente.out[0]), { schemaVersion: 1, state: "absent" });
 
     escreverConfig(root, { initials: "mr" });
     const gravado = coletor();
-    assert.equal(initials({ root, positional: [], flags: { json: true }, io: gravado.io, M }), 0);
+    assert.equal(initials({ root, positional: [], flags: { json: true }, io: gravado.io, M: msg }), 0);
     assert.deepEqual(JSON.parse(gravado.out[0]), { schemaVersion: 1, state: "recorded", initials: "mr" });
 
     escreverConfig(root, { initials: "M_R" });
     const invalido = coletor();
-    assert.equal(initials({ root, positional: [], flags: { json: true }, io: invalido.io, M }), 1);
+    assert.equal(initials({ root, positional: [], flags: { json: true }, io: invalido.io, M: msg }), 1);
     assert.deepEqual(JSON.parse(invalido.out[0]), { schemaVersion: 1, state: "invalid", value: "M_R" });
   } finally {
     descartar(root);
@@ -57,7 +57,7 @@ test("should write initials with set and keep projectId", () => {
     escreverConfig(root, { projectId: "abc" });
     const { io, out } = coletor();
 
-    assert.equal(initials({ root, positional: ["set", "mr"], flags: {}, io, M }), 0);
+    assert.equal(initials({ root, positional: ["set", "mr"], flags: {}, io, M: msg }), 0);
     assert.deepEqual(JSON.parse(readFileSync(arquivoDe(root), "utf8")), { projectId: "abc", initials: "mr" });
     assert.equal(out.length, 2);
   } finally {
@@ -73,7 +73,7 @@ test("should refuse invalid initials with exit 1 and leave the file byte for byt
 
     for (const valor of ["AB", "a_b"]) {
       const { io, out, err } = coletor();
-      assert.equal(initials({ root, positional: ["set", valor], flags: {}, io, M }), 1);
+      assert.equal(initials({ root, positional: ["set", valor], flags: {}, io, M: msg }), 1);
       assert.equal(err.length, 1);
       assert.equal(out.length, 0);
       assert.deepEqual(readFileSync(arquivoDe(root)), antes);
@@ -88,7 +88,7 @@ test("should exit 1 when set has no value", () => {
   try {
     const { io, err } = coletor();
 
-    assert.equal(initials({ root, positional: ["set"], flags: {}, io, M }), 1);
+    assert.equal(initials({ root, positional: ["set"], flags: {}, io, M: msg }), 1);
     assert.equal(err.length, 1);
     assert.ok(err[0].length > 0);
     assert.equal(existsSync(arquivoDe(root)), false);
@@ -101,7 +101,7 @@ test("should keep initials after install", () => {
   const repo = instalacaoLimpa();
   try {
     const { io } = coletor();
-    assert.equal(initials({ root: repo, positional: ["set", "mr"], flags: {}, io, M }), 0);
+    assert.equal(initials({ root: repo, positional: ["set", "mr"], flags: {}, io, M: msg }), 0);
 
     execFileSync("node", [BIN, "install", "--engine", "claude-code", "--language", "java",
       "--arch", "layered", "--user-language", "pt-BR", "--project-id", "fixture", "-y", repo],
@@ -117,19 +117,19 @@ test("should print each initials state as text in the right stream", () => {
   const root = temporario();
   try {
     const ausente = coletor();
-    assert.equal(initials({ root, positional: [], flags: {}, io: ausente.io, M }), 0);
-    assert.deepEqual(ausente.out, [M.initialsNotRecorded()]);
+    assert.equal(initials({ root, positional: [], flags: {}, io: ausente.io, M: msg }), 0);
+    assert.deepEqual(ausente.out, [msg.initialsNotRecorded()]);
 
     escreverConfig(root, { initials: "abcd" });
     const gravado = coletor();
-    assert.equal(initials({ root, positional: [], flags: {}, io: gravado.io, M }), 0);
-    assert.deepEqual(gravado.out, [M.initialsRecorded("abcd")]);
+    assert.equal(initials({ root, positional: [], flags: {}, io: gravado.io, M: msg }), 0);
+    assert.deepEqual(gravado.out, [msg.initialsRecorded("abcd")]);
 
     escreverConfig(root, { initials: ["mr"] });
     const invalido = coletor();
-    assert.equal(initials({ root, positional: [], flags: {}, io: invalido.io, M }), 1);
+    assert.equal(initials({ root, positional: [], flags: {}, io: invalido.io, M: msg }), 1);
     assert.deepEqual(invalido.out, []);
-    assert.deepEqual(invalido.err, [M.initialsInvalid('["mr"]')]);
+    assert.deepEqual(invalido.err, [msg.initialsInvalid('["mr"]')]);
   } finally {
     descartar(root);
   }
@@ -140,7 +140,7 @@ test("should print only the JSON line and nothing on stderr", () => {
   try {
     escreverConfig(root, { initials: "mr" });
     const { io, out, err } = coletor();
-    initials({ root, positional: [], flags: { json: true }, io, M });
+    initials({ root, positional: [], flags: { json: true }, io, M: msg });
     assert.equal(out.length, 1);
     assert.deepEqual(err, []);
   } finally {
@@ -155,8 +155,8 @@ test("should announce the write before and the result after, with the previous s
     const { io, out } = coletor();
     const discoNoAnuncio = [];
     const ioQueOlhaODisco = { ...io, out: (linha) => { discoNoAnuncio.push(readFileSync(arquivoDe(root), "utf8")); io.out(linha); } };
-    assert.equal(initials({ root, positional: ["set", "abcd"], flags: {}, io: ioQueOlhaODisco, M }), 0);
-    assert.deepEqual(out, [M.initialsWriting(arquivoDe(root)), M.initialsWritten("mr", "abcd")]);
+    assert.equal(initials({ root, positional: ["set", "abcd"], flags: {}, io: ioQueOlhaODisco, M: msg }), 0);
+    assert.deepEqual(out, [msg.initialsWriting(arquivoDe(root)), msg.initialsWritten("mr", "abcd")]);
     assert.equal(JSON.parse(discoNoAnuncio[0]).initials, "mr");
     assert.equal(JSON.parse(discoNoAnuncio[1]).initials, "abcd");
   } finally {
@@ -168,7 +168,7 @@ test("should refuse an unknown initials verb and write nothing", () => {
   const root = temporario();
   try {
     const { io, err } = coletor();
-    assert.equal(initials({ root, positional: ["clear"], flags: {}, io, M }), 1);
+    assert.equal(initials({ root, positional: ["clear"], flags: {}, io, M: msg }), 1);
     assert.equal(err.length, 1);
     assert.equal(existsSync(arquivoDe(root)), false);
   } finally {
@@ -180,8 +180,8 @@ test("should name the missing value when set has none", () => {
   const root = temporario();
   try {
     const { io, err } = coletor();
-    initials({ root, positional: ["set"], flags: {}, io, M });
-    assert.ok(err[0].includes(M.initialsSetNeedsValue()));
+    initials({ root, positional: ["set"], flags: {}, io, M: msg });
+    assert.ok(err[0].includes(msg.initialsSetNeedsValue()));
   } finally {
     descartar(root);
   }
@@ -203,8 +203,8 @@ test("should print an invalid string initials value as is", () => {
   try {
     escreverConfig(root, { initials: "M_R" });
     const { io, err } = coletor();
-    assert.equal(initials({ root, positional: [], flags: {}, io, M }), 1);
-    assert.deepEqual(err, [M.initialsInvalid("M_R")]);
+    assert.equal(initials({ root, positional: [], flags: {}, io, M: msg }), 1);
+    assert.deepEqual(err, [msg.initialsInvalid("M_R")]);
   } finally {
     descartar(root);
   }
@@ -215,8 +215,8 @@ test("should show an invalid previous value when overwriting it", () => {
   try {
     escreverConfig(root, { initials: "M_R" });
     const { io, out } = coletor();
-    assert.equal(initials({ root, positional: ["set", "mr"], flags: {}, io, M }), 0);
-    assert.equal(out[1], M.initialsWritten("M_R", "mr"));
+    assert.equal(initials({ root, positional: ["set", "mr"], flags: {}, io, M: msg }), 0);
+    assert.equal(out[1], msg.initialsWritten("M_R", "mr"));
   } finally {
     descartar(root);
   }
@@ -226,8 +226,8 @@ test("should show the none label when there were no initials before", () => {
   const root = temporario();
   try {
     const { io, out } = coletor();
-    assert.equal(initials({ root, positional: ["set", "mr"], flags: {}, io, M }), 0);
-    assert.equal(out[1], M.initialsWritten(M.initialsNone(), "mr"));
+    assert.equal(initials({ root, positional: ["set", "mr"], flags: {}, io, M: msg }), 0);
+    assert.equal(out[1], msg.initialsWritten(msg.initialsNone(), "mr"));
   } finally {
     descartar(root);
   }

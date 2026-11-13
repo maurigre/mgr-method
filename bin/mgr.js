@@ -12,7 +12,7 @@ import { specNext, specStatus, specValidate } from "../src/commands/spec.js";
 import { detectHook, precompactHook, suggestionsFor } from "../src/commands/hooks.js";
 import { escreverSync, lerPayload, modificados } from "./hook-io.js";
 import { projectRoot } from "../src/project-root.js";
-import { LOCAL_CONFIG_NAME, ORIGINS, misplacedTeamKeys, readAgents, readOrigin, readPersonal, readRuntimeVersioning } from "../src/registry.js";
+import { LOCAL_CONFIG_NAME, ORIGINS, configPath, misplacedTeamKeys, readAgents, readOrigin, readPersonal, readRuntimeVersioning } from "../src/registry.js";
 import { indexedFiles } from "./git-index.js";
 import * as engineRegistry from "../src/engines/index.js";
 import * as tokens from "../src/tokens.js";
@@ -236,6 +236,8 @@ async function cmdInstall(flags, positional) {
 
   const replaced = replacedByEngine(readLockfile(repo));
   const plan = installer.planInstall(engines, scope, repo, { skillsDir, language, architecture, userLanguage, optional, all: flags.allSkills, projectId, replaced, models, efforts, origin, runtimeVersioning: answeredRuntimeVersioning });
+  // O caminho do config como o usuário o lê (ADR-0031), um só para o plano e para o anúncio.
+  const arquivoConfig = pathsForDisplay([configPath(installer.coreDir(plan.scope, plan.repo))], plan.scope, plan.repo);
   const motoresComHook = hookEngines(plan, flags);
   // O que esta instalacao deixa de DECLARAR aparece no plano antes de qualquer escrita, inclusive
   // no --dry-run. O calculo vive no nucleo; aqui fica so a cola (CONSTITUTION secao 2.2), e o modo
@@ -295,6 +297,8 @@ async function cmdInstall(flags, positional) {
       ...(plan.legacyRuntime.keep.length ? [M.legacyRuntimeKept(pathsForDisplay(plan.legacyRuntime.keep, plan.scope, plan.repo))] : []),
       // O agente também mora em diretório do usuário: ele vê modelo e esforço por motor
       // ANTES de confirmar, e vê o que o motor não suporta (ADR-0010).
+      // ADR-0031: a migração do reviewGate aparece no plano antes da confirmação.
+      ...(plan.reviewGateMigration.state === "migrated" ? [M.planReviewGateMigration(plan.reviewGateMigration, arquivoConfig)] : []),
       ...linhasDoGate(plan),
       // A fonte de leis e o preâmbulo também são escrita em arquivo do usuário: aparecem no
       // plano antes da confirmação, como o hook e o agente (ADR-0011).
@@ -335,6 +339,8 @@ async function cmdInstall(flags, positional) {
   const res = installer.execute(installer.keepDeclared(plan, mantidas), { abandoned: aRemover });
   s.stop(M.installedAt(res.targets.map((t) => t.dir).join(" · ")));
   if (res.migrated) p.log.info(M.migrationInfo(res.migrated.removed.length));
+  // ADR-0031: a remoção do reviewGate é anunciada depois da escrita, como a migração de layout.
+  if (res.reviewGateMigration.state === "migrated") p.log.warn(M.reviewGateMigrated(res.reviewGateMigration, arquivoConfig));
   p.log.success(M.runtimeWritten(pathsForDisplay([res.runtime.dir], plan.scope, plan.repo), res.runtime.files));
   // LOG-1: a linha de depois do arquivo de ignorar e a escolha saem logo apos a escrita do runtime.
   if (plan.scope === "project") {

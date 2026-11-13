@@ -13,7 +13,7 @@ import path from "node:path";
 import * as bundle from "./bundle.js";
 import { installAgents, installEngine, installRuntime, isOurAgent, isOurSkill, lockedDirsOf, orphanClass, runtimeIgnoreFileFor } from "./builder.js";
 import * as engineDescriptors from "./engines/index.js";
-import { previewAgents, readAgents, readPersonal, readRuntimeVersioning, writeAgentPolicy, writeOrigin, writePersonal, writeRuntimeVersioning } from "./registry.js";
+import { previewPlan, readAgents, requestOf, readPersonal, readRuntimeVersioning, writeAgentPolicies, writeOrigin, writePersonal, writeRuntimeVersioning } from "./registry.js";
 import { readManifest, writeManifest, writeEnv, readEnvProjectId, MODEL_RUNTIME, MODEL_LAYERED, MODEL_CORE_RUNTIME } from "./manifest.js";
 import * as catalog from "./catalog.js";
 
@@ -141,11 +141,12 @@ export function planInstall(engines, scope, repo, opts = {}) {
   // `reviewGate` NÃO volta no plano: ele seria `agents.policies.review` com outro nome, e campo
   // duplicado diverge na primeira mudança. Mesma razão que tirou o `readReviewGate` do módulo.
   //
-  // `previewAgents` sobrepõe as respostas de modelo em memória: o plano mostra o que `execute` gravará.
-  const agents = previewAgents(coreDir(scope, repo), models, efforts);
+  // `previewPlan` sobrepõe as respostas em memória: o plano mostra o que `execute` gravará.
+  // ADR-0031: ele devolve também o que a escrita fará com o apelido `reviewGate`, de uma só leitura.
+  const { agents, reviewGateMigration } = previewPlan(coreDir(scope, repo), models, efforts);
   const base = {
     engines: skillsDir ? ["custom"] : engines, scope, repo, targets, skills, replaced, language, architecture, userLanguage,
-    projectId: pid, agents, answers: { models, origin, efforts }, optional, all,
+    projectId: pid, agents, reviewGateMigration, answers: { models, origin, efforts }, optional, all,
     legacyRuntime: legacyRuntimeDirs({ prior, targets, scope, repo }),
   };
   return withRuntimeVersioning(base, runtimeVersioning);
@@ -211,16 +212,16 @@ export function execute(plan, { abandoned = [], remove = rmSync } = {}) {
   // Só o que foi respondido é gravado; sem resposta o `config.json` não é criado nem tocado (DT-3).
   const core = coreDir(plan.scope, plan.repo);
   const { models = {}, origin = null, efforts = {} } = plan.answers ?? {};
-  const intents = new Set([
-    ...Object.keys(models).filter((intent) => Object.keys(models[intent] ?? {}).length),
-    ...Object.keys(efforts),
-  ]);
-  for (const intent of intents) {
-    const patch = {};
-    if (Object.keys(models[intent] ?? {}).length) patch.model = models[intent];
-    if (efforts[intent]) patch.effort = efforts[intent];
-    if (Object.keys(patch).length) writeAgentPolicy(core, intent, patch);
-  }
+  // Uma gravação só para todos os pedidos (review isolado 4, SP-1): o plano aplica tudo junto, e a
+  // escrita também, para os dois concordarem. A ordem é a dos pedidos (modelos, depois esforços):
+  // ela decide a ordem das chaves em `agents`, e o config de quem não tem `reviewGate` sai byte a
+  // byte igual ao de antes (RN-7). Intenção desconhecida falha alto, antes de gravar qualquer coisa.
+  const pedidos = [...new Set([...Object.keys(models), ...Object.keys(efforts)])]
+    .map((intent) => [intent, requestOf(models, efforts, intent)])
+    .filter(([, request]) => Object.keys(request).length > 0);
+  const { migration: reviewGateMigration } = pedidos.length
+    ? writeAgentPolicies(core, pedidos)
+    : { migration: { state: "none" } };
   if (origin) writeOrigin(core, origin);
   if (plan.runtimeVersioning?.source === "answered") writeRuntimeVersioning(core, plan.runtimeVersioning.value);
   // Ordem da spec §3: config do time -> camada pessoal -> skills/runtime/agentes -> manifesto -> .env.
@@ -293,6 +294,7 @@ export function execute(plan, { abandoned = [], remove = rmSync } = {}) {
     targets: plan.targets.map((t) => ({ engine: t.engine, dir: t.dir })),
     skills: plan.skills, migrated, core, projectId: plan.projectId,
     agents, gate, gateWarnings, agentChanges, removed, runtime, legacyRuntimeRemoved,
+    reviewGateMigration,
   };
 }
 

@@ -301,7 +301,7 @@ const MGR = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
 const RUNTIME = [".mgr-core", "runtime", "bin", "mgr-runtime.js"];
 const CLAUDE = "CLAUDE.md";
 const COPILOT = ".github/copilot-instructions.md";
-const M = getMessages("en");
+const msg = getMessages("en");
 const BLOCO_CLAUDE = instructionBlock("claude-code");
 const BLOCO_COPILOT = instructionBlock("copilot");
 const PREVIO_CRLF = "# Regras locais\r\nlinha um\r\nfinal sem quebra";
@@ -422,8 +422,8 @@ test("should announce one plan line per file before the first write when install
   const resultado = instalar(repo, home, "both");
 
   const saida = saidaDe(resultado);
-  const planos = [posicao(saida, M.planInstructions(CLAUDE)), posicao(saida, M.planInstructions(COPILOT))];
-  const escritas = [posicao(saida, M.instructionsWritten(CLAUDE)), posicao(saida, M.instructionsWritten(COPILOT))];
+  const planos = [posicao(saida, msg.planInstructions(CLAUDE)), posicao(saida, msg.planInstructions(COPILOT))];
+  const escritas = [posicao(saida, msg.instructionsWritten(CLAUDE)), posicao(saida, msg.instructionsWritten(COPILOT))];
   assert.equal(resultado.status, 0, saida);
   assert.ok(planos.every((indice) => indice >= 0), saida);
   assert.ok(escritas.every((indice) => indice >= 0), saida);
@@ -451,7 +451,7 @@ test("should keep the sha256 and announce no plan on a second install with the b
   const segunda = instalar(repo, home, "claude-code");
 
   assert.equal(segunda.status, 0, saidaDe(segunda));
-  assert.equal(contem(saidaDe(segunda), M.planInstructions(CLAUDE)), false);
+  assert.equal(contem(saidaDe(segunda), msg.planInstructions(CLAUDE)), false);
   assert.equal(shaDo(arquivo), hashAntes);
   assert.equal(readFileSync(arquivo, "utf8").split(OPEN).length - 1, 1);
 }));
@@ -477,8 +477,8 @@ test("should neither announce nor write the block without a constitution on inst
 
   const saida = `${saidaDe(instalacao)}${saidaDe(atualizacao)}`;
   assert.equal(atualizacao.status, 0, saida);
-  assert.equal(contem(saida, M.planInstructions(CLAUDE)), false);
-  assert.equal(contem(saida, M.instructionsWritten(CLAUDE)), false);
+  assert.equal(contem(saida, msg.planInstructions(CLAUDE)), false);
+  assert.equal(contem(saida, msg.instructionsWritten(CLAUDE)), false);
   assert.equal(existsSync(path.join(repo, CLAUDE)), false);
 }));
 
@@ -491,7 +491,7 @@ test("should keep a prior file byte for byte and announce the decline without te
 
   assert.equal(resultado.status, 0, saidaDe(resultado));
   assert.equal(readFileSync(arquivo, "utf8"), "# meu\n");
-  assert.ok(contem(saidaDe(resultado), M.instructionsDeclined(CLAUDE)));
+  assert.ok(contem(saidaDe(resultado), msg.instructionsDeclined(CLAUDE)));
 }));
 
 test("should not create the instruction file without terminal or -y when there is no prior file", comCasaERepo(({ repo, home }) => {
@@ -512,8 +512,8 @@ test("should show the plan on dry-run without writing, changing or asking about 
 
   const saida = saidaDe(resultado);
   assert.equal(resultado.status, 0, saida);
-  assert.ok(contem(saida, M.planInstructions(CLAUDE)));
-  assert.equal(contem(saida, M.qInstructionsBlock(CLAUDE)), false);
+  assert.ok(contem(saida, msg.planInstructions(CLAUDE)));
+  assert.equal(contem(saida, msg.qInstructionsBlock(CLAUDE)), false);
   assert.equal(readFileSync(arquivo, "utf8"), "# meu\n");
 }));
 
@@ -529,8 +529,8 @@ test("should show the plan on dry-run with -y and write neither the block nor th
 
   const saida = saidaDe(resultado);
   assert.equal(resultado.status, 0, saida);
-  assert.ok(contem(saida, M.planInstructions(CLAUDE)));
-  assert.equal(contem(saida, M.instructionsWritten(CLAUDE)), false);
+  assert.ok(contem(saida, msg.planInstructions(CLAUDE)));
+  assert.equal(contem(saida, msg.instructionsWritten(CLAUDE)), false);
   assert.equal(readFileSync(arquivo, "utf8"), "# meu\n");
   assert.equal(existsSync(path.join(repo, ".mgr-core", "manifest.json")), false);
 }));
@@ -541,7 +541,7 @@ test("should neither announce nor write the block on global scope with a constit
   const resultado = instalarGlobal(repo, home);
 
   assert.equal(resultado.status, 0, saidaDe(resultado));
-  assert.equal(contem(saidaDe(resultado), M.planInstructions(CLAUDE)), false);
+  assert.equal(contem(saidaDe(resultado), msg.planInstructions(CLAUDE)), false);
   assert.equal(existsSync(path.join(repo, CLAUDE)), false);
 }));
 
@@ -554,7 +554,7 @@ test("should neither announce nor write the block when installing with --skills-
   );
 
   assert.equal(resultado.status, 0, saidaDe(resultado));
-  assert.equal(contem(saidaDe(resultado), M.planInstructions(CLAUDE)), false);
+  assert.equal(contem(saidaDe(resultado), msg.planInstructions(CLAUDE)), false);
   assert.equal(existsSync(path.join(repo, CLAUDE)), false);
 }));
 
@@ -612,8 +612,8 @@ test("should decline the block on update without -y and write it on update with 
   const semConsentimento = run(["update", repo], { cwd: repo, home });
 
   assert.equal(semConsentimento.status, 0, saidaDe(semConsentimento));
-  assert.ok(contem(saidaDe(semConsentimento), M.planInstructions(CLAUDE)));
-  assert.ok(contem(saidaDe(semConsentimento), M.instructionsDeclined(CLAUDE)));
+  assert.ok(contem(saidaDe(semConsentimento), msg.planInstructions(CLAUDE)));
+  assert.ok(contem(saidaDe(semConsentimento), msg.instructionsDeclined(CLAUDE)));
   assert.equal(existsSync(arquivo), false);
 
   const comConsentimento = run(["update", "-y", repo], { cwd: repo, home });
@@ -632,7 +632,7 @@ test("should keep the copilot block untouched and announce it when installing on
 
   assert.equal(resultado.status, 0, saidaDe(resultado));
   assert.equal(shaDo(arquivoCopilot), hashAntes);
-  assert.ok(contem(saidaDe(resultado), M.instructionsKept(COPILOT, "copilot")));
+  assert.ok(contem(saidaDe(resultado), msg.instructionsKept(COPILOT, "copilot")));
 }));
 
 test("should announce the kept copilot block again on update", comCasaERepo(({ repo, home }) => {
@@ -643,7 +643,7 @@ test("should announce the kept copilot block again on update", comCasaERepo(({ r
   const resultado = run(["update", "-y", repo], { cwd: repo, home });
 
   assert.equal(resultado.status, 0, saidaDe(resultado));
-  assert.ok(contem(saidaDe(resultado), M.instructionsKept(COPILOT, "copilot")));
+  assert.ok(contem(saidaDe(resultado), msg.instructionsKept(COPILOT, "copilot")));
 }));
 
 test("should announce each block before removal, remove both and keep the prior user file", comCasaERepo(({ repo, home }) => {
@@ -656,8 +656,8 @@ test("should announce each block before removal, remove both and keep the prior 
 
   const saida = saidaDe(remocao);
   assert.equal(remocao.status, 0, saida);
-  const aRemover = [posicao(saida, M.instructionsToRemove(CLAUDE)), posicao(saida, M.instructionsToRemove(COPILOT))];
-  const removidos = [posicao(saida, M.instructionsRemoved(CLAUDE)), posicao(saida, M.instructionsRemoved(COPILOT))];
+  const aRemover = [posicao(saida, msg.instructionsToRemove(CLAUDE)), posicao(saida, msg.instructionsToRemove(COPILOT))];
+  const removidos = [posicao(saida, msg.instructionsRemoved(CLAUDE)), posicao(saida, msg.instructionsRemoved(COPILOT))];
   assert.ok(aRemover.every((indice) => indice >= 0), saida);
   assert.ok(removidos.every((indice) => indice >= 0), saida);
   assert.ok(Math.max(...aRemover) < Math.min(...removidos));
@@ -698,15 +698,15 @@ test("should report no-file, write the block once and keep it current through th
 
   const saida = saidaDe(escrita);
   assert.equal(escrita.status, 0, saida);
-  assert.ok(posicao(saida, M.instructionsWriting(CLAUDE)) >= 0);
-  assert.ok(posicao(saida, M.instructionsWriting(CLAUDE)) < posicao(saida, M.instructionsWritten(CLAUDE)));
+  assert.ok(posicao(saida, msg.instructionsWriting(CLAUDE)) >= 0);
+  assert.ok(posicao(saida, msg.instructionsWriting(CLAUDE)) < posicao(saida, msg.instructionsWritten(CLAUDE)));
   assert.equal(readFileSync(arquivo, "utf8"), blocoComQuebra(BLOCO_CLAUDE));
   const hashAntes = shaDo(arquivo);
 
   const repetida = runtime(script, ["instructions", "write", "--engine", "claude-code"], { cwd: repo, home });
 
   assert.equal(repetida.status, 0, saidaDe(repetida));
-  assert.ok(contem(saidaDe(repetida), M.instructionsCurrent(CLAUDE)));
+  assert.ok(contem(saidaDe(repetida), msg.instructionsCurrent(CLAUDE)));
   assert.equal(shaDo(arquivo), hashAntes);
 }));
 
@@ -718,14 +718,14 @@ test("should refuse the runtime write for an engine not installed and for a miss
   const copilot = runtime(script, ["instructions", "write", "--engine", "copilot"], { cwd: repo, home });
 
   assert.equal(copilot.status, 1, saidaDe(copilot));
-  assert.ok(contem(saidaDe(copilot), M.instructionsEngineNotInstalled("copilot", "claude-code")));
+  assert.ok(contem(saidaDe(copilot), msg.instructionsEngineNotInstalled("copilot", "claude-code")));
   assert.equal(existsSync(path.join(repo, COPILOT)), false);
 
   rmSync(path.join(repo, "docs", "sdd", "CONSTITUTION.md"));
   const semConstituicao = runtime(script, ["instructions", "write"], { cwd: repo, home });
 
   assert.equal(semConstituicao.status, 1, saidaDe(semConstituicao));
-  assert.ok(contem(saidaDe(semConstituicao), M.instructionsNoConstitution()));
+  assert.ok(contem(saidaDe(semConstituicao), msg.instructionsNoConstitution()));
   assert.equal(existsSync(path.join(repo, CLAUDE)), false);
 }));
 
@@ -755,7 +755,7 @@ test("should refuse the runtime write with no engine installed in the project or
   const escrita = runtime(script, ["instructions", "write"], { cwd: repo, home });
 
   assert.equal(escrita.status, 1, saidaDe(escrita));
-  assert.ok(contem(saidaDe(escrita), M.instructionsNoEngine()));
+  assert.ok(contem(saidaDe(escrita), msg.instructionsNoEngine()));
   assert.equal(existsSync(path.join(repo, CLAUDE)), false);
 }));
 
@@ -786,7 +786,7 @@ test("should keep the git index and history unchanged when the runtime writes th
   const escrita = runtime(path.join(repo, ...RUNTIME), ["instructions", "write"], { cwd: repo, home });
 
   assert.equal(escrita.status, 0, saidaDe(escrita));
-  assert.ok(contem(saidaDe(escrita), M.instructionsWritten(CLAUDE)));
+  assert.ok(contem(saidaDe(escrita), msg.instructionsWritten(CLAUDE)));
   assert.deepEqual(impressaoGit(repo, home), antes);
 }));
 
@@ -805,7 +805,7 @@ test("should print the instructions state as one JSON line with exit 0 in the do
   instalacaoSimulada(repo);
   const { io, out, err } = coletor();
 
-  assert.equal(instructions({ root: repo, positional: [], flags: { json: true }, io, M }), 0);
+  assert.equal(instructions({ root: repo, positional: [], flags: { json: true }, io, M: msg }), 0);
 
   assert.equal(out.length, 1);
   assert.deepEqual(err, []);
@@ -823,34 +823,34 @@ test("should print the state line for each engine without --json", comCasaERepo(
   instalacaoSimulada(repo);
   const { io, out } = coletor();
 
-  assert.equal(instructions({ root: repo, positional: [], flags: {}, io, M }), 0);
+  assert.equal(instructions({ root: repo, positional: [], flags: {}, io, M: msg }), 0);
 
-  assert.deepEqual(out, [M.instructionsStateLine(CLAUDE, "no-file")]);
+  assert.deepEqual(out, [msg.instructionsStateLine(CLAUDE, "no-file")]);
 }));
 
 test("should write the block and print writing then written, then report current on a second write", comCasaERepo(({ repo }) => {
   instalacaoSimulada(repo);
   const primeira = coletor();
 
-  assert.equal(instructions({ root: repo, positional: ["write"], flags: {}, io: primeira.io, M }), 0);
+  assert.equal(instructions({ root: repo, positional: ["write"], flags: {}, io: primeira.io, M: msg }), 0);
 
   assert.equal(readFileSync(path.join(repo, CLAUDE), "utf8"), `${instructionBlock("claude-code").join("\n")}\n`);
-  assert.deepEqual(primeira.out, [M.instructionsWriting(CLAUDE), M.instructionsWritten(CLAUDE)]);
+  assert.deepEqual(primeira.out, [msg.instructionsWriting(CLAUDE), msg.instructionsWritten(CLAUDE)]);
 
   const segunda = coletor();
-  assert.equal(instructions({ root: repo, positional: ["write"], flags: {}, io: segunda.io, M }), 0);
-  assert.deepEqual(segunda.out, [M.instructionsCurrent(CLAUDE)]);
+  assert.equal(instructions({ root: repo, positional: ["write"], flags: {}, io: segunda.io, M: msg }), 0);
+  assert.deepEqual(segunda.out, [msg.instructionsCurrent(CLAUDE)]);
 }));
 
 test("should refuse the write for an engine not installed and create no file for it", comCasaERepo(({ repo }) => {
   instalacaoSimulada(repo);
   const { io, out, err } = coletor();
 
-  assert.equal(instructions({ root: repo, positional: ["write"], flags: { engines: ["copilot"] }, io, M }), 1);
+  assert.equal(instructions({ root: repo, positional: ["write"], flags: { engines: ["copilot"] }, io, M: msg }), 1);
 
   assert.deepEqual(out, []);
   assert.equal(err.length, 1);
-  assert.ok(err[0].includes(M.instructionsEngineNotInstalled("copilot", "claude-code")));
+  assert.ok(err[0].includes(msg.instructionsEngineNotInstalled("copilot", "claude-code")));
   assert.equal(existsSync(path.join(repo, COPILOT)), false);
 }));
 
@@ -858,11 +858,11 @@ test("should refuse the write without constitution and create no file", comCasaE
   criarManifesto(repo, { engines: ["claude-code"], scope: "project", version: "0.0.0" });
   const { io, out, err } = coletor();
 
-  assert.equal(instructions({ root: repo, positional: ["write"], flags: {}, io, M }), 1);
+  assert.equal(instructions({ root: repo, positional: ["write"], flags: {}, io, M: msg }), 1);
 
   assert.deepEqual(out, []);
   assert.equal(err.length, 1);
-  assert.ok(err[0].includes(M.instructionsNoConstitution()));
+  assert.ok(err[0].includes(msg.instructionsNoConstitution()));
   assert.equal(existsSync(path.join(repo, CLAUDE)), false);
 }));
 
@@ -873,7 +873,7 @@ test("should refuse the write with no manifest in the project or globally", comC
   try {
     process.env.HOME = home;
 
-    assert.equal(instructions({ root: repo, positional: ["write"], flags: {}, io, M }), 1);
+    assert.equal(instructions({ root: repo, positional: ["write"], flags: {}, io, M: msg }), 1);
   } finally {
     if (homeAnterior === undefined) delete process.env.HOME;
     else process.env.HOME = homeAnterior;
@@ -881,14 +881,14 @@ test("should refuse the write with no manifest in the project or globally", comC
 
   assert.deepEqual(out, []);
   assert.equal(err.length, 1);
-  assert.ok(err[0].includes(M.instructionsNoEngine()));
+  assert.ok(err[0].includes(msg.instructionsNoEngine()));
   assert.equal(existsSync(path.join(repo, CLAUDE)), false);
 }));
 
 test("should refuse an unknown instructions subverb with exit 1 and write to err only", comCasaERepo(({ repo }) => {
   const { io, out, err } = coletor();
 
-  assert.equal(instructions({ root: repo, positional: ["bogus"], flags: {}, io, M }), 1);
+  assert.equal(instructions({ root: repo, positional: ["bogus"], flags: {}, io, M: msg }), 1);
 
   assert.deepEqual(out, []);
   assert.equal(err.length, 1);
@@ -899,7 +899,7 @@ test("should refuse --json with exit 1 and a message naming the missing closing 
   writeFileSync(path.join(repo, CLAUDE), `${OPEN}\nlinha solta\n`, "utf8");
   const { io, out, err } = coletor();
 
-  assert.equal(instructions({ root: repo, positional: [], flags: { json: true }, io, M }), 1);
+  assert.equal(instructions({ root: repo, positional: [], flags: { json: true }, io, M: msg }), 1);
 
   assert.deepEqual(out, []);
   assert.equal(err.length, 1);

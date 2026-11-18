@@ -8,6 +8,8 @@ import {
 } from "../src/precompact.js";
 import { get as engineDescriptor, ids as engineIds } from "../src/engines/index.js";
 import { tempDir } from "../scripts/lib/tmp.mjs";
+import { getMessages } from "../src/messages.js";
+import { InvariantError } from "../src/errors.js";
 
 // A tabela da DT-2 da spec, afirmada célula a célula. Bloquear é a única coisa que esta fatia faz
 // que pode custar trabalho do usuário, então é a que mais precisa de teste.
@@ -143,7 +145,7 @@ function repoCom(features) {
   return repo;
 }
 
-const doHook = { engine: "claude-code", trigger: AUTO };
+const doHook = { engine: "claude-code", trigger: AUTO, tabela: getMessages("pt-BR") };
 
 test("com uma feature em andamento, o hand-off nomeia a próxima task", () => {
   const repo = repoCom({ alfa: [["P1.1", "done"], ["P1.2", "todo"]] });
@@ -192,7 +194,7 @@ test("a seção do que o hand-off NÃO sabe está sempre presente", () => {
   const repo = repoCom({ alfa: [["P1.1", "todo"]] });
   for (const trigger of [MANUAL, AUTO]) {
     for (const changedFiles of [[], ["src/a.js"]]) {
-      const { text } = assemble(repo, { engine: "claude-code", trigger, changedFiles });
+      const { text } = assemble(repo, { engine: "claude-code", trigger, changedFiles, tabela: getMessages("pt-BR") });
       assert.match(text, /### O que este hand-off NÃO sabe/);
       assert.match(text, /não vê a conversa/);
       assert.match(text, /abrir uma sessão nova/, "a sugestão de sessão nova é pedido explícito do autor");
@@ -202,20 +204,20 @@ test("a seção do que o hand-off NÃO sabe está sempre presente", () => {
 
 test("no manual o texto NÃO diz que ninguém pediu, porque alguém pediu", () => {
   const repo = repoCom({ alfa: [["P1.1", "todo"]] });
-  const doManual = assemble(repo, { engine: "copilot", trigger: MANUAL }).text;
+  const doManual = assemble(repo, { engine: "copilot", trigger: MANUAL, tabela: getMessages("pt-BR") }).text;
   assert.match(doManual, /`copilot`/);
   assert.match(doManual, /\*\*Você pediu a compactação\*\*/);
   assert.ok(!doManual.includes("Não foi pedido por ninguém"),
     "tratar a intenção do usuário como acidente contraria a UC-2 do PRD");
 
-  const doAuto = assemble(repo, { engine: "copilot", trigger: AUTO }).text;
+  const doAuto = assemble(repo, { engine: "copilot", trigger: AUTO, tabela: getMessages("pt-BR") }).text;
   assert.match(doAuto, /gatilho `auto`/);
   assert.match(doAuto, /Não foi pedido por ninguém/);
 });
 
 test("gatilho ausente é dito DESCONHECIDO, e não inventado", () => {
   const repo = repoCom({ alfa: [["P1.1", "todo"]] });
-  const { text } = assemble(repo, { engine: "claude-code", trigger: null });
+  const { text } = assemble(repo, { engine: "claude-code", trigger: null, tabela: getMessages("pt-BR") });
   assert.match(text, /gatilho desconhecido \(o motor não o informou\)/);
   assert.ok(!text.includes("`null`"), "valor de JavaScript em texto para humano é vazamento");
 });
@@ -289,6 +291,27 @@ test("`persist` cria quando não há, e ACRESCENTA quando já há", () => {
   const texto = readFileSync(primeiro.file, "utf8");
   assert.equal(texto.split("Hand-off automático").length - 1, 2);
   assert.match(texto, /\n---\n/);
+});
+
+test("shouldThrowInvariantErrorWhenAssembleReceivesNoMessageTable", () => {
+  const repo = repoCom({ alfa: [["P1.1", "todo"]] });
+  assert.throws(() => assemble(repo, { engine: "claude-code", trigger: AUTO }),
+    (error) => error instanceof InvariantError && error.key === "invariantHandoffNoTable");
+});
+
+test("shouldAssembleTheHandoffInEnglishWithoutAnyPortugueseHandoffPhrase", () => {
+  const repo = repoCom({ alfa: [["P1.1", "done"], ["P1.2", "todo"]], beta: [["P1.1", "todo"]] });
+  const { text } = assemble(repo, { ...doHook, changedFiles: ["src/a.js"], tabela: getMessages("en") });
+  const pt = getMessages("pt-BR");
+  const fraseEmPortugues = [
+    pt.handoffUnknownTitle, pt.handoffChangedTitle, ...pt.handoffUnknownBody.split("\n"),
+    ...pt.handoffSuggestion.split("\n"), "Hand-off automático", "Próxima task", "Artefatos em disco",
+  ];
+  for (const frase of fraseEmPortugues) assert.ok(!text.includes(frase), frase);
+  for (const frase of ["Automatic hand-off", "**Next task:**", "**Artifacts on disk:**",
+    "**Modified and not committed:**", "### What this hand-off does NOT know"]) {
+    assert.ok(text.includes(frase), frase);
+  }
 });
 
 test("arquivo modificado entra quando a borda o informa, e some quando não há", () => {

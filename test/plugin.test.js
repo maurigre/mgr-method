@@ -1,9 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  aggregateChecksum, assertValidManifest, parseSkillName, sha256, validateManifest,
+  aggregateChecksum, parseSkillName, sha256, validateManifest,
   CATEGORIES, EFFORT_LEVELS, PERMISSIONS,
 } from "../src/plugin.js";
+import { assertValidManifest } from "../src/plugin-installer.js";
+import { PLUGIN_MANIFEST_TEXT_EN } from "../src/plugin.js";
+import { getMessages } from "../src/messages.js";
 
 const manifest = (overrides = {}) => ({
   name: "@mgr/junit-clean",
@@ -121,5 +124,26 @@ test("ecosystems é opcional, kebab e de vocabulário aberto", () => {
     const problems = validateManifest(manifest({ ecosystems: invalido }));
     assert.equal(problems.length, 1, JSON.stringify(invalido));
     assert.match(problems[0], /"ecosystems" must be an array of kebab-case/);
+  }
+});
+
+test("should keep the English plugin manifest texts of the language layer byte for byte equal to the registry contract in src/plugin.js", () => {
+  const camada = getMessages("en");
+  const amostras = [["‹1›"], [["a", "b"], "‹2›"], [40, 1024]];
+  const desfecho = (mensagem, parametros) => {
+    try {
+      return String(mensagem(...parametros));
+    } catch (erro) {
+      return `throws ${erro.name}`;
+    }
+  };
+  for (const [chave, contrato] of Object.entries(PLUGIN_MANIFEST_TEXT_EN)) {
+    if (typeof contrato === "string") {
+      assert.equal(camada[chave], contrato, chave);
+      continue;
+    }
+    for (const parametros of amostras) {
+      assert.equal(desfecho(camada[chave], parametros), desfecho(contrato, parametros), chave);
+    }
   }
 });

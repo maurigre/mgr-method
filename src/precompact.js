@@ -11,6 +11,7 @@ import { get as engineDescriptor } from "./engines/index.js";
 import { slugs } from "./artifacts.js";
 import { nextTask } from "./plan-next.js";
 import { statusFor } from "./spec-status.js";
+import { InvariantError } from "./errors.js";
 
 // Os dois gatilhos que as plataformas declaram. Qualquer outro valor é DESCONHECIDO, e desconhecido
 // nunca bloqueia: bloquear por engano custa a requisição em curso do usuário.
@@ -96,7 +97,8 @@ function tocadaEm(repo, slug) {
  * Devolve sempre a mesma forma, com `outcome` discriminando — o padrão que `plan-next` e
  * `spec-status` já usam, e que a DES-1 pede no lugar de `null` como sentinela.
  */
-export function assemble(repo, { engine, trigger, changedFiles = [], now = new Date() }) {
+export function assemble(repo, { engine, trigger, changedFiles = [], now = new Date(), tabela }) {
+  if (!tabela) throw new InvariantError("invariantHandoffNoTable", []);
   const candidatas = emAndamento(repo);
   if (!candidatas.length) return { outcome: NOTHING_IN_PROGRESS };
 
@@ -109,7 +111,7 @@ export function assemble(repo, { engine, trigger, changedFiles = [], now = new D
     slug: escolhida.slug,
     others: outras,
     destination: path.join("specs", escolhida.slug, ".handoff.md"),
-    text: texto({ repo, escolhida, outras, engine, trigger, changedFiles, now }),
+    text: texto({ repo, escolhida, outras, engine, trigger, changedFiles, now, tabela }),
   };
 }
 
@@ -172,61 +174,52 @@ export function writeStamp(coreDir, { engine, now = Date.now() } = {}) {
   }
 }
 
-const linhaDaTask = (escolhida) => (escolhida.task
-  ? `**Próxima task:** \`${escolhida.task.id}\` — ${escolhida.task.artifact || "sem artefato declarado"}`
-  : "**Próxima task:** nenhuma está pronta; as pendentes esperam dependência.");
+const linhaDaTask = (escolhida, tabela) => {
+  const { task } = escolhida;
+  if (!task) return tabela.handoffNothingReady;
+  return task.artifact ? tabela.handoffNextTask(task.id, task.artifact) : tabela.handoffNextTaskNoArtifact(task.id);
+};
 
-// O gatilho vem do payload do motor. Ausente ou fora dos dois valores documentados, diz-se
-// DESCONHECIDO em palavra — inventar um nome plausível é o que a RN-2 proíbe.
-const nomeDoGatilho = (trigger) =>
-  ([MANUAL, AUTO].includes(trigger) ? `\`${trigger}\`` : "desconhecido (o motor não o informou)");
-
+// O gatilho vem do payload do motor. Ausente ou fora dos dois valores documentados, a frase diz
+// DESCONHECIDO — inventar um nome plausível é o que a RN-2 proíbe.
 // Quem pediu muda a frase: no `manual` houve intenção humana, e tratá-la como acidente contraria a
 // UC-2 do PRD.
-const abertura = (engine, trigger) => (trigger === MANUAL
-  ? `Gravado pelo hook de pré-compactação do \`${engine}\`. **Você pediu a compactação**, e o método`
-    + " pôs o estado em disco antes de ela acontecer."
-  : `Gravado pelo hook de pré-compactação do \`${engine}\`, gatilho ${nomeDoGatilho(trigger)}.`
-    + " **Não foi pedido por ninguém**: o motor anunciou que ia compactar, e o método pôs o estado em"
-    + " disco antes.");
+function abertura(tabela, engine, trigger) {
+  if (trigger === MANUAL) return tabela.handoffOpeningManual(engine);
+  return trigger === AUTO ? tabela.handoffOpeningAuto(engine, trigger) : tabela.handoffOpeningUnknownTrigger(engine);
+}
 
-function texto({ repo, escolhida, outras, engine, trigger, changedFiles, now }) {
+function texto({ repo, escolhida, outras, engine, trigger, changedFiles, now, tabela }) {
   const estado = statusFor(repo, { slug: escolhida.slug });
   const blocos = [
-    `## Hand-off automático — compactação de contexto em ${now.toISOString()}`,
+    tabela.handoffTitle(now.toISOString()),
     "",
-    abertura(engine, trigger),
+    abertura(tabela, engine, trigger),
     "",
-    `**Feature:** \`${escolhida.slug}\` · plano em \`${escolhida.file}\``,
-    `**Tasks:** ${escolhida.taskCount} no total, ${escolhida.doneCount} com \`status: done\` declarado.`,
-    linhaDaTask(escolhida),
+    tabela.handoffFeature(escolhida.slug, escolhida.file),
+    tabela.handoffTasks(escolhida.taskCount, escolhida.doneCount),
+    linhaDaTask(escolhida, tabela),
   ];
   if (estado.found) {
-    blocos.push(`**Artefatos em disco:** ${estado.artifacts.map(marca).join(" ")}`);
+    blocos.push(tabela.handoffArtifacts(estado.artifacts.map(marca).join(" ")));
   }
   if (outras.length) {
-    blocos.push("",
-      `**Havia mais de uma feature em andamento:** ${outras.map((slug) => `\`${slug}\``).join(", ")}.`
-      + " Esta foi escolhida por ter o `05-execution.md` modificado mais recentemente — é desempate,"
-      + " não certeza.");
+    blocos.push("", tabela.handoffManyFeatures(outras.map((slug) => `\`${slug}\``).join(", ")));
   }
   if (changedFiles.length) {
-    blocos.push("", "**Modificados e não commitados:**", ...changedFiles.map((arquivo) => `- \`${arquivo}\``));
+    blocos.push("", tabela.handoffChangedTitle, ...changedFiles.map((arquivo) => `- \`${arquivo}\``));
   }
-  blocos.push("", ...oQueNaoSeSabe());
+  blocos.push("", ...oQueNaoSeSabe(tabela));
   return `${blocos.join("\n")}\n`;
 }
 
 const marca = (artefato) => (artefato.status === "present" ? artefato.id : `-${artefato.id}`);
 
 // Sempre presente, sem exceção. É a diferença entre um hand-off honesto e um que engana a retomada.
-const oQueNaoSeSabe = () => [
-  "### O que este hand-off NÃO sabe",
+const oQueNaoSeSabe = (tabela) => [
+  tabela.handoffUnknownTitle,
   "",
-  "Ele foi montado por um hook, que **não vê a conversa**. O que foi decidido falando e ainda não",
-  "chegou ao disco **não está aqui** — nem a razão de decisões tomadas nesta sessão, nem o que estava",
-  "a meio caminho de ser escrito.",
+  tabela.handoffUnknownBody,
   "",
-  "**Sugestão:** abrir uma sessão nova e retomar por este arquivo, em vez de seguir numa janela já",
-  "compactada. Se algo importante foi decidido e não está escrito, escreva antes de continuar.",
+  tabela.handoffSuggestion,
 ];

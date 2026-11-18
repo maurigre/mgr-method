@@ -236,3 +236,126 @@ test("should keep the eight engine-independent commands at exit 0 and name the r
     assert.ok(`${result.stdout}${result.stderr}`.includes(path.join(".claude", "agents", "mgr-draft.md")), label);
   }
 });
+
+const manifestPathOf = (project) => path.join(project, ".mgr-core", "manifest.json");
+
+const withManifest = (project, mutate) => {
+  const manifest = JSON.parse(fs.readFileSync(manifestPathOf(project), "utf8"));
+  mutate(manifest);
+  fs.writeFileSync(manifestPathOf(project), JSON.stringify(manifest, null, 2) + "\n", "utf8");
+};
+
+const doctorJson = (project, home) => runNode([RUNTIME, "doctor", "--json"], { cwd: project, env: runtimeEnv(home) });
+
+const LETHAL_FIELDS = [
+  ["skills", {}],
+  ["skillsDirs", "x"],
+  ["engines", 7],
+  ["agents", true],
+  ["scope", "bogus"],
+];
+
+for (const [field, value] of LETHAL_FIELDS) {
+  test(`should exit 2 with invalid-manifest JSON from the runtime when ${field} is ${JSON.stringify(value)} (CA-1, CA-2)`, () => {
+    const { project, home } = fixture(`lethal-${field}`);
+    withManifest(project, (manifest) => {
+      manifest[field] = value;
+    });
+    const result = doctorJson(project, home);
+    assert.equal(result.status, 2, `${result.stdout}${result.stderr}`);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.outcome, "invalid-manifest");
+    assert.equal(report.blocks, true);
+    assert.equal(report.checks, 0);
+    assert.deepEqual(report.findings, []);
+    assert.ok(report.manifest.problems.length > 0, "the invalid manifest names at least one problem, so the person knows what to fix");
+  });
+}
+
+const NON_OBJECT_MANIFESTS = [
+  ["an unreadable file", "{ nao e json", "CA-4"],
+  ["an empty file", "", "CA-4"],
+  ["the string \"x\"", '"x"', "CA-5"],
+  ["null", "null", "CA-5"],
+  ["the number 7", "7", "CA-5"],
+  ["the array [1,2]", "[1,2]", "CA-5"],
+];
+
+for (const [label, content, criterion] of NON_OBJECT_MANIFESTS) {
+  test(`should exit 2 with invalid-manifest JSON from the runtime when the manifest is ${label} (${criterion})`, () => {
+    const { project, home } = fixture(`shape-${criterion}-${content.length}`);
+    fs.writeFileSync(manifestPathOf(project), content, "utf8");
+    const result = doctorJson(project, home);
+    assert.equal(result.status, 2, `${result.stdout}${result.stderr}`);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.outcome, "invalid-manifest");
+    assert.equal(report.blocks, true);
+    assert.equal(report.checks, 0);
+    assert.deepEqual(report.findings, []);
+    if (criterion === "CA-4") {
+      assert.equal(report.manifest.state, "unreadable");
+    }
+    if (content === '"x"' || content === "null") {
+      assert.equal(report.manifest.problems[0].kind, "root");
+    }
+  });
+}
+
+test("should keep outcome audited from the runtime when skills holds a path-like entry (CA-18)", () => {
+  const { project, home } = fixture("ca18");
+  withManifest(project, (manifest) => {
+    manifest.skills = ["../x"];
+  });
+  const result = doctorJson(project, home);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.outcome, "audited", result.stdout);
+  assert.ok(report.findings.length > 0, result.stdout);
+  assert.notEqual(result.status, 2, `${result.stdout}${result.stderr}`);
+});
+
+test("should keep outcome audited with exit 0 from the runtime on a valid manifest (CA-7)", () => {
+  const { project, home } = fixture("ca7");
+  const result = doctorJson(project, home);
+  assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+  assert.equal(JSON.parse(result.stdout).outcome, "audited");
+});
+
+test("should answer the no-install envelope with exit 0 on --json from a runtime copy with no manifest (CA-19)", () => {
+  const { project, home } = fixture("ca19-source");
+  const bare = makeTemp("ca19-bare");
+  assertOutsideGit(bare);
+  fs.cpSync(path.join(project, ".mgr-core"), path.join(bare, ".mgr-core"), { recursive: true });
+  fs.rmSync(manifestPathOf(bare));
+  const result = doctorJson(bare, home);
+  assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+  assert.deepEqual(JSON.parse(result.stdout), { schemaVersion: 1, blocks: false, outcome: "no-install", findings: [], checks: 0 });
+});
+
+test("should leave an invalid manifest byte for byte unchanged after the runtime doctor, with and without --json (CA-17)", () => {
+  const { project, home } = fixture("ca17");
+  const content = '{ "skills": {}, "engines": 7, \n  "x": "ç" }\n';
+  fs.writeFileSync(manifestPathOf(project), content, "utf8");
+  const before = fs.readFileSync(manifestPathOf(project));
+  for (const args of [["doctor"], ["doctor", "--json"]]) {
+    const result = runNode([RUNTIME, ...args], { cwd: project, env: runtimeEnv(home) });
+    assert.equal(result.status, 2, `${args.join(" ")}: ${result.stdout}${result.stderr}`);
+    assert.ok(before.equals(fs.readFileSync(manifestPathOf(project))), `${args.join(" ")} changed the manifest`);
+  }
+});
+
+test("should print the unknown runtime version as one whole sentence in each language when no version can be read", () => {
+  const { project, home } = fixture("versao-desconhecida");
+  const pacoteDoRuntime = path.join(project, ".mgr-core", "runtime", "package.json");
+  const pacote = JSON.parse(fs.readFileSync(pacoteDoRuntime, "utf8"));
+  delete pacote.version;
+  fs.writeFileSync(pacoteDoRuntime, JSON.stringify(pacote, null, 2) + "\n", "utf8");
+  withManifest(project, (manifest) => { delete manifest.version; });
+  for (const [idioma, frase] of [
+    ["en", "mgr-method, version unknown (project runtime)"],
+    ["pt-BR", "mgr-method, versão desconhecida (runtime do projeto)"],
+  ]) {
+    const resultado = runNode([RUNTIME, "version", "--user-language", idioma], { cwd: project, env: runtimeEnv(home) });
+    assert.equal(resultado.status, 0, resultado.stderr);
+    assert.equal(resultado.stdout.trim(), frase);
+  }
+});

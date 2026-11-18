@@ -4,6 +4,8 @@
 import path from "node:path";
 import { RUNTIME_IGNORE_FILE, RUNTIME_VERSIONING } from "../catalog.js";
 import { runtimeIgnoreEffect, runtimeIgnoreFileFor, runtimeIgnoreState, removeRuntimeIgnore, writeRuntimeIgnore } from "../builder.js";
+import { UsageError } from "../errors.js";
+import { RUNTIME_DIR_NAME } from "../bundle.js";
 import * as installer from "../installer.js";
 import { configPath, readRuntimeVersioning, writeRuntimeVersioning } from "../registry.js";
 
@@ -18,11 +20,11 @@ const rawRuntimeValue = (value) => (typeof value === "string" ? value : JSON.str
 
 // DT-11: valor gravado invalido recusa ANTES de escrever. Lanca (TS-3): o `catch` do `main` imprime
 // a mensagem com o prefixo de erro e sai 1, entao quem chama nao decide nada.
-export function refuseInvalidRuntimeVersioning({ scope, core, repo, M }) {
+export function refuseInvalidRuntimeVersioning({ scope, core, repo }) {
   if (scope !== "project") return;
   const gravada = readRuntimeVersioning(core);
   if (gravada.state !== "invalid") return;
-  throw new Error(M.rvInvalidRefused(posixRelative(repo, configPath(core)), rawRuntimeValue(gravada.value)));
+  throw new UsageError("rvInvalidRefused", [posixRelative(repo, configPath(core)), rawRuntimeValue(gravada.value)]);
 }
 
 // Leitura (DT-7): diz o que está GRAVADO; `invalid` sai 1.
@@ -58,7 +60,7 @@ function rvSet({ root, positional, io, M, gitIndex, rootIgnoredLines }) {
   }
   const core = installer.coreDir("project", root);
   if (!installer.detectPrior("project", root)) {
-    io.err(M.errorPrefix(M.rvNoInstall(".mgr-core")));
+    io.err(M.errorPrefix(M.rvNoInstall(RUNTIME_DIR_NAME)));
     return 1;
   }
 
@@ -125,10 +127,7 @@ export function reportRuntimeChoice({ runtimeVersioning: escolha, M, out }) {
 // A linha do plano com a fonte da escolha; `null` quando não se aplica (escopo global).
 export function planRuntimeLine({ runtimeVersioning: escolha, M }) {
   if (!escolha || escolha.source === "not-applicable") return null;
-  const fonte = {
-    answered: M.runtimeSourceAnswered, recorded: M.runtimeSourceRecorded, default: M.runtimeSourceDefault,
-  }[escolha.source];
-  return escolha.value === "unversioned" ? M.planRuntimeUnversioned(fonte) : M.planRuntimeVersioned(fonte);
+  return M.planRuntimeLine(escolha.value, escolha.source);
 }
 
 // DT-8 (LOG-2): a linha "antes" sempre sai; o git só é lido, nunca alterado (RN-10).

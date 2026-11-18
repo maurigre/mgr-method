@@ -5,6 +5,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "../src/provenance.js";
 import { check } from "../src/prov-rules.js";
+import { findingTexts } from "../src/findings.js";
+import { getMessages } from "../src/messages.js";
+import { renderText } from "../src/ui-text.js";
 import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const RAIZ = fileURLToPath(new URL("..", import.meta.url));
@@ -21,7 +24,7 @@ test("PROV-1: as seis etiquetas malformadas da fixture são apontadas, e nenhuma
   assert.equal(encontrados.length, 6);
   for (const finding of encontrados) {
     assert.equal(finding.severity, "error");
-    assert.match(finding.message, /etiqueta malformada/);
+    assert.match(renderText(getMessages("pt-BR"), findingTexts(finding).message), /etiqueta malformada/);
   }
 });
 
@@ -29,15 +32,15 @@ test("PROV-2: arquivo que sumiu e linha além do fim são os dois apontados", ()
   const encontrados = doTipo(achados("etiquetas.md"), "PROV-2");
   assert.equal(encontrados.length, 2);
   assert.ok(encontrados.every((f) => f.severity === "error"));
-  assert.ok(encontrados.some((f) => /não existe em disco/.test(f.message)), "o arquivo que sumiu");
-  assert.ok(encontrados.some((f) => /linha\(s\), e a etiqueta aponta/.test(f.message)), "a linha além do fim");
+  assert.ok(encontrados.some((f) => /não existe em disco/.test(renderText(getMessages("pt-BR"), findingTexts(f).message))), "o arquivo que sumiu");
+  assert.ok(encontrados.some((f) => /linha\(s\), e a etiqueta aponta/.test(renderText(getMessages("pt-BR"), findingTexts(f).message))), "a linha além do fim");
 });
 
 test("PROV-4: o caminho que escapa da raiz é apontado, e NÃO como PROV-2", () => {
   const encontrados = doTipo(achados("etiquetas.md"), "PROV-4");
   assert.equal(encontrados.length, 1);
   assert.equal(encontrados[0].severity, "error");
-  assert.match(encontrados[0].message, /escapa da raiz/);
+  assert.match(renderText(getMessages("pt-BR"), findingTexts(encontrados[0]).message), /escapa da raiz/);
   assert.doesNotMatch(encontrados[0].remediation, /gitignored/, "a remediação da PROV-2 manda procurar o arquivo; esta, não");
 });
 
@@ -74,8 +77,9 @@ test("PROV-3: só roda em feature com 06-completion.md, e só em posição de ma
 
 test("PROV-3: a mensagem declara o que detecta e o que NÃO distingue", () => {
   const [aviso] = doTipo(achados("pendencias.md", { closed: true }), "PROV-3");
-  assert.match(aviso.message, /POSIÇÃO/, "diz que detecta posição");
-  assert.match(aviso.message, /não distingue uma pendência real de uma citação que por acaso termina a linha/);
+  const mensagem = renderText(getMessages("pt-BR"), findingTexts(aviso).message);
+  assert.match(mensagem, /POSIÇÃO/, "diz que detecta posição");
+  assert.match(mensagem, /não distingue uma pendência real de uma citação que por acaso termina a linha/);
 });
 
 test("o falso positivo conhecido é apontado, e o teste o documenta como falso positivo", () => {

@@ -5,7 +5,9 @@
 // teste; a borda passa o fetch global.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { EFFORT_LEVELS, parseSkillName } from "./plugin.js";
+import { UsageError } from "./errors.js";
+import { text } from "./ui-text.js";
+import { EFFORT_LEVELS, isSkillName, parseSkillName } from "./plugin.js";
 import { AGENTS, INHERIT, INTENTS, LAWS_SHARED, RUNTIME_VERSIONING } from "./catalog.js";
 import * as engines from "./engines/index.js";
 
@@ -20,7 +22,18 @@ export const configPath = (coreDir) => path.join(coreDir, CONFIG_NAME);
 
 export function readConfig(coreDir) {
   const file = configPath(coreDir);
-  return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : { registries: [] };
+  if (!existsSync(file)) return { registries: [] };
+  let config;
+  try {
+    config = JSON.parse(readFileSync(file, "utf8"));
+  } catch (cause) {
+    throw new UsageError("fileNotJson", [file], { cause });
+  }
+  // JSON valido com raiz que nao e objeto: `null` estouraria `TypeError` no primeiro acesso, mostrado
+  // como defeito do MGR, e `[]` ou `"x"` seguiriam adiante sem os campos da config. E erro de uso do
+  // arquivo da pessoa (achado R4-8).
+  if (!isPlainObject(config)) throw new UsageError("fileNotObject", [file]);
+  return config;
 }
 
 export function writeConfig(coreDir, config) {
@@ -36,14 +49,14 @@ export function listRegistries(coreDir) {
 
 export function addRegistry(coreDir, { name, url, trusted = false }) {
   if (!KEBAB_RE.test(name || "")) {
-    throw new Error(`invalid registry name: ${JSON.stringify(name)} (kebab-case, it is the "@name" scope of the skills)`);
+    throw new UsageError("registryNameInvalid", [JSON.stringify(name)]);
   }
   if (!/^https?:\/\//.test(url || "")) {
-    throw new Error(`invalid registry url: ${JSON.stringify(url)} (expected the http(s) URL of the registry index.json)`);
+    throw new UsageError("registryUrlInvalid", [JSON.stringify(url)]);
   }
   const config = readConfig(coreDir);
   if (config.registries.some((registry) => registry.name === name)) {
-    throw new Error(`registry already configured: ${name} (remove it first to change the URL)`);
+    throw new UsageError("registryAlreadyConfigured", [name]);
   }
   config.registries.push({ name, url, trusted });
   writeConfig(coreDir, config);
@@ -54,7 +67,7 @@ export function removeRegistry(coreDir, name) {
   const config = readConfig(coreDir);
   const remaining = config.registries.filter((registry) => registry.name !== name);
   if (remaining.length === config.registries.length) {
-    throw new Error(`registry not configured: ${name}`);
+    throw new UsageError("registryNotConfigured", [name]);
   }
   writeConfig(coreDir, { ...config, registries: remaining });
   return remaining;
@@ -63,27 +76,27 @@ export function removeRegistry(coreDir, name) {
 // Valida a forma do index (gerado pelo registry a partir dos manifests — ADR-0005).
 // Devolve lista de problemas, vazia = válido (mesmo contrato do validateManifest).
 export function validateIndex(index) {
-  if (!index || typeof index !== "object" || Array.isArray(index)) return ["index must be a JSON object"];
+  if (!index || typeof index !== "object" || Array.isArray(index)) return [text("indexNotObject")];
   const problems = [];
-  if (index.indexVersion !== 1) problems.push(`unsupported "indexVersion": ${JSON.stringify(index.indexVersion)} (expected 1)`);
-  if (typeof index.registry !== "string" || index.registry === "") problems.push('"registry" must be a non-empty string');
+  if (index.indexVersion !== 1) problems.push(text("indexVersionUnsupported", JSON.stringify(index.indexVersion)));
+  if (typeof index.registry !== "string" || index.registry === "") problems.push(text("indexRegistryInvalid"));
   if (!index.categories || typeof index.categories !== "object" || Array.isArray(index.categories)) {
-    problems.push('"categories" must be an object mapping category to skill entries');
+    problems.push(text("indexCategoriesInvalid"));
     return problems;
   }
   for (const [category, entries] of Object.entries(index.categories)) {
-    if (!Array.isArray(entries)) { problems.push(`category "${category}" must be an array`); continue; }
+    if (!Array.isArray(entries)) { problems.push(text("indexCategoryNotArray", category)); continue; }
     for (const entry of entries) {
-      const id = entry?.name ?? `<entry in ${category}>`;
-      try { parseSkillName(entry?.name); } catch { problems.push(`${id}: invalid "name"`); }
-      if (typeof entry?.version !== "string") problems.push(`${id}: missing "version"`);
-      if (typeof entry?.description !== "string") problems.push(`${id}: missing "description"`);
-      if (!CHECKSUM_RE.test(entry?.checksum || "")) problems.push(`${id}: "checksum" must be "sha256-<hex>"`);
+      const name = entry?.name ?? null;
+      try { parseSkillName(entry?.name); } catch { problems.push(text("indexEntryNameInvalid", name, category)); }
+      if (typeof entry?.version !== "string") problems.push(text("indexEntryVersionMissing", name, category));
+      if (typeof entry?.description !== "string") problems.push(text("indexEntryDescriptionMissing", name, category));
+      if (!CHECKSUM_RE.test(entry?.checksum || "")) problems.push(text("indexEntryChecksumInvalid", name, category));
       const files = entry?.files;
       const validFiles = Array.isArray(files) && files.length > 0 && files.every(
         (file) => typeof file?.path === "string" && /^https?:\/\//.test(file?.url || "") && SHA256_RE.test(file?.sha256 || ""),
       );
-      if (!validFiles) problems.push(`${id}: "files" must be a non-empty array of {path, url, sha256}`);
+      if (!validFiles) problems.push(text("indexEntryFilesInvalid", name, category));
     }
   }
   return problems;
@@ -91,19 +104,24 @@ export function validateIndex(index) {
 
 // Baixa e valida o index de um registry. `fetchImpl` injetado pela borda.
 export async function fetchIndex(url, { fetchImpl }) {
-  const response = await fetchImpl(url);
+  let response;
+  try {
+    response = await fetchImpl(url);
+  } catch (error) {
+    throw new UsageError("registryIndexUnreachable", [url], { cause: error });
+  }
   if (!response.ok) {
-    throw new Error(`registry index unavailable: ${url} (HTTP ${response.status})`);
+    throw new UsageError("registryIndexUnavailable", [url, response.status]);
   }
   let index;
   try {
     index = await response.json();
   } catch {
-    throw new Error(`registry index is not valid JSON: ${url}`);
+    throw new UsageError("registryIndexNotJson", [url]);
   }
   const problems = validateIndex(index);
   if (problems.length) {
-    throw new Error(`invalid registry index at ${url}: ${problems.join("; ")}`);
+    throw new UsageError("registryIndexInvalid", [url, problems]);
   }
   return index;
 }
@@ -111,17 +129,18 @@ export async function fetchIndex(url, { fetchImpl }) {
 // Resolve `@registry/skill` na lista de registries configurados: encontra o registry pelo
 // scope do nome, baixa o index e devolve a entrada da skill com a origem.
 export async function resolve(name, registries, { fetchImpl }) {
+  if (!isSkillName(name)) throw new UsageError("pluginSkillNameInvalid", [JSON.stringify(name)]);
   const { registry: scope } = parseSkillName(name);
   const origin = registries.find((registry) => registry.name === scope);
   if (!origin) {
-    throw new Error(`registry not configured for scope "@${scope}": run \`mgr registry add ${scope} <index-url>\` first`);
+    throw new UsageError("registryNotConfiguredForScope", [scope]);
   }
   const index = await fetchIndex(origin.url, { fetchImpl });
   for (const [category, entries] of Object.entries(index.categories)) {
     const entry = entries.find((candidate) => candidate.name === name);
     if (entry) return { entry, category, origin };
   }
-  throw new Error(`skill not found in registry "${scope}": ${name}`);
+  throw new UsageError("skillNotFoundInRegistry", [scope, name]);
 }
 
 // Modo de detecção do projeto (ADR-0009), guardado no mesmo config dos registries.
@@ -136,10 +155,10 @@ export function readDetectionMode(coreDir) {
   // confirmação humana precisa de uma base de auditoria que ainda não temos. Tratar como
   // `suggest` em silêncio seria mentir sobre a política de segurança que o usuário configurou.
   if (mode === "auto") {
-    throw new Error('detectionMode "auto" is not available yet: installing without human confirmation depends on `mgr audit`, which is not implemented');
+    throw new UsageError("detectionModeAutoUnavailable");
   }
   if (!DETECTION_MODES.includes(mode)) {
-    throw new Error(`invalid detectionMode: ${JSON.stringify(mode)} (expected ${DETECTION_MODES.join(" | ")})`);
+    throw new UsageError("detectionModeInvalid", [JSON.stringify(mode), DETECTION_MODES]);
   }
   return mode;
 }
@@ -153,7 +172,7 @@ const isPlainObject = (value) => value !== null && typeof value === "object" && 
 // A forma do `model` (mapa por motor), com a mensagem que ensina a forma. Uma só, usada pela
 // validação da política e pela base da escrita, que só confere a forma (DT-25, review isolado 4).
 function modelShapeError(label, model) {
-  return new Error(`invalid ${label}.model: ${JSON.stringify(model)} (expected a map of engine to model, e.g. {"claude-code": "opus"})`);
+  return new UsageError("modelShapeInvalid", [label, JSON.stringify(model)]);
 }
 
 // Resolve UMA política de agente: default do catálogo completado pelo que o usuário escreveu.
@@ -164,7 +183,7 @@ function modelShapeError(label, model) {
 function resolvePolicy(label, defaults, configured) {
   if (configured === undefined) return { ...defaults };
   if (!isPlainObject(configured)) {
-    throw new Error(`invalid ${label}: ${JSON.stringify(configured)} (expected an object)`);
+    throw new UsageError("configValueNotObject", [label, JSON.stringify(configured)]);
   }
 
   // O merge é de DOIS níveis por causa do `model`: override parcial COMPLETA o default, não o
@@ -175,14 +194,14 @@ function resolvePolicy(label, defaults, configured) {
   }
 
   if (typeof policy.enabled !== "boolean") {
-    throw new Error(`invalid ${label}.enabled: ${JSON.stringify(policy.enabled)} (expected true | false)`);
+    throw new UsageError("configEnabledInvalid", [label, JSON.stringify(policy.enabled)]);
   }
   // `inherit` não é um nível de esforço: é a forma de o autor dizer "não declare este campo", e o
   // agente herda o da sessão. Existe porque `effort` TEM default — sem um valor para desligá-lo,
   // não haveria como recusar a declaração. O `model` não precisa disso para o caso comum, já que o
   // default dele não publica nada, mas aceita pela mesma razão e com a mesma palavra.
   if (policy.effort !== INHERIT && !EFFORT_LEVELS.includes(policy.effort)) {
-    throw new Error(`invalid ${label}.effort: ${JSON.stringify(policy.effort)} (expected ${[...EFFORT_LEVELS, INHERIT].join(" | ")})`);
+    throw new UsageError("policyEffortInvalid", [label, JSON.stringify(policy.effort), [...EFFORT_LEVELS, INHERIT]]);
   }
 
   // `model` é mapa por motor — mesma forma do mgr-manifest.json. String é o erro provável de
@@ -195,7 +214,7 @@ function resolvePolicy(label, defaults, configured) {
     // plataforma (e no copilot, da conta) e mudam sem o método saber. Lista nossa envelheceria
     // e passaria a recusar modelo válido. Quem valida é a plataforma, que avisa e substitui.
     if (typeof value !== "string" || value.length === 0) {
-      throw new Error(`invalid ${label}.model.${engine}: ${JSON.stringify(value)} (expected a non-empty model name)`);
+      throw new UsageError("policyModelEngineInvalid", [label, engine, JSON.stringify(value)]);
     }
   }
 
@@ -235,11 +254,11 @@ export function writeAgentPolicy(coreDir, intent, request = {}) {
 // enquanto o plano, que aplica tudo junto, o aceitava. `requests` é `[[intent, { model, effort }], ...]`,
 // na ordem em que as chaves entram em `agents`; lista vazia e intenção repetida são recusadas.
 export function writeAgentPolicies(coreDir, requests) {
-  if (!requests.length) throw new Error("nothing to write for agents (expected at least one intent)");
+  if (!requests.length) throw new UsageError("agentsNothingToWrite");
   assertRequestedIntents(requests);
   for (const [intent, { model, effort } = {}] of requests) {
     if (model === undefined && effort === undefined) {
-      throw new Error(`nothing to write for agents.${intent} (expected model, effort, or both)`);
+      throw new UsageError("agentsIntentNothingToWrite", [intent]);
     }
   }
 
@@ -259,7 +278,7 @@ export function writeAgentPolicies(coreDir, requests) {
 // `agents` tem de ser objeto: UMA recusa, com o mesmo texto, na leitura e na escrita (review isolado 6).
 function assertAgentsObject(agents) {
   if (agents !== undefined && !isPlainObject(agents)) {
-    throw new Error(`invalid agents: ${JSON.stringify(agents)} (expected an object)`);
+    throw new UsageError("configValueNotObject", ["agents", JSON.stringify(agents)]);
   }
 }
 
@@ -269,9 +288,9 @@ function assertRequestedIntents(requests) {
   const vistas = new Set();
   for (const [intent] of requests) {
     if (!INTENTS.includes(intent)) {
-      throw new Error(`unknown agent intent: ${JSON.stringify(intent)} (expected ${INTENTS.join(" | ")})`);
+      throw new UsageError("agentIntentUnknown", [JSON.stringify(intent), INTENTS]);
     }
-    if (vistas.has(intent)) throw new Error(`agent intent requested twice: ${JSON.stringify(intent)}`);
+    if (vistas.has(intent)) throw new UsageError("agentIntentRequestedTwice", [JSON.stringify(intent)]);
     vistas.add(intent);
   }
 }
@@ -308,7 +327,7 @@ function policyBaseOf(config, intent, { model }) {
   const propria = config.agents?.[intent];
   if (propria != null) {
     if (!isPlainObject(propria)) {
-      throw new Error(`invalid agents.${intent}: ${JSON.stringify(propria)} (expected an object)`);
+      throw new UsageError("configValueNotObject", [`agents.${intent}`, JSON.stringify(propria)]);
     }
     if (model !== undefined && propria.model != null && !isPlainObject(propria.model)) {
       throw modelShapeError(`agents.${intent}`, propria.model);
@@ -374,7 +393,7 @@ export function readOrigin(coreDir) {
 
 export function writeOrigin(coreDir, valor) {
   if (!ORIGINS.includes(valor)) {
-    throw new Error(`unknown project origin: ${JSON.stringify(valor)} (expected ${ORIGINS.join(" | ")})`);
+    throw new UsageError("projectOriginUnknown", [JSON.stringify(valor), ORIGINS]);
   }
   const config = readConfig(coreDir);
   // Tres casos distintos, e nenhum deles e `null` com significado de negocio: a chave nunca existiu,
@@ -404,7 +423,7 @@ export function readRuntimeVersioning(coreDir) {
 // Valida ANTES de ler ou gravar. O `antes` tem a mesma forma do `writeOrigin`.
 export function writeRuntimeVersioning(coreDir, value) {
   if (!RUNTIME_VERSIONING.includes(value)) {
-    throw new Error(`unknown runtime versioning: ${JSON.stringify(value)} (expected ${RUNTIME_VERSIONING.join(" | ")})`);
+    throw new UsageError("runtimeVersioningUnknown", [JSON.stringify(value), RUNTIME_VERSIONING]);
   }
   const config = readConfig(coreDir);
   const atual = runtimeVersioningOf(config);
@@ -451,12 +470,12 @@ export const RESERVED_AGENT_KEYS = Object.freeze(["budget"]);
 function resolveBudget(configured) {
   if (configured === undefined) return null;
   if (!isPlainObject(configured)) {
-    throw new Error(`invalid agents.budget: ${JSON.stringify(configured)} (expected an object)`);
+    throw new UsageError("configValueNotObject", ["agents.budget", JSON.stringify(configured)]);
   }
   const total = configured.totalTokens;
   if (total === undefined) return { totalTokens: null };
   if (!Number.isInteger(total) || total < 0) {
-    throw new Error(`invalid agents.budget.totalTokens: ${JSON.stringify(total)} (expected a non-negative integer)`);
+    throw new UsageError("budgetTotalTokensInvalid", [JSON.stringify(total)]);
   }
   return { totalTokens: total };
 }
@@ -488,14 +507,14 @@ export function requestOf(models, efforts, intent) {
   const model = models?.[intent];
   if (model !== undefined) {
     if (!isPlainObject(model)) {
-      throw new Error(`invalid model request for ${intent}: ${JSON.stringify(model)} (expected a map of engine to model)`);
+      throw new UsageError("modelRequestInvalid", [intent, JSON.stringify(model)]);
     }
     if (Object.keys(model).length > 0) request.model = model;
   }
   const effort = efforts?.[intent];
   if (effort !== undefined) {
     if (typeof effort !== "string") {
-      throw new Error(`invalid effort request for ${intent}: ${JSON.stringify(effort)} (expected a level name)`);
+      throw new UsageError("effortRequestInvalid", [intent, JSON.stringify(effort)]);
     }
     if (effort.length > 0) request.effort = effort;
   }
@@ -528,7 +547,7 @@ function agentsFromConfig(config) {
   const desconhecidas = Object.keys(configured ?? {})
     .filter((chave) => !INTENTS.includes(chave) && !RESERVED_AGENT_KEYS.includes(chave));
   if (desconhecidas.length) {
-    throw new Error(`unknown agent intent(s): ${desconhecidas.join(", ")} (expected ${INTENTS.join(" | ")})`);
+    throw new UsageError("agentIntentsUnknown", [desconhecidas, INTENTS]);
   }
   const budget = resolveBudget(configured?.budget);
 
@@ -566,11 +585,11 @@ export function readLawsPreamble(coreDir) {
   const configured = readConfig(coreDir).lawsPreamble;
   if (configured === undefined) return { ...LAWS_PREAMBLE_DEFAULTS };
   if (!isPlainObject(configured)) {
-    throw new Error(`invalid lawsPreamble: ${JSON.stringify(configured)} (expected an object)`);
+    throw new UsageError("configValueNotObject", ["lawsPreamble", JSON.stringify(configured)]);
   }
   const preamble = { ...LAWS_PREAMBLE_DEFAULTS, ...configured };
   if (typeof preamble.enabled !== "boolean") {
-    throw new Error(`invalid lawsPreamble.enabled: ${JSON.stringify(preamble.enabled)} (expected true | false)`);
+    throw new UsageError("configEnabledInvalid", ["lawsPreamble", JSON.stringify(preamble.enabled)]);
   }
   return preamble;
 }
@@ -596,9 +615,9 @@ function readLocalObject(coreDir) {
   try {
     parsed = JSON.parse(readFileSync(file, "utf8"));
   } catch (error) {
-    throw new Error(`${file} is not valid JSON: ${error.message}`, { cause: error });
+    throw new UsageError("fileNotJson", [file], { cause: error });
   }
-  if (!isPlainObject(parsed)) throw new Error(`${file} must contain a JSON object`);
+  if (!isPlainObject(parsed)) throw new UsageError("fileNotObject", [file]);
   return parsed;
 }
 
@@ -611,7 +630,7 @@ export function readPersonal(coreDir) {
   const ignoredUnknown = chaves.filter((chave) => !PERSONAL_KEYS.includes(chave) && !TEAM_KEYS.includes(chave));
   if (local.projectId === undefined) return { ignoredTeam, ignoredUnknown };
   if (typeof local.projectId !== "string" || local.projectId === "") {
-    throw new Error(`invalid projectId in ${localConfigPath(coreDir)}: ${JSON.stringify(local.projectId)} (expected a non-empty string)`);
+    throw new UsageError("localProjectIdInvalid", [localConfigPath(coreDir), JSON.stringify(local.projectId)]);
   }
   return { projectId: local.projectId, ignoredTeam, ignoredUnknown };
 }
@@ -621,7 +640,7 @@ export function readPersonal(coreDir) {
 // Se o arquivo existente for inválido, lança ANTES de gravar, para não apagar o que o autor escreveu.
 export function writePersonal(coreDir, { projectId } = {}) {
   if (typeof projectId !== "string" || projectId === "") {
-    throw new Error(`invalid projectId: ${JSON.stringify(projectId)} (expected a non-empty string)`);
+    throw new UsageError("projectIdInvalid", [JSON.stringify(projectId)]);
   }
   const local = readLocalObject(coreDir);
   mkdirSync(coreDir, { recursive: true });
@@ -650,7 +669,7 @@ export function readInitials(coreDir) {
 // chaves sobrevivem. Arquivo pessoal invalido lanca antes de gravar.
 export function writeInitials(coreDir, valor) {
   if (typeof valor !== "string" || !INITIALS_PATTERN.test(valor)) {
-    throw new Error(`invalid initials: ${JSON.stringify(valor)} (expected 2 to 4 lowercase letters a-z)`);
+    throw new UsageError("initialsValueInvalid", [JSON.stringify(valor)]);
   }
   const local = readLocalObject(coreDir);
   mkdirSync(coreDir, { recursive: true });

@@ -17,6 +17,7 @@ import * as catalog from "../src/catalog.js";
 import { get as engineDescriptor, ids as engineIds } from "../src/engines/index.js";
 import { collectInstallAnswers, detectUserLanguage, CANCELLED } from "../src/prompts.js";
 import { getMessages } from "../src/messages.js";
+import { renderText } from "../src/ui-text.js";
 import { validateAll, validateSkill, checkSkill } from "../src/validator.js";
 import { aggregateChecksum, sha256 } from "../src/plugin.js";
 import { add as addPlugin } from "../src/plugin-installer.js";
@@ -39,7 +40,7 @@ test("skills do fluxo SDD presentes e válidas", () => {
   const names = bundle.skillNames();
   for (const n of CORE) assert.ok(names.includes(n), `faltando ${n}`);
   for (const [n, problems] of Object.entries(validateAll())) {
-    assert.equal(problems.length, 0, `${n}: ${problems.join("; ")}`);
+    assert.equal(problems.length, 0, `${n}: ${problems.map((pr) => renderText(getMessages("pt-BR"), pr)).join("; ")}`);
   }
 });
 
@@ -54,7 +55,7 @@ test("selectSkills monta o subconjunto por linguagem/arquitetura", () => {
   assert.ok(s2.includes("arch-clean") && s2.includes("evidence-capture"));
   assert.ok(!s2.includes("junit-clean"));
 
-  assert.throws(() => catalog.selectSkills({ architecture: "xyz" }), /arquitetura desconhecida/);
+  assert.throws(() => catalog.selectSkills({ architecture: "xyz" }), /unknown architecture/);
 });
 
 test("requiredShared devolve 4 entradas com skill arch e spec-init", () => {
@@ -251,8 +252,8 @@ test("detect, installs e detectPrior enxergam a instalação", () => {
 
 test("update e uninstall exigem instalação existente", () => {
   const repo = diretorioTemporario();
-  assert.throws(() => installer.update("project", repo), /rode `mgr install`/);
-  assert.throws(() => installer.uninstall("project", repo), /nada a desinstalar/);
+  assert.throws(() => installer.update("project", repo), /run `mgr install` first/);
+  assert.throws(() => installer.uninstall("project", repo), /nothing to uninstall/);
 });
 
 test("SHARED_SOURCES e instalador leem as mesmas fontes compartilhadas", () => {
@@ -503,7 +504,7 @@ test("CLI: install migra instalação antiga sem crash (smoke)", () => {
 });
 
 test("planInstall rejeita motor desconhecido", () => {
-  assert.throws(() => installer.planInstall(["motor-x"], "project", diretorioTemporario(), { architecture: "hexagonal" }), /motor inválido/);
+  assert.throws(() => installer.planInstall(["motor-x"], "project", diretorioTemporario(), { architecture: "hexagonal" }), /invalid engine/);
 });
 
 test("buildRuntime gera skills + shared num diretório", () => {
@@ -514,34 +515,35 @@ test("buildRuntime gera skills + shared num diretório", () => {
 });
 
 test("bundle.pkgDir lança para recurso ausente e readVersion retorna semver", () => {
-  assert.throws(() => bundle.pkgDir("nao-existe"), /recurso do MGR ausente/);
+  assert.throws(() => bundle.pkgDir("nao-existe"), /MGR resource missing/);
   assert.match(bundle.readVersion(), /^\d+\.\d+\.\d+/);
   assert.ok(existsSync(bundle.skillsDir()) && existsSync(bundle.sharedDir()));
 });
 
 test("buildSkill lança para skill inexistente", () => {
-  assert.throws(() => buildSkill("nao-existe", path.join(diretorioTemporario(), "skills")), /skill inexistente/);
+  assert.throws(() => buildSkill("nao-existe", path.join(diretorioTemporario(), "skills")), /skill does not exist/);
 });
 
 test("validateSkill reporta SKILL.md ausente", () => {
-  assert.deepEqual(validateSkill("nao-existe"), ["nao-existe: falta SKILL.md"]);
+  assert.deepEqual(validateSkill("nao-existe").map((pr) => renderText(getMessages("pt-BR"), pr)), ["nao-existe: falta SKILL.md"]);
 });
 
 test("checkSkill cobre frontmatter, name, description e tamanho", () => {
   const desc = "d".repeat(50);
-  assert.deepEqual(checkSkill("x", "sem frontmatter"), ["x: sem frontmatter YAML (--- ... ---)"]);
+  const emPtBR = (problemas) => problemas.map((pr) => renderText(getMessages("pt-BR"), pr));
+  assert.deepEqual(emPtBR(checkSkill("x", "sem frontmatter")), ["x: sem frontmatter YAML (--- ... ---)"]);
 
-  const semName = checkSkill("foo", `---\ndescription: ${desc}\n---\n`);
+  const semName = emPtBR(checkSkill("foo", `---\ndescription: ${desc}\n---\n`));
   assert.ok(semName.some((p) => p.includes("sem `name`")));
 
-  const nomeRuim = checkSkill("foo", `---\nname: Foo Bar\ndescription: ${desc}\n---\n`);
+  const nomeRuim = emPtBR(checkSkill("foo", `---\nname: Foo Bar\ndescription: ${desc}\n---\n`));
   assert.ok(nomeRuim.some((p) => p.includes("kebab-case")));
   assert.ok(nomeRuim.some((p) => p.includes("difere do nome da pasta")));
 
-  const descCurta = checkSkill("foo", "---\nname: foo\ndescription: curta\n---\n");
+  const descCurta = emPtBR(checkSkill("foo", "---\nname: foo\ndescription: curta\n---\n"));
   assert.ok(descCurta.some((p) => p.includes("curta demais")));
 
-  const longo = checkSkill("foo", `---\nname: foo\ndescription: ${desc}\n---\n${"\n".repeat(501)}`);
+  const longo = emPtBR(checkSkill("foo", `---\nname: foo\ndescription: ${desc}\n---\n${"\n".repeat(501)}`));
   assert.ok(longo.some((p) => p.includes("linhas")));
 
   assert.deepEqual(checkSkill("foo", `---\nname: foo\ndescription: ${desc}\n---\n`), []);
@@ -708,7 +710,7 @@ test("CLI: install e update restauram o conjunto travado no lockfile (registry H
     }, null, 2) + "\n", "utf8");
     await assert.rejects(
       run(["install", "--engine", "claude-code", "--arch", "hexagonal", "--project-id", "x", "-y", adulterado]),
-      /does not match mgr-skills.lock/,
+      /não confere com mgr-skills.lock/,
     );
     assert.ok(!existsSync(path.join(adulterado, ".claude/skills/junit-clean")), "checksum divergente não escreve o plugin");
   } finally {
@@ -2220,7 +2222,7 @@ test("mgr agents: diz o valor E a origem de cada um, por motor", () => {
   const { stdout, status } = rodarAgents(repoComConfig({}), []);
   assert.equal(status, 0);
   for (const intent of catalog.INTENTS) assert.match(stdout, new RegExp(`^${intent}\\s`, "m"));
-  assert.match(stdout, /esforço=high \(default\)/, "o esforço herdado sai como default");
+  assert.match(stdout, /esforço=high \(padrão\)/, "o esforço herdado sai como padrão, no idioma configurado");
   assert.match(stdout, /esforço=não suportado por este motor/, "o copilot não tem effort");
   assert.ok(!stdout.includes("modelo=opus"), "nenhum motor recebe identificador publicado");
 });
@@ -2229,7 +2231,7 @@ test("mgr agents: o que o autor escreveu sai como configurado", () => {
   const repo = repoComConfig({ agents: { execution: { model: { "claude-code": "sonnet" } } } });
   const { stdout } = rodarAgents(repo, ["execution"]);
   assert.match(stdout, /modelo=sonnet \(configurado\)/);
-  assert.match(stdout, /esforço=low \(default\)/, "o que não foi escrito não vira escolha dele");
+  assert.match(stdout, /esforço=low \(padrão\)/, "o que não foi escrito não vira escolha dele");
   assert.ok(!stdout.includes("drafting"), "pedindo uma intenção, só ela sai");
 });
 
@@ -2613,7 +2615,7 @@ test("mgr agents set: esforço fora da escala reprova, e o config fica intocado"
   const repo = repoComMotores(["claude-code"]);
   const { stderr, status } = rodarAgents(repo, ["set", "review", "--effort", "extremo"]);
   assert.notEqual(status, 0);
-  assert.match(stderr, /invalid agents\.review\.effort: "extremo"/);
+  assert.match(stderr, /agents\.review\.effort inválido: "extremo"/);
   assert.equal(Object.hasOwn(configDe(repo), "agents"), false);
 });
 
@@ -3179,7 +3181,7 @@ test("mgr doctor declara que ausencia de achado nao e atestado", () => {
 test("mgr doctor separa remediacao de ausencia de correcao", () => {
   comDoctor((repo) => {
     const { stdout } = rodarDoctor([], repo);
-    assert.match(stdout, /sem correcao automatica/, "a orfa nao tem, e a razao esta no ADR da fatia");
+    assert.match(stdout, /sem correção automática/, "a orfa nao tem, e a razao esta no ADR da fatia");
     assert.match(stdout, /resolva com: mgr update/, "a instalacao velha tem, e e o comando que ja existe");
   });
 });
@@ -3283,4 +3285,350 @@ test("catalog.skillClass: LANGUAGE e mapa de arrays, e a consulta achata antes d
   assert.ok(todas.length > 0);
   for (const nome of todas) assert.equal(catalog.skillClass(nome), catalog.CLASS_LANGUAGE);
   assert.equal(catalog.skillClass("java"), catalog.CLASS_UNCLASSIFIED);
+});
+
+const MANIFESTO_RELATIVO = ".mgr-core/manifest.json";
+const caminhoDoManifestoPlantado = (repo) => path.join(repo, ".mgr-core", "manifest.json");
+const manifestoPlantado = (repo) => JSON.parse(readFileSync(caminhoDoManifestoPlantado(repo), "utf8"));
+const gravarManifestoPlantado = (repo, conteudo) => writeFileSync(
+  caminhoDoManifestoPlantado(repo), typeof conteudo === "string" ? conteudo : JSON.stringify(conteudo, null, 2));
+
+const executarDoctor = (repo, args = []) => {
+  const bin = fileURLToPath(new URL("../bin/mgr.js", import.meta.url));
+  const resultado = spawnSync("node", [bin, "doctor", ...args, repo], ptBR(repo));
+  return { status: resultado.status, out: `${resultado.stdout}`, err: `${resultado.stderr}` };
+};
+
+const FORMAS_COMUNS = [["objeto", {}], ["string", "x"], ["numero", 7], ["booleano", true]];
+const formasLetaisDoManifesto = () => [
+  ...["skills", "skillsDirs", "engines", "agents"]
+    .flatMap((campo) => FORMAS_COMUNS.map(([forma, valor]) => ({ rotulo: `${campo} ${forma}`, campo, valor }))),
+  { rotulo: "skillsDirs com elemento numerico", campo: "skillsDirs", valor: [1] },
+  { rotulo: "agents com elemento numerico", campo: "agents", valor: [1] },
+  { rotulo: "scope null", campo: "scope", valor: null },
+  { rotulo: "scope ausente", campo: "scope", valor: undefined },
+  { rotulo: "scope bogus", campo: "scope", valor: "bogus" },
+  { rotulo: "scope numero", campo: "scope", valor: 7 },
+  { rotulo: "scope booleano", campo: "scope", valor: true },
+  { rotulo: "scope objeto", campo: "scope", valor: {} },
+];
+const RAIZES_NAO_OBJETO = [["string", "\"x\""], ["numero", "7"], ["array", "[1,2]"], ["null", "null"]];
+const VAZAMENTOS_DE_EXCECAO = [/is not a function/, /The "path" argument/, /TypeError/, /\.(map|filter|some|flatMap|forEach)\b/,
+  /at .*\.js:\d+/, /manifest\.(skills|skillsDirs|engines|agents)\b/];
+
+test("shouldExitTwoWithoutLeakingExceptionsForEveryLethalManifestShape", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const base = manifestoPlantado(repo);
+    for (const { rotulo, campo, valor } of formasLetaisDoManifesto()) {
+      gravarManifestoPlantado(repo, { ...base, [campo]: valor });
+      for (const args of [[], ["--json"]]) {
+        const { status, out, err } = executarDoctor(repo, args);
+        assert.equal(status, 2, `${rotulo} ${args}: manifesto fora de forma deve sair 2 para o consumidor automatico distinguir de defeito`);
+        for (const vazamento of VAZAMENTOS_DE_EXCECAO) {
+          assert.doesNotMatch(`${out}${err}`, vazamento, `${rotulo} ${args}: excecao crua ou nome interno na saida e o defeito que a fatia fecha`);
+        }
+      }
+    }
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("shouldPrintParseableInvalidManifestJsonForEveryLethalManifestShape", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const base = manifestoPlantado(repo);
+    for (const { rotulo, campo, valor } of formasLetaisDoManifesto()) {
+      gravarManifestoPlantado(repo, { ...base, [campo]: valor });
+      const { status, out } = executarDoctor(repo, ["--json"]);
+      assert.equal(status, 2, `${rotulo}: exit 2 tambem com --json`);
+      const payload = JSON.parse(out);
+      assert.equal(payload.outcome, "invalid-manifest", `${rotulo}: o outcome novo e o que o consumidor le`);
+      assert.equal(payload.blocks, true, `${rotulo}: manifesto invalido bloqueia`);
+      assert.equal(payload.checks, 0, `${rotulo}: nenhuma verificacao rodou, e o zero declara isso`);
+      assert.deepEqual(payload.findings, [], `${rotulo}: sem diagnostico nao ha achado`);
+      assert.ok(payload.manifest.problems.length >= 1, `${rotulo}: ao menos um problema nomeia o que esta fora de forma`);
+      assert.equal(payload.manifest.file, MANIFESTO_RELATIVO);
+      assert.equal(payload.manifest.state, "read", `${rotulo}: o arquivo e JSON valido, so a forma esta errada`);
+      assert.equal(payload.manifest.fix, null, `${rotulo}: nenhum comando conserta, e o json diz isso`);
+      assert.equal(payload.manifest.prova, "sem-remediacao", `${rotulo}: a ausencia de remediacao e declarada, nao omitida`);
+    }
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("shouldTreatCorruptedAndEmptyManifestAsUnreadableAndNotAsMissingInstall", () => {
+  const repo = instalacaoLimpa();
+  const vazio = diretorioTemporario();
+  const pt = getMessages("pt-BR");
+  try {
+    for (const [rotulo, conteudo] of [["corrompido", "{ nao e json"], ["vazio", ""]]) {
+      gravarManifestoPlantado(repo, conteudo);
+      const humano = executarDoctor(repo);
+      assert.equal(humano.status, 2, `${rotulo}: arquivo ilegivel nao e ausencia de instalacao`);
+      assert.ok(!humano.out.includes(pt.doctorSemInstalacao), `${rotulo}: dizer que nao ha instalacao mascara o defeito`);
+      assert.ok(humano.out.includes(pt.doctorManifestoIlegivel(MANIFESTO_RELATIVO)), `${rotulo}: o cabecalho de ilegivel nomeia o arquivo`);
+      const json = executarDoctor(repo, ["--json"]);
+      assert.equal(json.status, 2);
+      assert.equal(JSON.parse(json.out).manifest.state, "unreadable", `${rotulo}: o estado distingue ilegivel de fora de forma`);
+    }
+    gravarManifestoPlantado(repo, "null");
+    const nulo = executarDoctor(repo, ["--json"]);
+    assert.equal(nulo.status, 2, "raiz null e JSON valido, mas nao e manifesto");
+    assert.equal(JSON.parse(nulo.out).manifest.state, "read", "null parseia: o estado e de leitura, o problema e de raiz");
+    const semManifesto = executarDoctor(vazio);
+    assert.equal(semManifesto.status, 0, "sem manifesto continua nao sendo defeito");
+    assert.ok(semManifesto.out.includes(pt.doctorSemInstalacao), "a frase de sempre segue para quem realmente nao tem instalacao");
+  } finally {
+    descartar(repo);
+    descartar(vazio);
+  }
+});
+
+test("shouldReportRootProblemWhenManifestIsValidJsonButNotAnObject", () => {
+  const repo = instalacaoLimpa();
+  const pt = getMessages("pt-BR");
+  try {
+    for (const [forma, conteudo] of RAIZES_NAO_OBJETO) {
+      gravarManifestoPlantado(repo, conteudo);
+      const json = executarDoctor(repo, ["--json"]);
+      assert.equal(json.status, 2, `${forma}: exit 2`);
+      const payload = JSON.parse(json.out);
+      assert.equal(payload.blocks, true, `${forma}: blocks false faria o consumidor tratar manifesto quebrado como saudavel`);
+      assert.equal(payload.outcome, "invalid-manifest");
+      assert.equal(payload.manifest.problems[0].kind, "root", `${forma}: o problema e da raiz`);
+      assert.ok(!json.out.includes(pt.doctorSemInstalacao), `${forma}: nao e ausencia de instalacao`);
+      const humano = executarDoctor(repo);
+      assert.equal(humano.status, 2);
+      assert.ok(humano.out.includes(pt.manifestProblemRoot("manifest.json", payload.manifest.problems[0].found)),
+        `${forma}: a linha de problema diz o tipo encontrado`);
+    }
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("shouldDeclareNoAutomaticRemediationAndNameNoCommandForInvalidManifest", () => {
+  const repo = instalacaoLimpa();
+  const pt = getMessages("pt-BR");
+  try {
+    const base = manifestoPlantado(repo);
+    for (const conteudo of [{ ...base, skillsDirs: 7 }, "{ nao e json"]) {
+      gravarManifestoPlantado(repo, conteudo);
+      const { status, out } = executarDoctor(repo);
+      assert.equal(status, 2);
+      assert.ok(out.includes(pt.doctorSemRemediacaoAutomatica), "sem remediacao e dito, nao omitido");
+      assert.doesNotMatch(out, /mgr (update|install|init|doctor)|resolva com:|doctor --fix/,
+        "nomear um comando de conserto seria prometer o que o MGR nao faz");
+    }
+    gravarManifestoPlantado(repo, { ...base, skillsDirs: 7 });
+    const { out } = executarDoctor(repo);
+    assert.ok(out.includes(pt.manifestProblemStringList("skillsDirs", "number")), "a linha de problema vem da tabela do idioma");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("shouldPrintInvalidManifestBlockInEnglishWithFoundTypeBetweenBackticks", () => {
+  const repo = instalacaoLimpa();
+  const en = getMessages("en");
+  const pt = getMessages("pt-BR");
+  try {
+    const base = manifestoPlantado(repo);
+    const permitidos = Object.keys(engineDescriptor(base.engines[0]).skillsDir).join(" | ");
+    gravarManifestoPlantado(repo, { ...base, skillsDirs: "x", scope: "bogus" });
+    const { status, out } = executarDoctor(repo, ["--user-language", "en"]);
+    assert.equal(status, 2);
+    assert.ok(out.includes(en.doctorManifestoInvalido(MANIFESTO_RELATIVO)), "o cabecalho sai em ingles com a flag");
+    assert.ok(out.includes(en.manifestProblemStringList("skillsDirs", "string")), "a linha de problema sai em ingles");
+    assert.ok(out.includes(en.manifestProblemScope(permitidos, "string")), "o escopo invalido nomeia os valores permitidos em ingles");
+    assert.ok(out.includes(en.doctorSemRemediacaoAutomatica), "a ausencia de remediacao sai em ingles");
+    assert.ok(out.includes("found `string`"), "o tipo encontrado vai entre crases, para nao se confundir com a prosa");
+    assert.ok(!out.includes(pt.doctorManifestoInvalido(MANIFESTO_RELATIVO)), "nenhum pedaco pt-BR no bloco em ingles");
+    assert.ok(!out.includes(pt.doctorSemRemediacaoAutomatica));
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("shouldKeepAuditedOutcomeForSkillsAndEnginesFormsThatAreNotLethal", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const base = manifestoPlantado(repo);
+    const casos = [
+      ["skills com caminho relativo", { skills: ["../x"] }],
+      ["skills valida e caminho relativo", { skills: ["arch-layered", "../x"] }],
+      ["skills com numero", { skills: [1] }],
+      ["engines com numero", { engines: [1] }],
+      ["agentsDirs objeto", { agentsDirs: {} }],
+      ["agentsDirs string", { agentsDirs: "x" }],
+      ["agentsDirs numero", { agentsDirs: 7 }],
+    ];
+    for (const [rotulo, alteracao] of casos) {
+      gravarManifestoPlantado(repo, { ...base, ...alteracao });
+      const { status, out, err } = executarDoctor(repo, ["--json"]);
+      assert.ok([0, 1].includes(status), `${rotulo}: defeito sai 1 e limpo sai 0, nunca 2: ${status} ${err}`);
+      const payload = JSON.parse(out);
+      assert.equal(payload.outcome, "audited", `${rotulo}: o doctor sobrevive e audita, degradar para invalido perderia o relatorio`);
+      assert.ok(Array.isArray(payload.findings), `${rotulo}: a lista de achados esta presente`);
+      assert.equal(payload.checks, CHECKS.length, `${rotulo}: todas as verificacoes rodaram`);
+    }
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("shouldDistinguishTheFourStatesByExitCodeBeforeAndAfter", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const original = readFileSync(caminhoDoManifestoPlantado(repo), "utf8");
+    const skills = path.join(repo, ".claude", "skills");
+    assert.equal(executarDoctor(repo).status, 0, "instalacao recem-feita: nada bloqueia");
+
+    mkdirSync(path.join(skills, "arch-hexagonal"), { recursive: true });
+    writeFileSync(path.join(skills, "arch-hexagonal", "SKILL.md"),
+      readFileSync(path.join(skills, "arch-layered", "SKILL.md"), "utf8"));
+    assert.equal(executarDoctor(repo).status, 1, "orfa em disco e defeito");
+
+    gravarManifestoPlantado(repo, "{ nao e json");
+    assert.equal(executarDoctor(repo).status, 2, "manifesto invalido sai 2, distinto do defeito");
+    assert.equal(executarDoctor(repo, ["--json"]).status, 2);
+
+    writeFileSync(caminhoDoManifestoPlantado(repo), original);
+    assert.equal(executarDoctor(repo).status, 1, "restaurado o manifesto, o defeito volta a sair 1");
+
+    rmSync(path.join(skills, "arch-hexagonal"), { recursive: true, force: true });
+    assert.equal(executarDoctor(repo).status, 0, "removida a orfa, volta a nada bloquear");
+
+    rmSync(caminhoDoManifestoPlantado(repo));
+    assert.equal(executarDoctor(repo).status, 0, "sem manifesto nao ha instalacao, e isso nao e defeito");
+    assert.equal(executarDoctor(repo, ["--json"]).status, 0);
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("shouldPrintNoInstallEnvelopeAsJsonWithExitZeroAndKeepTheSentenceWithoutJson", () => {
+  const vazio = diretorioTemporario();
+  try {
+    const json = executarDoctor(vazio, ["--json"]);
+    assert.equal(json.status, 0, "sem instalacao nao e defeito");
+    assert.deepEqual(JSON.parse(json.out),
+      { schemaVersion: 1, blocks: false, outcome: "no-install", findings: [], checks: 0 },
+      "o consumidor automatico precisa de JSON tambem aqui, nao de prosa");
+    assert.equal(JSON.stringify(JSON.parse(json.out)),
+      "{\"schemaVersion\":1,\"blocks\":false,\"outcome\":\"no-install\",\"findings\":[],\"checks\":0}",
+      "a ordem das chaves e parte do contrato publicado");
+    const humano = executarDoctor(vazio);
+    assert.equal(humano.status, 0);
+    assert.ok(humano.out.includes(getMessages("pt-BR").doctorSemInstalacao), "sem --json a frase de sempre nao muda");
+  } finally {
+    descartar(vazio);
+  }
+});
+
+test("shouldKeepAuditedWithExitZeroForLegacyManifestWithoutEnginesAndScope", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const { model, version } = manifestoPlantado(repo);
+    gravarManifestoPlantado(repo, { model, version });
+    const json = executarDoctor(repo, ["--json"]);
+    assert.equal(json.status, 0, "manifesto legado e tolerado: exigir campo novo quebraria quem ainda nao atualizou");
+    const payload = JSON.parse(json.out);
+    assert.equal(payload.outcome, "audited", "legado nao e invalido");
+    assert.notEqual(payload.outcome, "invalid-manifest");
+    assert.equal(executarDoctor(repo).status, 0);
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("shouldLeaveInvalidManifestByteForByteUntouchedWithAndWithoutJson", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const base = manifestoPlantado(repo);
+    const conteudos = ["{ nao e json", "", "\"x\"", "null", JSON.stringify({ ...base, skillsDirs: "x" }, null, 2)];
+    for (const conteudo of conteudos) {
+      gravarManifestoPlantado(repo, conteudo);
+      for (const args of [[], ["--json"]]) {
+        executarDoctor(repo, args);
+        assert.equal(readFileSync(caminhoDoManifestoPlantado(repo), "utf8"), conteudo,
+          `${JSON.stringify(conteudo)} ${args}: o doctor e diagnostico, escrever no manifesto invalido esconderia o defeito`);
+      }
+    }
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("shouldKeepDoctorGlueFreeOfManifestRulesCodesAndMessageKeys", () => {
+  const cola = readFileSync(fileURLToPath(new URL("../src/commands/doctor.js", import.meta.url)), "utf8");
+  assert.ok(!cola.includes("manifest.js"), "a cola nao importa a regra de forma: o diagnostico a entrega pronta");
+  for (const codigo of ["array-of-strings", "array-of-skill-names", "non-string-element", "scope-key", "safe-skill-name"]) {
+    assert.ok(!cola.includes(codigo), `\`${codigo}\` na cola seria logica de forma que a secao 2.1 manda ficar no nucleo`);
+  }
+  assert.ok(!cola.includes("manifestProblem"), "chave de problema de manifesto na cola seria texto decidido fora do nucleo");
+  assert.doesNotMatch(cola, /["'`]finding[A-Z]\w*["'`]/, "chave de mensagem de achado na cola seria texto decidido fora do nucleo");
+});
+
+const BLOCO_ABERTO = "<!-- >>> mgr-method (managed block: mgr uninstall removes it) >>> -->\nlinha solta\n";
+const SEM_FECHO_EN = /mgr-method block has no closing line in /;
+const SEM_FECHO_PT = /bloco do mgr-method sem linha de fechamento em /;
+
+const comBlocoSemFecho = (corpo) => {
+  const repo = instalacaoLimpa();
+  try {
+    writeFileSync(path.join(repo, "CLAUDE.md"), BLOCO_ABERTO, "utf8");
+    corpo(repo);
+  } finally {
+    descartar(repo);
+  }
+};
+
+const rodarMgrEm = (repo, args) =>
+  spawnSync(process.execPath, [fileURLToPath(new URL("../bin/mgr.js", import.meta.url)), ...args], {
+    encoding: "utf8", cwd: repo, env: { ...process.env, LC_ALL: "C" },
+  });
+
+const rodarRuntimeEm = (repo, args) =>
+  spawnSync(process.execPath, [path.join(repo, ".mgr-core", "runtime", "bin", "mgr-runtime.js"), ...args], {
+    encoding: "utf8", cwd: repo, env: { ...process.env, LC_ALL: "C" },
+  });
+
+test("shouldShowLocalizedUsageErrorInPtBrFromMainCatchOfMgr", () => {
+  comBlocoSemFecho((repo) => {
+    const resultado = rodarMgrEm(repo, ["uninstall", "--user-language", "pt-BR", "-y", repo]);
+    assert.equal(resultado.status, 1);
+    assert.match(resultado.stderr, SEM_FECHO_PT);
+    assert.doesNotMatch(resultado.stderr, SEM_FECHO_EN, "o message em ingles nao pode vazar no idioma pt-BR");
+  });
+});
+
+test("shouldShowLocalizedUsageErrorInEnFromMainCatchOfMgr", () => {
+  comBlocoSemFecho((repo) => {
+    const resultado = rodarMgrEm(repo, ["uninstall", "--user-language", "en", "-y", repo]);
+    assert.equal(resultado.status, 1);
+    assert.match(resultado.stderr, SEM_FECHO_EN);
+    assert.doesNotMatch(resultado.stderr, SEM_FECHO_PT);
+  });
+});
+
+test("shouldShowLocalizedUsageErrorInPtBrFromInstructionsCatch", () => {
+  comBlocoSemFecho((repo) => {
+    const resultado = rodarRuntimeEm(repo, ["instructions", "--user-language", "pt-BR"]);
+    assert.equal(resultado.status, 1);
+    assert.match(resultado.stderr, SEM_FECHO_PT);
+    assert.doesNotMatch(resultado.stderr, SEM_FECHO_EN, "o message em ingles nao pode vazar no idioma pt-BR");
+  });
+});
+
+test("shouldShowLocalizedUsageErrorInEnFromInstructionsCatch", () => {
+  comBlocoSemFecho((repo) => {
+    const resultado = rodarRuntimeEm(repo, ["instructions", "--user-language", "en"]);
+    assert.equal(resultado.status, 1);
+    assert.match(resultado.stderr, SEM_FECHO_EN);
+    assert.doesNotMatch(resultado.stderr, SEM_FECHO_PT);
+  });
 });

@@ -18,6 +18,7 @@ import path from "node:path";
 import { get as engineDescriptor, ids as engineIds } from "./engines/index.js";
 import { RUNTIME_ENTRY } from "./catalog.js";
 import { runtimeDir } from "./installer.js";
+import { UsageError } from "./errors.js";
 
 export const runtimeCommand = (scope, root) => `node "${path.join(runtimeDir(scope, root), ...RUNTIME_ENTRY)}"`;
 
@@ -35,14 +36,26 @@ export const hookCommand = (command, engine) => `${command} detect --hook ${engi
 // ramificar por nome de motor — a lista vem de `engineIds()`, e não há literal de motor aqui.
 const descritor = (engine) => {
   if (!engineIds().includes(engine)) {
-    throw new Error(`invalid engine for session hook: ${engine} (expected ${engineIds().join(" | ")})`);
+    throw new UsageError("invalidSessionHookEngine", [engine, engineIds()]);
   }
   return engineDescriptor(engine);
 };
 
 const isOurs = (entry) => JSON.stringify(entry).includes(HOOK_MARKER);
 
-const readSettings = (file) => (existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {});
+const readSettings = (file) => {
+  if (!existsSync(file)) return {};
+  let settings;
+  try {
+    settings = JSON.parse(readFileSync(file, "utf8"));
+  } catch (cause) {
+    throw new UsageError("fileNotJson", [file], { cause });
+  }
+  if (settings === null || typeof settings !== "object" || Array.isArray(settings)) {
+    throw new UsageError("fileNotObject", [file]);
+  }
+  return settings;
+};
 
 const writeSettings = (file, settings) => {
   mkdirSync(path.dirname(file), { recursive: true });

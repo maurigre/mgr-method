@@ -272,6 +272,11 @@ NEVER embed architecture rules here — delegate:
    (the whole section — every numbered item under it, whatever the prefix) and the
    project's **language profile** (canon idioms + lint — e.g. Java: `JQ-`/`JS-`), with
    citable IDs. Applied by `spec-execute` while coding and by the `code-analyzer` in review.
+   **After writing the guide**, run `node {{MGR_RUNTIME}} sdd-check --json`: a
+   `guide-behind-source` warning lists citable IDs of the sources that the guide still lacks — add
+   them before finishing, and never finish with that warning present. On a guide that already
+   exists, keep the rules that exist only in it (project rules the sources do not have) and record
+   them in `_self-assessment.md`.
 5. Record the choice in an ADR (via `adr-create`, invoked mode).
 6. Add a short **pointer section** stating that the WEIGHT of an anchored finding follows the project's
    origin, and that the norm itself is **L6.6** of the execution laws. Point to the law; never copy

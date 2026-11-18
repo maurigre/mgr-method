@@ -9,11 +9,12 @@ import * as bundle from "./bundle.js";
 import * as catalog from "./catalog.js";
 import * as engines from "./engines/index.js";
 import { injectFrontmatter } from "./adapters.js";
+import { InvariantError, UsageError } from "./errors.js";
 
 export function buildSkill(name, destSkills) {
   const src = path.join(bundle.skillsDir(), name);
   if (!existsSync(path.join(src, "SKILL.md"))) {
-    throw new Error(`skill inexistente ou sem SKILL.md: ${name}`);
+    throw new UsageError("skillNotFoundOrNoSkillMd", [name]);
   }
   const dest = path.join(destSkills, name);
   rmSync(dest, { recursive: true, force: true });
@@ -155,7 +156,7 @@ const IGNORE_FILE_VALUES = ["write", "omit"];
 
 function exigirIgnoreFile(origem, ignoreFile) {
   if (!IGNORE_FILE_VALUES.includes(ignoreFile)) {
-    throw new Error(`${origem}: ignoreFile must be "write" or "omit", got ${String(ignoreFile)}`);
+    throw new InvariantError("ignoreFileInvalid", [origem, ignoreFile]);
   }
 }
 
@@ -219,7 +220,7 @@ export function runtimeIgnoreEffect({ state, ignoreFile }) {
 export function runtimeIgnoreFileFor(value) {
   if (value === "unversioned") return "write";
   if (value === "versioned") return "omit";
-  throw new Error(`runtimeIgnoreFileFor: value must be ${catalog.RUNTIME_VERSIONING.join(" | ")}, got ${String(value)}`);
+  throw new UsageError("runtimeIgnoreFileValueInvalid", [catalog.RUNTIME_VERSIONING, value]);
 }
 
 // Marcador de posse no arquivo do agente. `.claude/agents/` e `.github/agents/` são diretórios
@@ -242,7 +243,7 @@ const isSkillMarkLine = (line) => line.startsWith(`# ${SKILL_MARKER}:`);
 // Põe a marca como última linha do frontmatter. Idempotente: marca antiga sai antes da nova.
 export function markSkill(text, name) {
   const match = text.match(SKILL_FRONTMATTER);
-  if (!match) throw new Error(`SKILL.md of ${name} has no YAML frontmatter to mark`);
+  if (!match) throw new UsageError("skillMdNoFrontmatterToMark", [name]);
   const eol = match[0].includes("\r\n") ? "\r\n" : "\n";
   const linhas = match[1] === undefined ? [] : match[1].split(/\r?\n/).filter((line) => !isSkillMarkLine(line));
   linhas.push(`# ${SKILL_MARKER}: ${name}`);
@@ -339,7 +340,7 @@ function frontmatterField(bloco, nome) {
 // do arquivo não há o que trocar: erro explícito, e não texto devolvido como se tivesse sido aplicado.
 export function replaceAgentFrontmatter(text, frontmatter) {
   const atual = text.match(FRONTMATTER_BLOCK);
-  if (!atual) throw new Error("agent file has no frontmatter to replace");
+  if (!atual) throw new UsageError("agentFileNoFrontmatter");
   const changes = [];
   for (const nome of ["model", "effort"]) {
     const before = frontmatterField(atual[0], nome);

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 import {
   addRegistry, CONFIGURED, configPath, DEFAULT, fetchIndex, ORIGINS, RESERVED_AGENT_KEYS, listRegistries, readAgents, readConfig, readDetectionMode,
@@ -8,6 +9,10 @@ import {
 } from "../src/registry.js";
 import { AGENTS, INTENTS, REVIEW_GATE } from "../src/catalog.js";
 import { fileURLToPath } from "node:url";
+import { UsageError } from "../src/errors.js";
+import { readPersonal } from "../src/registry.js";
+import { getMessages } from "../src/messages.js";
+import { renderText } from "../src/ui-text.js";
 import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const diretorioTemporario = () => tempDir("mgr-registry-");
@@ -58,7 +63,7 @@ test("config de registries: add/list/remove persistem em .mgr-core/config.json",
 test("addRegistry valida nome, url e duplicidade", () => {
   const core = diretorioTemporario();
   assert.throws(() => addRegistry(core, { name: "MGR", url: INDEX_URL }), /invalid registry name/);
-  assert.throws(() => addRegistry(core, { name: "mgr", url: "ftp://x" }), /invalid registry url/);
+  assert.throws(() => addRegistry(core, { name: "mgr", url: "ftp://x" }), /invalid registry URL/);
   addRegistry(core, { name: "mgr", url: INDEX_URL });
   assert.throws(() => addRegistry(core, { name: "mgr", url: INDEX_URL }), /registry already configured/);
 });
@@ -91,10 +96,30 @@ test("validateIndex reprova cada regra com mensagem específica", () => {
     [{ ...valid, categories: { language: [{ ...entry, files: [] }] } }, /"files" must be a non-empty array/],
   ];
   for (const [invalid, expected] of cases) {
-    const problems = validateIndex(invalid);
+    const problems = validateIndex(invalid).map((problem) => renderText(getMessages("en"), problem));
     assert.ok(problems.some((problem) => expected.test(problem)), `${expected} em ${JSON.stringify(problems)}`);
   }
-  assert.deepEqual(validateIndex(null), ["index must be a JSON object"]);
+  assert.deepEqual(validateIndex(null).map((problem) => renderText(getMessages("en"), problem)), ["index must be a JSON object"]);
+});
+
+test("should name the file and keep the parser text out of the message when config.local.json is not JSON", () => {
+  const core = diretorioTemporario();
+  writeFileSync(path.join(core, "config.local.json"), "{ not json");
+  const error = (() => { try { readPersonal(core); } catch (erro) { return erro; } return null; })();
+  assert.ok(error instanceof UsageError);
+  assert.match(error.message, /config\.local\.json/);
+  assert.doesNotMatch(error.message, /Unexpected token|Expected property name/);
+  assert.ok(error.cause instanceof SyntaxError);
+});
+
+test("should throw a UsageError with cause and without the platform text when the index fetch rejects", async () => {
+  const original = new TypeError("fetch failed");
+  const error = await fetchIndex(INDEX_URL, { fetchImpl: async () => { throw original; } })
+    .then(() => null, (e) => e);
+  assert.ok(error instanceof UsageError);
+  assert.match(error.message, new RegExp(INDEX_URL.replace(/\./g, "\\.")));
+  assert.doesNotMatch(error.message, /fetch failed/);
+  assert.equal(error.cause, original);
 });
 
 test("fetchIndex devolve o index válido e falha com erro específico", async () => {

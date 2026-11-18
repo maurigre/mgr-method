@@ -1,13 +1,16 @@
 // Cola do comando `instructions` do runtime. Humble Object: só parse, formatação e exit code; o IO entra
 // por `io` e a raiz por `root`. A decisão, o arquivo e o estado do bloco vivem em src/instructions.js.
+import { renderError } from "../errors.js";
 import { installedEngines, instructionStates, planInstructions, writeInstructionBlock } from "../instructions.js";
+
+const COMANDO = "instructions";
 
 // `instructions [--json]` — só lê. `instructions write [--engine <id>]` — grava com o consentimento
 // já dado pela skill (o comando nunca pergunta).
 export function instructions({ root, flags = {}, positional = [], io, M }) {
   if (positional.length === 0) return instructionsList({ root, flags, io, M });
   if (positional[0] === "write") return instructionsWrite({ root, flags, io, M });
-  io.err(M.errorPrefix(M.unknownCommand(`instructions ${positional[0]}`)));
+  io.err(M.errorPrefix(M.unknownCommand(`${COMANDO} ${positional[0]}`)));
   return 1;
 }
 
@@ -19,7 +22,7 @@ function instructionsList({ root, flags, io, M }) {
     constitution = planInstructions(root, { engines }).constitution;
     files = instructionStates(root, engines);
   } catch (erro) {
-    io.err(M.errorPrefix(erro.message));
+    io.err(M.errorPrefix(renderError(M, erro)));
     return 1;
   }
   if (flags.json) {
@@ -36,7 +39,7 @@ function instructionsWrite({ root, flags, io, M }) {
   try {
     constitution = planInstructions(root, { engines: instalados }).constitution;
   } catch (erro) {
-    io.err(M.errorPrefix(erro.message));
+    io.err(M.errorPrefix(renderError(M, erro)));
     return 1;
   }
   // Recusas ANTES de qualquer escrita: nada é gravado quando uma delas dispara.

@@ -10,6 +10,7 @@
 //   `done_when`; inferir formato os reprovaria 35 vezes.
 import { create } from "./findings.js";
 import { STATUS_VALUES, priorityLevel } from "./plan-parser.js";
+import { text } from "./ui-text.js";
 
 const MAX_FILES = 3;
 
@@ -30,9 +31,9 @@ export function checkConsistency(parsed, file) {
       if (ids.has(dependencia)) continue;
       findings.push(create({
         code: "PLAN-1", severity: gravidade, file, line: task.line, task: task.id,
-        message: `depends_on aponta para \`${dependencia}\`, que não é uma task deste plano`,
-        remediation: `Corrija o id, ou crie a task \`${dependencia}\`. Ids válidos aqui: ${[...ids].join(", ")}.`,
-        example: "- **depends_on:** [P0.1, P0.2]",
+        message: text("artifactPlan1Message", dependencia),
+        remediation: text("artifactPlan1Remediation", dependencia, [...ids]),
+        example: text("artifactPlan1Example"),
       }));
     }
 
@@ -40,9 +41,9 @@ export function checkConsistency(parsed, file) {
     if (task.files.length > MAX_FILES) {
       findings.push(create({
         code: "PLAN-3", severity: gravidade, file, line: task.line, task: task.id,
-        message: `task com ${task.files.length} arquivos; o teto é ${MAX_FILES}`,
-        remediation: "Quebre a task antes de executar — a granularidade existe para o trabalho caber num passo revisável.",
-        example: "- **files:** [src/a.js, test/a.test.js]",
+        message: text("artifactPlan3Message", task.files.length, MAX_FILES),
+        remediation: text("artifactPlan3Remediation"),
+        example: text("artifactPlan3Example"),
       }));
     }
   }
@@ -70,9 +71,9 @@ function detectCycles(parsed, file, gravidade) {
       const task = porId.get(id);
       findings.push(create({
         code: "PLAN-2", severity: gravidade, file, line: task ? task.line : null, task: id,
-        message: `ciclo no DAG de dependências: ${ciclo.join(" → ")}`,
-        remediation: "Quebre o ciclo: uma das tasks tem de poder começar sem a outra, ou as duas são a mesma task.",
-        example: "- **depends_on:** [P0.1]   (e P0.1 não depende desta)",
+        message: text("artifactPlan2Message", ciclo),
+        remediation: text("artifactPlan2Remediation"),
+        example: text("artifactPlan2Example"),
       }));
       return;
     }
@@ -94,9 +95,9 @@ export function checkPresence(parsed, file) {
   if (!parsed.format.declared) {
     findings.push(create({
       code: "PLAN-0", severity: "warning", file,
-      message: "plano sem o marcador de formato: as regras de presença não foram aplicadas",
-      remediation: "Acrescente o marcador na primeira linha para que o plano seja verificado por inteiro. Sem ele, só as regras de consistência valem — nenhum plano existente é reprovado por isto.",
-      example: "<!-- mgr-plan-format: 1 -->",
+      message: text("artifactPlan0Message"),
+      remediation: text("artifactPlan0Remediation"),
+      example: text("artifactPlan0Example"),
     }));
     return findings;
   }
@@ -108,9 +109,9 @@ export function checkPresence(parsed, file) {
     if (!faltando.length) continue;
     findings.push(create({
       code: "PLAN-4", severity: "error", file, line: task.line, task: task.id,
-      message: `task sem ${faltando.join(" e sem ")}`,
-      remediation: "`artifact` declara o trilho — nome, forma, assinatura e QUANTIDADE exatos (L4.3). `done_when` declara o critério observável que fecha a task.",
-      example: "- **artifact:** 1 módulo com parse(text)\n- **done_when:** o teste passa e falharia sem a regra",
+      message: text("artifactPlan4Message", faltando),
+      remediation: text("artifactPlan4Remediation"),
+      example: text("artifactPlan4Example"),
     }));
   }
 
@@ -133,9 +134,9 @@ function checkStatus(parsed, file) {
     .filter((task) => !STATUS_VALUES.includes(task.status))
     .map((task) => create({
       code: "PLAN-6", severity: "warning", file, line: task.line, task: task.id,
-      message: `status \`${task.status}\` não é \`${STATUS_VALUES.join("` nem `")}\``,
-      remediation: `O vocabulário é fechado e em inglês, como as chaves: só \`${STATUS_VALUES.join("` e `")}\`. Valor fora dele nunca conta como concluído, então a task será oferecida de novo.`,
-      example: "- **status:** done",
+      message: text("artifactPlan6Message", task.status, STATUS_VALUES),
+      remediation: text("artifactPlan6Remediation", STATUS_VALUES),
+      example: text("artifactPlan6Example"),
     }));
 }
 
@@ -151,9 +152,9 @@ function checkPriorityOrder(parsed, file) {
       if (!(priorityLevel(task.id) < priorityLevel(dependencia))) continue;
       findings.push(create({
         code: "PLAN-5", severity: "warning", file, line: task.line, task: task.id,
-        message: `task de prioridade P${priorityLevel(task.id)} depende de \`${dependencia}\`, que é P${priorityLevel(dependencia)}`,
-        remediation: "Confira se a prioridade está certa: bloqueante que espera complementar normalmente indica que uma das duas está no bloco errado.",
-        example: "- **depends_on:** [P0.1]   (numa task P1.x)",
+        message: text("artifactPlan5Message", priorityLevel(task.id), dependencia, priorityLevel(dependencia)),
+        remediation: text("artifactPlan5Remediation"),
+        example: text("artifactPlan5Example"),
       }));
     }
   }

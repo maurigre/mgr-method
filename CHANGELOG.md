@@ -15,6 +15,24 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Modo scaffold (geração de estrutura de código no greenfield).
 
 ### Adicionado
+- **O `doctor` não morre mais em manifesto malformado (ADR-0032).** Manifesto ilegível, que não é
+  objeto, ou fora de forma em `skills`, `skillsDirs`, `engines`, `agents` ou `scope` devolve o
+  `outcome` `invalid-manifest` (com `manifest.problems` por código, sem remediação automática) e sai
+  **2**. Com `--json`, repositório sem instalação devolve o envelope `no-install`. O runtime do projeto
+  se comporta igual.
+- **Todo texto mostrado vem da camada de idioma (ADR-0033).** Erros, invariantes, `validate`,
+  `spec validate`, o hand-off gerado, o aviso do `dist` e o launcher `bin/mgr.cjs` saem no idioma
+  configurado, e o texto da plataforma (`fetch failed`, `JSON.parse`) deixa de aparecer na frase
+  mostrada. Arquivo JSON corrompido do usuário (`manifest.json`, `config.json`, `config.local.json`,
+  lockfile, `settings` dos hooks, manifesto de plugin baixado) e nome de skill inválido no lockfile
+  saem como erro de uso que nomeia o arquivo, e não como defeito do MGR. As perguntas interativas
+  também: o "Sim / Não" das confirmações, o aviso de seleção vazia, o fim do spinner e a dica de teclas
+  das perguntas de escolha, que saíam em inglês fixo da biblioteca de prompts, vêm da camada de idioma.
+  JSON válido cuja raiz não é objeto em `config.json`, `config.local.json`, lockfile e `settings` dos
+  hooks também sai como erro de uso que nomeia o arquivo. O `manifest.json` segue o ADR-0032: o
+  `doctor` o diagnostica (`invalid-manifest`), e o install e o update ficam para a fatia seguinte.
+  Uma regra de lint (`QUAL-8`) e `test/output-language.test.js` reprovam a recaída nos caminhos que
+  cobrem; os caminhos sem guarda estão declarados no ADR-0033.
 - **O esforço de cada intenção se escolhe no `install`, como o modelo (ADR-0030).** Com terminal e um
   motor que aceita esforço por agente (hoje, o claude-code), o `install` pergunta o esforço uma vez por
   intenção, com **pular** pré-selecionado, que mantém o padrão do catálogo e não grava nada. Esforço já
@@ -45,7 +63,32 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - A mecânica do bloco foi extraída para `src/managed-block.js`, que o `.gitignore` também usa, sem
   mudança no contrato dele.
 
+- **O `sdd-check` avisa quando o guia de review ficou para trás das fontes do método (DT-26).** O
+  aviso `guide-behind-source` lista os IDs citáveis das famílias universais (`QUAL`, `SEC`, `PERF`,
+  `DES`, `NAM`, `PAT`, `MNT`, `TST`, `LOG`, `DOC`, `MUT` e o `INV` da arquitetura) que as fontes
+  instaladas trazem e o `docs/sdd/09-review-rules.md` não; `guide-source-unavailable` diz o que não
+  pôde ser usado. É aviso: o exit code não muda. O `spec-create` mostra o aviso no início de toda
+  feature e oferece atualizar o guia; o `spec-init` não termina com ele. Medido neste repositório: o
+  guia local não tinha 16 regras (`SEC-1..7`, `PERF-1..5`, `MNT-1..3`, `PAT-1`) desde os PRs #36 a #39.
+  A comparação é por ID: um guia que só menciona o ID, sem trazer a regra, passa.
+
 ### Alterado
+- **Quebra de contrato do `--json` (ADR-0032, ADR-0033), `schemaVersion` continua 1:** os valores de
+  texto passam de pt-BR a **inglês canônico, iguais em qualquer idioma**: `expected` e `found` do
+  achado do `doctor`; `message`, `remediation` e `example` do `spec validate`; o `warning` do
+  `spec status`. Quem comparava esses textos em pt-BR precisa trocar a comparação. A saída humana
+  segue o idioma configurado.
+- **Quebra de contrato:** o `doctor` ganha o exit **2** (não conseguiu diagnosticar). Antes, manifesto
+  fora de forma derrubava o comando com exceção e exit 1, manifesto corrompido, vazio ou `null` era
+  lido como "sem instalação" com exit 0, e manifesto que não é objeto saía `blocks: false` com exit 0.
+  Quem tratava só `0` e `1` deve tratar o `2`.
+- **Mensagens revisadas.** O texto em pt-BR que saía sem acento (achados do `doctor`, "sem correção
+  automática") ou com termo em inglês ("finding", "gitignored", "commitados") foi corrigido; as linhas
+  `esperado:`/`encontrado:`/`resolva com:` do `doctor` alinham as colunas; e o inglês ganhou grafia
+  única ("canceled", "URL").
+- Em pt-BR, o `mgr agents` e o plano do `install` deixam de mostrar o termo inglês `default`: a
+  origem do valor sai `(padrão)` e o aviso de modelo herdado diz "por padrão". No `install`
+  interativo, a linha de skills já existentes passa a vir da camada de idioma.
 - **Quebra de contrato (ADR-0030):** `install` com `--effort` ou `--model` soltos, que saía 0 e ignorava a
   flag sem aviso, passa a sair 1 antes de escrever qualquer coisa, mostrando a forma por intenção. O mesmo
   vale para nível de esforço fora da lista e para flag de esforço sem motor escolhido que aceite esforço.

@@ -11,6 +11,7 @@ import { create } from "./findings.js";
 import {
   checkPointer, POINTER_ESCAPES_ROOT, POINTER_NO_FILE, POINTER_NO_LINE,
 } from "./provenance.js";
+import { text } from "./ui-text.js";
 
 // PROV-1 — parece etiqueta e não é nenhuma das oito da L1.10.
 //
@@ -19,23 +20,22 @@ import {
 function etiquetaMalformada(label, file) {
   return create({
     code: "PROV-1", severity: "error", file, line: label.line,
-    message: `etiqueta malformada: \`${label.raw}\` usa o token \`${label.token}\` e não tem a forma que a L1.10 declara`,
-    remediation: "Escreva a etiqueta numa das oito formas da L1.10. `prd` pede a seção, `adr` pede o número, e `code` pede caminho e linha — linha começa em 1.",
-    example: "A decisão veio daqui [prd:UC-1]\nO separador de bloco cercado vive aqui [code:src/markdown.js:1]",
+    message: text("artifactProv1Message", label.raw, label.token),
+    remediation: text("artifactProv1Remediation"),
+    example: text("artifactProv1Example"),
   });
 }
 
 // PROV-2 — o ponteiro não resolve em disco. Arquivo que sumiu e linha além do fim são o MESMO
 // defeito para quem lê: a âncora aponta para o nada, e a remediação é reancorar.
 function ponteiroQuebrado(label, resultado, file) {
-  const alvo = `\`${resultado.path}\``;
   return create({
     code: "PROV-2", severity: "error", file, line: label.line,
     message: resultado.outcome === POINTER_NO_LINE
-      ? `ponteiro quebrado: ${alvo} tem ${resultado.lines} linha(s), e a etiqueta aponta para a ${resultado.line}`
-      : `ponteiro quebrado: ${alvo} não existe em disco, a partir da raiz do repositório`,
-    remediation: "Reancore a etiqueta no lugar onde o fato vive hoje. O caminho é relativo à raiz do repositório, e arquivo gitignored conta como existente.",
-    example: "O separador de bloco cercado vive aqui [code:src/markdown.js:1]",
+      ? text("artifactProv2NoLineMessage", resultado.path, resultado.lines, resultado.line)
+      : text("artifactProv2NoFileMessage", resultado.path),
+    remediation: text("artifactProv2Remediation"),
+    example: text("artifactProvPointerExample"),
   });
 }
 
@@ -45,9 +45,9 @@ function ponteiroQuebrado(label, resultado, file) {
 function ponteiroForaDaRaiz(label, resultado, file) {
   return create({
     code: "PROV-4", severity: "error", file, line: label.line,
-    message: `ponteiro para fora do projeto: \`${resultado.path}\` escapa da raiz do repositório`,
-    remediation: "Ancore num caminho de dentro do projeto, relativo à raiz. Um fato que vive fora do repositório não é conferível por quem clonar.",
-    example: "O separador de bloco cercado vive aqui [code:src/markdown.js:1]",
+    message: text("artifactProv4Message", resultado.path),
+    remediation: text("artifactProv4Remediation"),
+    example: text("artifactProvPointerExample"),
   });
 }
 
@@ -60,9 +60,9 @@ function ponteiroForaDaRaiz(label, resultado, file) {
 function pendenciaEmFeatureFechada(mark, file) {
   return create({
     code: "PROV-3", severity: "warning", file, line: mark.line,
-    message: `marca de pendência \`${mark.form}\` ao fim da linha, numa feature com \`06-completion.md\`. Este aviso detecta a POSIÇÃO da marca; ele não distingue uma pendência real de uma citação que por acaso termina a linha`,
-    remediation: "Se é pendência, resolva-a ou diga por que ela sobrevive ao fechamento. Se é citação, mova a marca para o meio da frase — fora de posição de marca ela não é apontada.",
-    example: "O prazo de migração do acervo ficou fora desta fatia, e a marca [A DEFINIR] citada aqui não é apontada.",
+    message: text("artifactProv3Message", mark.form),
+    remediation: text("artifactProv3Remediation"),
+    example: text("artifactProv3Example"),
   });
 }
 

@@ -2,6 +2,7 @@
 // raiz por `root`. O diagnóstico vive em src/doctor.js.
 import * as bundle from "../bundle.js";
 import * as diag from "../doctor.js";
+import { renderText } from "../ui-text.js";
 
 // O runtime copiado para o projeto (`bin/mgr-runtime.js`) chama `doctor(base)` sem dizer se o pacote
 // esta junto, e a copia nao leva `skills/` nem `shared/`. Em vez de editar o runtime, o comando
@@ -30,23 +31,40 @@ export function doctor({ root, flags, io, M }) {
   const repo = root;
   const resultado = diag.diagnose(repo, temFontes() ? {} : { sources: null });
 
+  const bloqueia = diag.blocks(resultado);
+  const envelope = () => JSON.stringify({ schemaVersion: 1, blocks: bloqueia, ...resultado }, null, 2);
+
   if (resultado.outcome === diag.NO_INSTALL) {
-    io.out(M.doctorSemInstalacao);
+    io.out(flags.json ? envelope() : M.doctorSemInstalacao);
     return 0;
   }
 
-  const bloqueia = diag.hasDefect(resultado);
+  if (resultado.outcome === diag.INVALID_MANIFEST) {
+    if (flags.json) {
+      io.out(envelope());
+      return 2;
+    }
+    const { file, state, problems } = resultado.manifest;
+    const cabecalho = state === "unreadable" ? M.doctorManifestoIlegivel(file) : M.doctorManifestoInvalido(file);
+    io.out(io.style.red(cabecalho));
+    for (const problema of problems) io.out(renderText(M, diag.problemText(problema)));
+    io.out(M.doctorSemRemediacaoAutomatica);
+    return 2;
+  }
+
   if (flags.json) {
-    io.out(JSON.stringify({ schemaVersion: 1, blocks: bloqueia, ...resultado }, null, 2));
+    io.out(envelope());
     return bloqueia ? 1 : 0;
   }
 
   const cor = { [diag.DEFECT]: io.style.red, [diag.WARNING]: io.style.yellow, [diag.UNAVAILABLE]: io.style.dim };
-  for (const { check, severity, file, expected, found, fix } of resultado.findings) {
+  for (const achado of resultado.findings) {
+    const { check, severity, file, fix } = achado;
+    const descritores = diag.findingText(achado);
     io.out(cor[severity](`${severity === diag.DEFECT ? "x" : "!"} ${check} — ${file}`));
-    io.out(`    esperado:  ${expected}`);
-    io.out(`    encontrado: ${found}`);
-    io.out(fix ? `    resolva com: ${comCicloDeVida(fix, io.lifecycle)}` : io.style.dim("    sem correcao automatica"));
+    io.out(M.doctorEsperado(renderText(M, descritores.expected)));
+    io.out(M.doctorEncontrado(renderText(M, descritores.found)));
+    io.out(fix ? M.doctorResolvaCom(comCicloDeVida(fix, io.lifecycle)) : io.style.dim(M.doctorSemCorrecao));
   }
 
   io.out("");

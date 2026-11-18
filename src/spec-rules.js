@@ -9,14 +9,15 @@
 // critérios cobrem a spec, se o critério é bom. As três são julgamento, não parsing — e a segunda
 // é o eixo Spec do `code-analyzer`, que a L6.1 proíbe fundir com outro eixo.
 import { create } from "./findings.js";
+import { text } from "./ui-text.js";
 
 export function check(parsed, file) {
   if (!parsed.format.declared) {
     return [create({
       code: "SPEC-0", severity: "warning", file,
-      message: "spec sem o marcador de formato: as regras de critério não foram aplicadas",
-      remediation: "Acrescente o marcador na primeira linha para que a spec seja verificada. Sem ele, nenhuma regra roda — nenhuma spec existente é reprovada por isto.",
-      example: "<!-- mgr-spec-format: 1 -->",
+      message: text("artifactSpec0Message"),
+      remediation: text("artifactSpec0Remediation"),
+      example: text("artifactSpec0Example"),
     })];
   }
 
@@ -26,9 +27,9 @@ export function check(parsed, file) {
   if (!parsed.criteria.length) {
     findings.push(create({
       code: "SPEC-1", severity: "error", file,
-      message: "spec declara o formato mas não tem nenhum critério de aceitação",
-      remediation: "Uma spec sem critério de aceitação não tem como ser verificada no fechamento. Declare ao menos um, com identidade.",
-      example: "- [ ] **CA-1:** o comando sai com código 1 quando o plano tem dependência inexistente",
+      message: text("artifactSpec1Message"),
+      remediation: text("artifactSpec1Remediation"),
+      example: text("artifactSpec1Example"),
     }));
     return findings;
   }
@@ -45,10 +46,10 @@ export function check(parsed, file) {
       findings.push(create({
         code: "SPEC-2", severity: "error", file, line: criterio.line, task: criterio.id,
         message: anterior.id === criterio.id
-          ? `identidade duplicada: \`${criterio.id}\` já aparece na linha ${anterior.line}`
-          : `identidade duplicada: \`${criterio.id}\` colide com \`${anterior.id}\`, na linha ${anterior.line}`,
-        remediation: "A identidade existe para ser citada numa reprovação. Duas com o mesmo número tornam a citação ambígua — renumere.",
-        example: "- [ ] **CA-2:** <o próximo número livre>",
+          ? text("artifactSpec2DuplicateMessage", criterio.id, anterior.line)
+          : text("artifactSpec2CollisionMessage", criterio.id, anterior.id, anterior.line),
+        remediation: text("artifactSpec2Remediation"),
+        example: text("artifactSpec2Example"),
       }));
     } else {
       vistos.set(criterio.number, { id: criterio.id, line: criterio.line });
@@ -60,9 +61,9 @@ export function check(parsed, file) {
     if (criterio.body) continue;
     findings.push(create({
       code: "SPEC-3", severity: "error", file, line: criterio.line, task: criterio.id,
-      message: `critério \`${criterio.id}\` está vazio`,
-      remediation: "Enuncie o que se observa quando o critério é cumprido. Identidade sem enunciado não verifica nada.",
-      example: "- [ ] **CA-1:** os 10 planos existentes produzem zero erros",
+      message: text("artifactSpec3Message", criterio.id),
+      remediation: text("artifactSpec3Remediation"),
+      example: text("artifactSpec3Example"),
     }));
   }
 
@@ -84,8 +85,8 @@ function checkNumbering(parsed, file) {
 
   return [create({
     code: "SPEC-4", severity: "warning", file, line: parsed.criteria[0].line,
-    message: `buraco na numeração dos critérios: falta ${faltando.join(", ")}`,
-    remediation: "Confira se um critério foi removido sem renumerar. Se o buraco é intencional, ignore este aviso.",
-    example: "- [ ] **CA-1:** …\n- [ ] **CA-2:** …\n- [ ] **CA-3:** …",
+    message: text("artifactSpec4Message", faltando),
+    remediation: text("artifactSpec4Remediation"),
+    example: text("artifactSpec4Example"),
   })];
 }

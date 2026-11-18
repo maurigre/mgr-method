@@ -52,7 +52,8 @@ export async function detectHook({ cwd, root, flags, positional, proc }) {
 // diagnóstico, que é o que a LOG-1/LOG-2 pedem, sem virar ruído no contexto de ninguém.
 // Log não tem o que fazer com o resultado: se o canal de diagnóstico caiu, não há onde relatar isso
 // — e relatar pelo próprio canal seria recursivo.
-const logHook = (proc, linha) => { proc.escreverSync(proc.stderrFd, `[mgr] ${linha}\n`); };
+const ETIQUETA_DO_LOG = "[mgr]";
+const logHook = (proc, linha) => { proc.escreverSync(proc.stderrFd, `${ETIQUETA_DO_LOG} ${linha}\n`); };
 
 // O aviso ao usuário sai pelo envelope que o motor declara, ou não sai. Motor sem canal não recebe
 // texto solto: imprimir no que a plataforma descarta faria a fatia parecer avisar.
@@ -131,7 +132,7 @@ export async function precompactHook({ root, flags, M, proc }) {
     logHook(proc, M.precompactLogGitAfter(changedFiles.length));
 
     // Gravar vem antes de decidir (RN-1): se só der para fazer uma coisa, é pôr o estado em disco.
-    const montado = assemble(repo, { engine, trigger, changedFiles });
+    const montado = assemble(repo, { engine, trigger, changedFiles, tabela: M });
     const gravou = montado.outcome === ASSEMBLED;
     if (gravou) {
       logHook(proc, M.precompactLogWriteBefore(montado.destination));

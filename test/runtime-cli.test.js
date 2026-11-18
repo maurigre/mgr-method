@@ -55,7 +55,7 @@ test("should report SDD OK on sdd-check", comProjeto((dir) => {
 }));
 
 test("should print the runtime version line on version", () => {
-  const versionRun = run("version");
+  const versionRun = run("version", "--user-language", "pt-BR");
   assert.equal(versionRun.status, 0);
   assert.match(versionRun.stdout, /\(runtime do projeto\)/);
 });

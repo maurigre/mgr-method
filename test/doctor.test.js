@@ -11,6 +11,7 @@ import {
   orphanSkills, runtimeBodies, runtimeLocations, sharedCheckAvailability, staleInstall, unresolvedTokens,
   AUDITED, NO_INSTALL, diagnose, hasDefect, CHECKS,
 } from "../src/doctor.js";
+import { INVALID_MANIFEST, blocks } from "../src/doctor.js";
 import path from "node:path";
 import { Buffer } from "node:buffer";
 import { diff } from "../src/lockfile.js";
@@ -20,6 +21,14 @@ import * as engineDescriptors from "../src/engines/index.js";
 import { ORFA, VERSAO_VELHA, descartar, instalacaoComDefeitos, instalacaoComDefeitosDoisMotores, instalacaoLimpa, instalacaoLimpaDoisMotores, apagarFonteCompartilhada, plantarTokenEmShared, alterarCorpoEmShared, apagarRuntime, alterarVersaoDoRuntime, alterarUmByteDoRuntime, removerArquivoDoRuntime } from "./fixtures/instalacao.js";
 import { layoutPorMotor } from "./fixtures/layout-por-motor.js";
 import { tempDir } from "../scripts/lib/tmp.mjs";
+import { manifestShapeProblems, readManifest, MANIFEST_NAME } from "../src/manifest.js";
+import { problemText } from "../src/manifest.js";
+import { UsageError } from "../src/errors.js";
+import { getMessages } from "../src/messages.js";
+import { renderText } from "../src/ui-text.js";
+import { InvariantError } from "../src/errors.js";
+import { findingText } from "../src/doctor.js";
+import { runtimeVersioningCheck } from "../src/doctor.js";
 
 const DIR = ".claude/skills";
 
@@ -28,7 +37,7 @@ test("skill em disco fora do manifesto e achado", () => {
   assert.equal(achados.length, 1);
   assert.equal(achados[0].check, "orphan-skill");
   assert.equal(achados[0].file, `${DIR}/junit-clean`);
-  assert.equal(achados[0].found, "em disco e fora do manifesto");
+  assert.equal(achados[0].found, "on disk and not in the manifest");
 });
 
 test("skill declarada em disco NAO e achado", () => {
@@ -124,8 +133,8 @@ test("fonte compartilhada declarada e ausente produz um achado", () => {
   assert.equal(achados[0].check, "missing-shared");
   assert.equal(achados[0].severity, DEFECT);
   assert.match(achados[0].file, /_shared.*execution-laws/, "o arquivo e a fonte juntada com o diretorio");
-  assert.equal(achados[0].expected, "presente, porque o conjunto instalado a exige");
-  assert.equal(achados[0].found, "ausente");
+  assert.equal(achados[0].expected, "present, because the installed set requires it");
+  assert.equal(achados[0].found, "absent");
   assert.equal(achados[0].fix, FIX_UPDATE, "medido: o update restaura fonte compartilhada apagada");
 });
 
@@ -204,7 +213,7 @@ test("linha SEM token que difere e achado", () => {
   const instalado = "---\nname: x\n---\nlinha trocada";
   const [achado] = divergentBody({ name: "x", source: fonte, installed: instalado, file: "f", condicao: SKILL_DECLARADA });
   assert.equal(achado.check, "divergent-body");
-  assert.match(achado.found, /a partir da linha 1/, "a primeira linha do corpo e a linha 1, nao a 2");
+  assert.match(achado.found, /differs from line 1 of the body onward/, "a primeira linha do corpo e a linha 1, nao a 2");
 });
 
 test("instalacao recem-feita NAO tem corpo divergente em skill nenhuma", () => {
@@ -230,7 +239,7 @@ test("a divergencia reporta a PRIMEIRA linha, nao a contagem", () => {
   const fonte = "---\nn: x\n---\nigual\nSECAO NOVA\nresto";
   const instalado = "---\nn: x\n---\nigual\nresto";
   const [achado] = divergentBody({ name: "x", source: fonte, installed: instalado, file: "f", condicao: SKILL_DECLARADA });
-  assert.match(achado.found, /a partir da linha 2/,
+  assert.match(achado.found, /differs from line 2 of the body onward/,
     "um bloco inserido desloca o indice: contar daria numero inflado, medido em 116 para uma secao a mais");
 });
 
@@ -287,7 +296,7 @@ test("manifesto atras do pacote e AVISO, nao defeito", () => {
   const [achado] = staleInstall({ manifestVersion: "0.7.0-beta.9", packageVersion: "0.7.0-beta.10", file: "m" });
   assert.equal(achado.severity, WARNING,
     "e o estado normal de quem nao rodou update; trata-lo como defeito deixaria o comando vermelho em quase todo projeto");
-  assert.equal(achado.expected, "a versao do pacote, 0.7.0-beta.10");
+  assert.equal(achado.expected, "the package version, 0.7.0-beta.10");
   assert.equal(achado.found, "0.7.0-beta.9");
 });
 
@@ -301,7 +310,7 @@ const hookCom = (comando) => ({ SessionStart: [{ hooks: [{ type: "command", comm
 test("hook apontando para binario inexistente e achado", () => {
   const [achado] = brokenHooks({ hooks: hookCom('node "/nao/existe/mgr.js"'), exists: () => false, file: "s" });
   assert.equal(achado.check, "broken-hook");
-  assert.match(achado.found, /\/nao\/existe\/mgr\.js nao existe/);
+  assert.match(achado.found, /\/nao\/existe\/mgr\.js does not exist/);
   assert.match(achado.expected, /SessionStart/, "sem o evento, quem le nao sabe qual hook conferir");
 });
 
@@ -341,7 +350,7 @@ test("sem lockfile a verificacao se declara INDISPONIVEL, e isso nao e defeito",
 
 test("plugin travado e nao instalado e achado, e reusa o diff do lockfile", () => {
   const [achado] = lockfileDrift({ lockfile: { skills: { "@mgr/junit-clean": {} } }, installedPlugins: [], diff, file: "m" });
-  assert.equal(achado.found, "ausente");
+  assert.equal(achado.found, "absent");
   assert.equal(achado.fix, FIX_RESTORE);
   assert.match(achado.expected, /@mgr\/junit-clean/);
 });
@@ -353,7 +362,7 @@ test("plugin em disco e fora do lockfile NAO vira achado aqui", () => {
 
 test("plugin travado e ausente do disco e defeito, e nomeia o comando", () => {
   const [achado] = lockfileDrift({ lockfile: { skills: { "@mgr/x": {} } }, installedPlugins: [], diff, file: "m" });
-  assert.equal(achado.found, "ausente");
+  assert.equal(achado.found, "absent");
   assert.equal(achado.fix, FIX_RESTORE);
 });
 
@@ -661,7 +670,7 @@ test("package.json da copia ausente acusa runtime-version como aviso de versao i
     const achados = doRuntime(diagnose(repo).findings);
     assert.equal(achados.length, 1);
     assert.equal(achados[0].severity, WARNING);
-    assert.equal(achados[0].found, "versao ilegivel ou ausente");
+    assert.equal(achados[0].found, "version unreadable or absent");
   } finally {
     descartar(repo);
   }
@@ -705,7 +714,7 @@ test("arquivo do runtime ausente com o diretorio presente acusa divergent-body c
     removerArquivoDoRuntime(repo, "src/detector.js");
     const achados = corposDoRuntime(diagnose(repo).findings);
     assert.equal(achados.length, 1);
-    assert.equal(achados[0].found, "ausente");
+    assert.equal(achados[0].found, "absent");
   } finally {
     descartar(repo);
   }
@@ -797,7 +806,7 @@ test("a frase do divergent-body serve para skill e para fonte compartilhada", ()
     file: ".claude/skills/spec-create/SKILL.md",
     condicao: SKILL_DECLARADA,
   })[0];
-  assert.equal(daSkill.expected, "o corpo de spec-create como o pacote o traz",
+  assert.equal(daSkill.expected, "the body of spec-create as the package ships it",
     "a frase perdeu a palavra skill de proposito: ela tambem descreve fonte compartilhada, que nao e skill");
 
   const daFonte = divergentBody({
@@ -865,13 +874,20 @@ test("token sobrando com skill declarada tem remediacao", () => {
   assert.equal(achado.fix, FIX_UPDATE, "mgr update alcanca skill declarada");
 });
 
+const erroDeCondicaoInvalida = (condicao) => (erro) => {
+  const validas = [SKILL_DECLARADA, SKILL_ORFA, SKILL_ORFA_SEM_PROVA, FONTE_COMPARTILHADA].join(", ");
+  assert.ok(erro instanceof InvariantError);
+  assert.equal(erro.message, `invalid condition: "${condicao}"; valid values are ${validas}`);
+  return true;
+};
+
 test("condicao ausente lanca em divergentBody", () => {
   assert.throws(
     () => divergentBody({
       name: "x", source: "a\nb", installed: "a\nc", file: "f",
       condicao: undefined,
     }),
-    /condicao invalida/,
+    erroDeCondicaoInvalida(undefined),
     "deve lancar erro especifico mencionando os tres valores validos"
   );
 });
@@ -882,7 +898,7 @@ test("condicao desconhecida lanca em divergentBody", () => {
       name: "x", source: "a\nb", installed: "a\nc", file: "f",
       condicao: "nao-existe",
     }),
-    /condicao invalida/,
+    erroDeCondicaoInvalida("nao-existe"),
     "deve lancar erro especifico mencionando os tres valores validos"
   );
 });
@@ -893,7 +909,7 @@ test("condicao ausente lanca em unresolvedTokens", () => {
       installed: "x {{MGR_FIXTURE}}", file: "f",
       condicao: undefined,
     }),
-    /condicao invalida/,
+    erroDeCondicaoInvalida(undefined),
     "deve lancar erro especifico mencionando os tres valores validos"
   );
 });
@@ -904,7 +920,7 @@ test("condicao desconhecida lanca em unresolvedTokens", () => {
       installed: "x {{MGR_FIXTURE}}", file: "f",
       condicao: "nao-existe",
     }),
-    /condicao invalida/,
+    erroDeCondicaoInvalida("nao-existe"),
     "deve lancar erro especifico mencionando os tres valores validos"
   );
 });
@@ -1164,7 +1180,7 @@ test("com sources null divergent-body e stale-install saem UM achado unavailable
       const achados = findings.filter((f) => f.check === check);
       assert.equal(achados.length, 1, `${check}: um achado so, nao um por skill, motor ou arquivo`);
       assert.equal(achados[0].severity, UNAVAILABLE);
-      assert.match(achados[0].found, /fontes do pacote nao estao no projeto/);
+      assert.match(achados[0].found, /the package sources are not in the project/);
       assert.equal(achados[0].fix, `npx mgr-method@${versao} doctor`);
       assert.ok(achados[0].fix.startsWith("npx mgr-method@"));
     }
@@ -1230,4 +1246,437 @@ test("órfã sem divergência e sem token não produz achado algum", () => {
     "a condição não fabrica achado: ela só decide a remediação de um achado que já existia");
   assert.deepEqual(unresolvedTokens({ installed: "nada aqui", file: "f", condicao: SKILL_ORFA }), [],
     "o mesmo para token: sem token sobrando não há achado, seja a skill órfã ou declarada");
+});
+
+const CAMPOS_ARRAY = ["skills", "skillsDirs", "engines", "agents"];
+const FORMAS_NAO_ARRAY = [["objeto", { a: 1 }, "object"], ["string", "x", "string"], ["numero", 7, "number"], ["booleano", true, "boolean"]];
+const comScope = (scope) => ({ engines: ["claude-code"], scope });
+const VAZAMENTO = /is not a function|\.map|\.filter|undefined/;
+
+test("should report a container problem when a skills, skillsDirs, engines or agents field is not an array", () => {
+  for (const field of CAMPOS_ARRAY) {
+    for (const [nome, valor, tipo] of FORMAS_NAO_ARRAY) {
+      const problems = manifestShapeProblems({ [field]: valor });
+      assert.equal(problems.length, 1, `${field} como ${nome} deve gerar exatamente um problema, senao o doctor repete o mesmo defeito`);
+      assert.equal(problems[0].field, field);
+      assert.equal(problems[0].kind, "container", `${field} como ${nome} quebra o consumidor que espera array`);
+      assert.equal(problems[0].found, tipo, "o doctor deve dizer o tipo encontrado, nao o erro interno");
+    }
+  }
+});
+
+test("should not report a problem when a skills, skillsDirs, engines or agents field is absent or null", () => {
+  assert.deepEqual(manifestShapeProblems({}), [], "campo ausente e estado legado tolerado pelos chamadores");
+  for (const field of CAMPOS_ARRAY) {
+    assert.deepEqual(manifestShapeProblems({ [field]: null }), [], `${field} null e estado legado tolerado pelos chamadores`);
+  }
+});
+
+test("should report a scope problem for every non-valid scope form when a recognized engine is declared", () => {
+  for (const [nome, valor, tipo] of [...FORMAS_NAO_ARRAY, ["null", null, "null"], ["ausente", undefined, "absent"]]) {
+    const problems = manifestShapeProblems(comScope(valor));
+    assert.equal(problems.length, 1, `scope ${nome} com motor reconhecido deve gerar um problema`);
+    assert.equal(problems[0].field, "scope");
+    assert.equal(problems[0].found, tipo, `scope ${nome} deve ser descrito pelo tipo`);
+  }
+});
+
+test("should report found as absent when scope is missing and a recognized engine is declared", () => {
+  const [problem] = manifestShapeProblems({ engines: ["claude-code"] });
+  assert.equal(problem.found, "absent","ausente e a causa mais comum e deve ser nomeada como tal");
+});
+
+test("should accept every scope key declared by the claude-code descriptor", () => {
+  for (const chave of Object.keys(engineDescriptors.get("claude-code").skillsDir)) {
+    assert.deepEqual(manifestShapeProblems(comScope(chave)), [], `scope ${chave} e valido para o motor`);
+  }
+});
+
+test("should report a scope problem when scope is a bogus string with a recognized engine", () => {
+  const problems = manifestShapeProblems(comScope("bogus"));
+  assert.equal(problems.length, 1);
+  assert.equal(problems[0].field, "scope");
+  assert.equal(problems[0].found, "string");
+});
+
+test("should not report a scope problem when no recognized engine is declared", () => {
+  assert.deepEqual(manifestShapeProblems({ scope: "bogus" }), [], "sem engines o escopo nao tem descritor contra o que ser conferido");
+  assert.deepEqual(manifestShapeProblems({ engines: ["custom"], scope: "bogus" }), [], "motor desconhecido nao tem descritor para julgar scope");
+});
+
+test("should list in scope allowed every key of the claude-code skillsDir descriptor", () => {
+  const [problem] = manifestShapeProblems(comScope("bogus"));
+  assert.equal(problem.expected, "scope-key");
+  assert.deepEqual(problem.allowed, Object.keys(engineDescriptors.get("claude-code").skillsDir), "allowed deve oferecer as chaves do descritor, senao o doctor nao diz como corrigir");
+});
+
+test("should report element problems for non-string items in skillsDirs and agents", () => {
+  for (const field of ["skillsDirs", "agents"]) {
+    const problems = manifestShapeProblems({ [field]: [1] });
+    assert.equal(problems.length, 1);
+    assert.equal(problems[0].field, field);
+    assert.equal(problems[0].kind, "element", `${field} com numero dentro quebra quem concatena caminho`);
+  }
+});
+
+test("should report element for a non-string skill and unsafe-name for a traversal skill name", () => {
+  assert.equal(manifestShapeProblems({ skills: [1] })[0].kind, "element");
+  const [inseguro] = manifestShapeProblems({ skills: ["../x"] });
+  assert.equal(inseguro.kind, "unsafe-name", "o nome da skill e concatenado a um diretorio removido com rmSync recursivo");
+});
+
+test("should not report an element problem for engines with a non-string item", () => {
+  assert.deepEqual(manifestShapeProblems({ engines: [1] }), [], "engines desconhecido e filtrado pelo descritor, nao e defeito de forma");
+});
+
+test("should report exactly one root problem when the manifest is not an object", () => {
+  for (const raiz of ["x", 7, [1, 2], null]) {
+    const problems = manifestShapeProblems(raiz);
+    assert.equal(problems.length, 1, `raiz ${JSON.stringify(raiz)} deve gerar um unico problema, sem varrer campos de algo que nao e objeto`);
+    assert.equal(problems[0].kind, "root");
+    assert.equal(problems[0].field, "manifest.json");
+  }
+});
+
+test("should report only the engines problem when engines is not an array", () => {
+  const problems = manifestShapeProblems({ engines: 7, scope: "bogus" });
+  assert.deepEqual(problems.map((p) => p.field), ["engines"], "sem array de motores nao ha como julgar scope, e o defeito raiz e engines");
+});
+
+test("should not report a problem for agentsDirs in any form", () => {
+  for (const valor of [{ a: 1 }, "x", 7, true, null, [1]]) {
+    assert.deepEqual(manifestShapeProblems({ agentsDirs: valor }), [], `agentsDirs ${JSON.stringify(valor)} nao e lido por ninguem`);
+  }
+});
+
+test("should never leak variable names or array method names in found", () => {
+  const manifestos = [
+    ...CAMPOS_ARRAY.flatMap((f) => FORMAS_NAO_ARRAY.map(([, v]) => ({ [f]: v }))),
+    { skillsDirs: [1] }, { agents: [1] }, { skills: [1] }, { skills: ["../x"] },
+    ...[...FORMAS_NAO_ARRAY.map(([, v]) => v), null, undefined, "bogus"].map(comScope),
+    "x", 7, [1, 2], null,
+  ];
+  for (const manifesto of manifestos) {
+    for (const problem of manifestShapeProblems(manifesto)) {
+      assert.doesNotMatch(String(problem.found), VAZAMENTO, `found e lido por humanos e nao pode expor internals: ${JSON.stringify(problem)}`);
+    }
+  }
+});
+
+const lancaComManifesto = (conteudo, mensagem) => {
+  const dir = tempDir("mgr-manifest-shape-");
+  try {
+    writeFileSync(path.join(dir, MANIFEST_NAME), JSON.stringify(conteudo));
+    assert.throws(() => readManifest(dir), { message: mensagem });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+test("should throw an invalid skills error from readManifest when skills is not an array", () => {
+  lancaComManifesto({ skills: { a: 1 } }, 'invalid "skills" in manifest.json: {"a":1} (expected an array of skill names)');
+  lancaComManifesto({ skills: "x" }, 'invalid "skills" in manifest.json: "x" (expected an array of skill names)');
+  lancaComManifesto({ skills: null }, 'invalid "skills" in manifest.json: null (expected an array of skill names)');
+});
+
+test("should throw an unsafe skill name error from readManifest for a traversal or non-string skill", () => {
+  lancaComManifesto({ skills: ["../x"] }, 'unsafe skill name in manifest.json: "../x"');
+  lancaComManifesto({ skills: [1] }, "unsafe skill name in manifest.json: 1");
+});
+
+test("should not throw from readManifest for malformed fields other than skills", () => {
+  for (const conteudo of [{ skillsDirs: "x" }, { agents: { a: 1 } }, { engines: 7 }, { engines: ["claude-code"] }]) {
+    const dir = tempDir("mgr-manifest-shape-");
+    try {
+      writeFileSync(path.join(dir, MANIFEST_NAME), JSON.stringify(conteudo));
+      assert.doesNotThrow(() => readManifest(dir), `${JSON.stringify(conteudo)} e problema do doctor, nao motivo para o install abortar`);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+});
+
+const caminhoManifesto = (repo) => path.join(repo, ".mgr-core", MANIFEST_NAME);
+const gravarManifesto = (repo, conteudo) => writeFileSync(caminhoManifesto(repo), conteudo);
+const gravarManifestoJson = (repo, conteudo) => gravarManifesto(repo, JSON.stringify(conteudo));
+
+test("should return invalid-manifest as unreadable with no problems when the manifest is not JSON or is empty", () => {
+  const repo = instalacaoLimpa();
+  try {
+    for (const conteudo of ["{ nao e json", ""]) {
+      gravarManifesto(repo, conteudo);
+      const { outcome, manifest } = diagnose(repo);
+      assert.equal(outcome, INVALID_MANIFEST, `${JSON.stringify(conteudo)} nao parseia e nao pode virar NO_INSTALL nem auditoria`);
+      assert.equal(manifest.state, "unreadable", "arquivo ilegivel precisa ser distinguido de arquivo lido com forma errada");
+      assert.deepEqual(manifest.problems, [], "nao ha campo a apontar quando nada foi lido");
+    }
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("should return invalid-manifest as read with a single root problem when the JSON root is not an object", () => {
+  const repo = instalacaoLimpa();
+  try {
+    for (const conteudo of [null, "x", 7, [1, 2]]) {
+      gravarManifestoJson(repo, conteudo);
+      const { outcome, manifest } = diagnose(repo);
+      assert.equal(outcome, INVALID_MANIFEST, `${JSON.stringify(conteudo)} e JSON valido mas nao e manifesto`);
+      assert.equal(manifest.state, "read", "o arquivo foi lido; o defeito e a forma");
+      assert.equal(manifest.problems.length, 1, "uma raiz errada e um problema so, sem derivados");
+      assert.equal(manifest.problems[0].kind, "root", "a raiz e o que esta errado");
+    }
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("should return invalid-manifest naming the field with no findings and no remediation for each lethal shape", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const instalado = JSON.parse(readFileSync(caminhoManifesto(repo), "utf8"));
+    const casos = [
+      ["skills", { skills: {} }],
+      ["skillsDirs", { skillsDirs: "x" }],
+      ["engines", { engines: 7 }],
+      ["agents", { agents: true }],
+      ["scope", { scope: "bogus" }],
+      ["skillsDirs", { skillsDirs: [1] }],
+      ["agents", { agents: [1] }],
+    ];
+    for (const [campo, alteracao] of casos) {
+      gravarManifestoJson(repo, { ...instalado, ...alteracao });
+      const rotulo = JSON.stringify(alteracao);
+      const comFontes = diagnose(repo);
+      const semFontes = diagnose(repo, { sources: null });
+      assert.equal(comFontes.outcome, INVALID_MANIFEST, `${rotulo} estoura o doctor e tem de ser barrado na porta`);
+      assert.equal(comFontes.checks, 0, "nenhuma verificacao roda sobre manifesto invalido");
+      assert.deepEqual(comFontes.findings, [], "achado sobre manifesto invalido seria ruido");
+      assert.ok(comFontes.manifest.problems.some((problema) => problema.field === campo), `o problema precisa nomear ${campo} para o time achar o que consertar`);
+      assert.equal(comFontes.manifest.fix, null, "nenhum comando conserta um manifesto malformado");
+      assert.equal(comFontes.manifest.prova, SEM_REMEDIACAO, "sem comando de correcao nao ha o que provar");
+      assert.deepEqual(semFontes, comFontes, `${rotulo}: a porta vale com e sem sources null`);
+    }
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("should keep auditing with findings when only skills elements, engines elements or agentsDirs are malformed", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const instalado = JSON.parse(readFileSync(caminhoManifesto(repo), "utf8"));
+    const casos = [
+      { skills: ["../x"] },
+      { skills: ["arch-layered", "../x"] },
+      { skills: [1] },
+      { engines: [1] },
+      { agentsDirs: "x" },
+    ];
+    for (const alteracao of casos) {
+      gravarManifestoJson(repo, { ...instalado, ...alteracao });
+      const resultado = diagnose(repo);
+      const rotulo = JSON.stringify(alteracao);
+      assert.equal(resultado.outcome, AUDITED, `${rotulo} nao e letal: bloquear aqui degradaria o que o doctor ja relata`);
+      assert.ok(resultado.findings.length > 0, `${rotulo} tem de continuar produzindo achados`);
+    }
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("should audit a legacy manifest with only model and version and report no defect", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const { model, version } = JSON.parse(readFileSync(caminhoManifesto(repo), "utf8"));
+    gravarManifestoJson(repo, { model, version });
+    const resultado = diagnose(repo);
+    assert.equal(resultado.outcome, AUDITED, "manifesto legado e instalacao antiga valida, nao invalida");
+    assert.equal(hasDefect(resultado), false, "instalacao antiga nao pode ficar vermelha so por ser antiga");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("should block on an invalid manifest and not on no-install", () => {
+  const invalido = { outcome: INVALID_MANIFEST, findings: [], checks: 0 };
+  const semInstalacao = { outcome: NO_INSTALL, findings: [], checks: 0 };
+  assert.equal(blocks(invalido), true, "manifesto invalido sem achado nao pode passar como saudavel");
+  assert.equal(blocks(semInstalacao), false, "projeto sem o metodo nao e defeito");
+});
+
+test("should make blocks equal to hasDefect for an audited result", () => {
+  const comDefeito = { outcome: AUDITED, findings: [{ severity: DEFECT }], checks: 1 };
+  const semDefeito = { outcome: AUDITED, findings: [{ severity: WARNING }], checks: 1 };
+  assert.equal(blocks(comDefeito), hasDefect(comDefeito), "para auditoria o bloqueio continua sendo o defeito");
+  assert.equal(blocks(comDefeito), true, "defeito bloqueia");
+  assert.equal(blocks(semDefeito), hasDefect(semDefeito), "para auditoria o bloqueio continua sendo o defeito");
+  assert.equal(blocks(semDefeito), false, "aviso nao bloqueia");
+});
+
+test("should keep the closed list of checks at twelve", () => {
+  assert.equal(CHECKS.length, 12, "a lista e FECHADA: mudar o numero exige decidir, nao descobrir depois");
+});
+
+const EXPECTED_FECHADO = ["object", "array-of-skill-names", "array-of-strings", "safe-skill-name", "scope-key"];
+const FOUND_FECHADO = ["object", "string", "number", "boolean", "null", "array", "absent", "non-string-element", "unsafe-name"];
+const MANIFESTOS_COM_PROBLEMA = [
+  "x", null,
+  { skills: {} }, { skillsDirs: "x" }, { engines: 7 }, { agents: true },
+  { skills: [1] }, { skills: ["../x"] }, { skillsDirs: [1] }, { agents: [1] },
+  comScope("bogus"), comScope(undefined), comScope(7),
+];
+const todosOsProblemas = () => MANIFESTOS_COM_PROBLEMA.flatMap((m) => manifestShapeProblems(m));
+
+test("should emit only expected and found codes from the closed vocabulary, with position and allowed in their own kinds", () => {
+  const problems = todosOsProblemas();
+  assert.ok(problems.length >= MANIFESTOS_COM_PROBLEMA.length);
+  for (const problem of problems) {
+    assert.ok(EXPECTED_FECHADO.includes(problem.expected), `expected fora do vocabulario: ${JSON.stringify(problem)}`);
+    assert.ok(FOUND_FECHADO.includes(problem.found), `found fora do vocabulario: ${JSON.stringify(problem)}`);
+    assert.equal("position" in problem, problem.kind === "element" || problem.kind === "unsafe-name", `position fora de lugar: ${JSON.stringify(problem)}`);
+    assert.equal("allowed" in problem, problem.field === "scope", `allowed fora de lugar: ${JSON.stringify(problem)}`);
+  }
+});
+
+test("should make scope allowed equal to the claude-code skillsDir keys", () => {
+  const [problem] = manifestShapeProblems(comScope(7));
+  assert.deepEqual(problem.allowed, Object.keys(engineDescriptors.get("claude-code").skillsDir));
+});
+
+const AMOSTRAS_DE_TEXTO = {
+  manifestProblemRoot: { field: MANIFEST_NAME, kind: "root", expected: "object", found: "string" },
+  manifestProblemSkillsList: { field: "skills", kind: "container", expected: "array-of-skill-names", found: "object" },
+  manifestProblemStringList: { field: "agents", kind: "container", expected: "array-of-strings", found: "boolean" },
+  manifestProblemElement: { field: "agents", kind: "element", expected: "array-of-strings", found: "non-string-element", position: 0 },
+  manifestProblemUnsafeName: { field: "skills", kind: "unsafe-name", expected: "safe-skill-name", found: "unsafe-name", position: 1 },
+  manifestProblemScope: { field: "scope", kind: "container", expected: "scope-key", found: "string", allowed: ["project", "user"] },
+  manifestProblemScopeAbsent: { field: "scope", kind: "container", expected: "scope-key", found: "absent", allowed: ["project", "user"] },
+};
+
+test("should pick one message key per problem combination", () => {
+  for (const [chave, problem] of Object.entries(AMOSTRAS_DE_TEXTO)) {
+    assert.equal(problemText(problem).key, chave);
+  }
+});
+
+test("should render every returned key in en and pt-BR without throwing", () => {
+  for (const problem of Object.values(AMOSTRAS_DE_TEXTO)) {
+    const descritor = problemText(problem);
+    for (const lang of ["en", "pt-BR"]) {
+      const tabela = getMessages(lang);
+      assert.ok(descritor.key in tabela, `${descritor.key} ausente em ${lang}`);
+      assert.doesNotThrow(() => renderText(tabela, descritor));
+      assert.ok(renderText(tabela, descritor).length > 0);
+    }
+  }
+});
+
+test("should keep the pt-BR sentence free of english form words and the en sentence free of portuguese ones", () => {
+  for (const problem of [...Object.values(AMOSTRAS_DE_TEXTO), ...todosOsProblemas()]) {
+    const descritor = problemText(problem);
+    assert.doesNotMatch(renderText(getMessages("pt-BR"), descritor), /\b(expected|found)\b/);
+    assert.doesNotMatch(renderText(getMessages("en"), descritor), /\b(esperado|esperados|encontrado)\b/);
+  }
+});
+
+test("should throw a UsageError from readManifest with the english message of before", () => {
+  const casos = [
+    [{ skills: { a: 1 } }, 'invalid "skills" in manifest.json: {"a":1} (expected an array of skill names)'],
+    [{ skills: ["../x"] }, 'unsafe skill name in manifest.json: "../x"'],
+  ];
+  for (const [conteudo, mensagem] of casos) {
+    const dir = tempDir("mgr-manifest-usage-");
+    try {
+      writeFileSync(path.join(dir, MANIFEST_NAME), JSON.stringify(conteudo));
+      assert.throws(() => readManifest(dir), (erro) => erro instanceof UsageError && erro.message === mensagem);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+});
+
+const achadosDaFabrica = () => {
+  const versaoVelha = { manifestVersion: "1.0.0", packageVersion: "1.1.0", file: "m" };
+  const lockfile = { skills: { "@mgr/x": {} } };
+  const achados = [
+    ...orphanSkills({ declared: [], onDisk: ["x"], skillsDir: DIR }),
+    ...missingSkills({ declared: ["y"], onDisk: [], skillsDir: DIR }),
+    ...missingAgents({ declared: ["a.md"], exists: () => false }),
+    ...missingShared({ expected: [{ installed: ["_shared", "laws", "execution-laws.md"] }], exists: () => false, skillsDir: DIR }),
+    ...architectureSkill({ architecture: "layered", onDisk: [], skillsDir: DIR }),
+    ...divergentBody({ name: "x", source: "a\nb", installed: "a\nc", file: "f", condicao: SKILL_DECLARADA }),
+    ...unresolvedTokens({ installed: "x {{MGR_FIXTURE}}", file: "f", condicao: SKILL_DECLARADA }),
+    ...bodyCheckAvailability(versaoVelha),
+    ...sharedCheckAvailability(versaoVelha),
+    ...staleInstall(versaoVelha),
+    ...brokenHooks({ hooks: hookCom('node "/nao/existe/mgr.js"'), exists: () => false, file: "s" }),
+    ...lockfileDrift({ lockfile: null, installedPlugins: [], diff, file: "m" }),
+    ...lockfileDrift({ lockfile, installedPlugins: [], diff, file: "m" }),
+    ...runtimeVersioningCheck({ choice: { state: "invalid", value: "Versioned" }, ignoreState: "current", file: "i", configFile: "c" }),
+    ...runtimeVersioningCheck({ choice: { state: "absent" }, ignoreState: "absent", file: "i", configFile: "c" }),
+    ...runtimeVersioningCheck({ choice: { state: "absent" }, ignoreState: "outdated", file: "i", configFile: "c" }),
+    ...runtimeVersioningCheck({ choice: { state: "recorded", value: "versioned" }, ignoreState: "current", file: "i", configFile: "c" }),
+    ...runtimeVersioningCheck({ choice: { state: "invalid", value: 42 }, ignoreState: "absent", file: "i", configFile: "c" }),
+  ];
+  const comDefeitos = instalacaoComDefeitos();
+  const semRuntime = instalacaoLimpa();
+  const semPackageJson = instalacaoLimpa();
+  const semDetector = instalacaoLimpa();
+  const semFontes = instalacaoLimpa();
+  try {
+    achados.push(...diagnose(comDefeitos).findings);
+    apagarRuntime(semRuntime);
+    achados.push(...diagnose(semRuntime).findings);
+    removerArquivoDoRuntime(semPackageJson, "package.json");
+    achados.push(...diagnose(semPackageJson).findings);
+    removerArquivoDoRuntime(semDetector, "src/detector.js");
+    achados.push(...diagnose(semDetector).findings);
+    achados.push(...diagnose(semFontes, { sources: null }).findings);
+  } finally {
+    [comDefeitos, semRuntime, semPackageJson, semDetector, semFontes].forEach(descartar);
+  }
+  return achados;
+};
+
+test("should return the descriptors of every finding that came from the factory", () => {
+  const achados = achadosDaFabrica();
+  assert.ok(achados.length > 0);
+  for (const achado of achados) {
+    const { expected, found } = findingText(achado);
+    for (const descritor of [expected, found]) {
+      assert.ok(typeof descritor.key === "string" || "value" in descritor, `${achado.check}: sem descritor`);
+    }
+  }
+});
+
+test("should throw InvariantError from findingText for a spread copy of a finding", () => {
+  const [achado] = orphanSkills({ declared: [], onDisk: ["x"], skillsDir: DIR });
+  assert.throws(() => findingText({ ...achado }), InvariantError);
+});
+
+test("should render the en descriptor of each finding equal to its expected and found", () => {
+  const tabela = getMessages("en");
+  for (const achado of achadosDaFabrica()) {
+    const { expected, found } = findingText(achado);
+    assert.equal(achado.expected, renderText(tabela, expected), `${achado.check}: expected`);
+    assert.equal(achado.found, renderText(tabela, found), `${achado.check}: found`);
+  }
+});
+
+test("should refuse a corrupt manifest with a UsageError that names the file and keeps the parser text out", () => {
+  const dir = tempDir("mgr-manifest-json-");
+  try {
+    writeFileSync(path.join(dir, MANIFEST_NAME), "{ nao e json", "utf8");
+    assert.throws(() => readManifest(dir), (error) => {
+      assert.ok(error instanceof UsageError, "a corrupt manifest is the user's file to fix, not an MGR defect");
+      assert.equal(error.key, "fileNotJson");
+      assert.match(error.message, /manifest\.json is not valid JSON/);
+      assert.doesNotMatch(error.message, /Expected property name|Unexpected token/, "the platform text stays out of the shown sentence (P-10)");
+      assert.ok(error.cause instanceof SyntaxError, "the original parser error stays as the cause, for diagnosis");
+      return true;
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

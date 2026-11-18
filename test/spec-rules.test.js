@@ -5,6 +5,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "../src/spec-parser.js";
 import { check } from "../src/spec-rules.js";
+import { findingTexts } from "../src/findings.js";
+import { getMessages } from "../src/messages.js";
+import { renderText } from "../src/ui-text.js";
 import { validateSpecs } from "../src/spec-validator.js";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { tempDir } from "../scripts/lib/tmp.mjs";
@@ -18,7 +21,7 @@ test("SPEC-0 avisa sobre formato não declarado e NÃO reprova", () => {
   const findings = check(spec("- [ ] **CA-1:** x\n", false), "03-spec.md");
   assert.deepEqual(codigos(findings), ["SPEC-0"]);
   assert.equal(findings[0].severity, "warning");
-  assert.match(findings[0].remediation, /nenhuma spec existente é reprovada/);
+  assert.match(renderText(getMessages("pt-BR"), findingTexts(findings[0]).remediation), /nenhuma spec existente é reprovada/);
 });
 
 test("sem marcador, NENHUMA outra regra roda — nem sobre spec sem critério nenhum", () => {
@@ -35,7 +38,7 @@ test("SPEC-1 reprova spec declarada sem nenhum critério", () => {
 test("SPEC-2 reprova identidade duplicada, apontando a primeira ocorrência", () => {
   const findings = check(spec("- [ ] **CA-1:** a\n- [ ] **CA-1:** b\n"), "f");
   assert.deepEqual(codigos(findings), ["SPEC-2"]);
-  assert.match(findings[0].message, /já aparece na linha 2/);
+  assert.match(renderText(getMessages("pt-BR"), findingTexts(findings[0]).message), /já aparece na linha 2/);
   assert.equal(findings[0].task, "CA-1");
 });
 
@@ -49,7 +52,7 @@ test("SPEC-4 avisa sobre buraco na numeração, sem reprovar", () => {
   const findings = check(spec("- [ ] **CA-1:** a\n- [ ] **CA-3:** c\n"), "f");
   assert.deepEqual(codigos(findings), ["SPEC-4"]);
   assert.equal(findings[0].severity, "warning");
-  assert.match(findings[0].message, /falta CA-2/);
+  assert.match(renderText(getMessages("pt-BR"), findingTexts(findings[0]).message), /ausente\(s\) CA-2/);
 });
 
 test("SPEC-4 não avisa em numeração contínua, nem quando começa fora do 1", () => {
@@ -111,7 +114,7 @@ test("SPEC-2 pega a colisão por número: `CA-1` e `CA-01` são o mesmo critéri
   const achados = check(parse("<!-- mgr-spec-format: 1 -->\n- [ ] **CA-1:** a\n- [ ] **CA-01:** b\n"), "03-spec.md");
   const duplicado = achados.find((f) => f.code === "SPEC-2");
   assert.ok(duplicado, "comparar por string deixaria o par escapar da SPEC-2 e da SPEC-4");
-  assert.match(duplicado.message, /`CA-01` colide com `CA-1`/);
+  assert.match(renderText(getMessages("pt-BR"), findingTexts(duplicado).message), /`CA-01` colide com `CA-1`/);
 });
 
 test("o contador só soma o que foi conferido: spec sem marcador não entra", () => {

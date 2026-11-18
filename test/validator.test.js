@@ -4,6 +4,9 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkSkill, frontmatter } from "../src/validator.js";
+import { getMessages } from "../src/messages.js";
+import { renderText } from "../src/ui-text.js";
+import { problemasDosDezesseteRamos } from "./fixtures/skills-dos-17-ramos.js";
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const skillsDir = path.join(raiz, "skills");
@@ -11,6 +14,8 @@ const AS_TREZE = readdirSync(skillsDir)
   .filter((nome) => existsSync(path.join(skillsDir, nome, "SKILL.md")))
   .sort();
 const textoDe = (nome) => readFileSync(path.join(skillsDir, nome, "SKILL.md"), "utf8");
+const lerEm = (idioma, problemas) => problemas.map((problema) => renderText(getMessages(idioma), problema));
+const emPtBR = (problemas) => lerEm("pt-BR", problemas);
 
 test("as skills do CORE em disco são as treze medidas", () => {
   assert.equal(AS_TREZE.length, 13,
@@ -77,7 +82,7 @@ test("a chave de topo depois do mapa volta ao topo", () => {
 test("chave sem valor e sem bloco recuado continua sendo string vazia", () => {
   const lido = frontmatter(comBloco("name:\ndescription: algo"));
   assert.equal(lido.name, "", "virar objeto aqui degradaria a mensagem de `checkSkill` para entrada malformada");
-  assert.equal(checkSkill("foo", comBloco("name:\ndescription: algo")).filter((p) => p.includes("sem `name`")).length, 1);
+  assert.equal(emPtBR(checkSkill("foo", comBloco("name:\ndescription: algo"))).filter((p) => p.includes("sem `name`")).length, 1);
 });
 
 test("profundidade 2 é entrada inválida, e é descartada em vez de achatada", () => {
@@ -94,12 +99,12 @@ test("linha recuada sem mapa aberto é descartada", () => {
 });
 
 const valida = (corpo) => checkSkill("foo", `---\nname: foo\ndescription: ${"d".repeat(60)}\n${corpo}\n---\n`);
-const so = (corpo, trecho) => valida(corpo).filter((p) => p.includes(trecho));
+const so = (corpo, trecho) => emPtBR(valida(corpo)).filter((p) => p.includes(trecho));
 
 test("name acima de 64 caracteres reprova, e 64 passa", () => {
   const desc = "d".repeat(60);
   const longo = "a".repeat(65);
-  assert.equal(checkSkill(longo, `---\nname: ${longo}\ndescription: ${desc}\n---\n`)
+  assert.equal(emPtBR(checkSkill(longo, `---\nname: ${longo}\ndescription: ${desc}\n---\n`))
     .filter((p) => p.includes("caracteres")).length, 1, "o padrão diz `Max 64 characters` e isto não era conferido");
   const exato = "a".repeat(64);
   assert.deepEqual(checkSkill(exato, `---\nname: ${exato}\ndescription: ${desc}\n---\n`), [],
@@ -108,7 +113,7 @@ test("name acima de 64 caracteres reprova, e 64 passa", () => {
 
 test("hífen duplo já era reprovado pelo kebab-case, e segue sendo", () => {
   const desc = "d".repeat(60);
-  assert.equal(checkSkill("pdf--processing", `---\nname: pdf--processing\ndescription: ${desc}\n---\n`)
+  assert.equal(emPtBR(checkSkill("pdf--processing", `---\nname: pdf--processing\ndescription: ${desc}\n---\n`))
     .filter((p) => p.includes("kebab-case")).length, 1);
 });
 
@@ -149,13 +154,13 @@ test("as treze seguem passando depois das regras novas", () => {
 });
 
 test("campo obrigatório lido como mapa reprova, nos dois", () => {
-  const comoMapa = (campo, resto) => checkSkill("foo", `---\n${resto}\n${campo}:\n  Use when: algo\n---\n`);
+  const comoMapa = (campo, resto) => emPtBR(checkSkill("foo", `---\n${resto}\n${campo}:\n  Use when: algo\n---\n`));
   assert.match(comoMapa("description", "name: foo")[0], /`description` tem de ser texto/);
   assert.match(comoMapa("name", `description: ${"d".repeat(60)}`)[0], /`name` tem de ser texto/);
 });
 
 test("name como mapa não produz mensagem de tamanho inventada", () => {
-  const achados = checkSkill("foo", `---\nname:\n  length: 65\ndescription: ${"d".repeat(60)}\n---\n`);
+  const achados = emPtBR(checkSkill("foo", `---\nname:\n  length: 65\ndescription: ${"d".repeat(60)}\n---\n`));
   assert.equal(achados.length, 1, "um problema, e o certo: a forma do campo");
   assert.ok(!achados[0].includes("caracteres"),
     "`{length: \"65\"}` coagido daria `\"65\" > 64` verdadeiro e uma mensagem sobre tamanho que não existe");
@@ -174,25 +179,25 @@ test("irmão SUB-recuado é descartado, não absorvido pelo mapa", () => {
 });
 
 test("metadata em sequência YAML reprova em vez de fabricar chave", () => {
-  const achados = checkSkill("foo", `---\nname: foo\ndescription: ${"d".repeat(60)}\nmetadata:\n  - author: x\n---\n`);
+  const achados = emPtBR(checkSkill("foo", `---\nname: foo\ndescription: ${"d".repeat(60)}\nmetadata:\n  - author: x\n---\n`));
   assert.match(achados[0], /`metadata` tem de ser um mapa/,
     "o item `- author: x` tem `:`, sobrevive ao filtro, e o parser FABRICAVA a chave `- author`");
 });
 
 test("metadata com profundidade 2 reprova em vez de normalizar em silêncio", () => {
-  const achados = checkSkill("foo", `---\nname: foo\ndescription: ${"d".repeat(60)}\nmetadata:\n  a:\n    b: 1\n---\n`);
+  const achados = emPtBR(checkSkill("foo", `---\nname: foo\ndescription: ${"d".repeat(60)}\nmetadata:\n  a:\n    b: 1\n---\n`));
   assert.match(achados[0], /`metadata` tem de ser um mapa/,
     "descartar o nível fundo e passar com `{a: \"\"}` é normalizar entrada inválida, não descartá-la");
 });
 
 test("allowed-tools como lista YAML reprova com a mensagem da LISTA", () => {
-  const achados = checkSkill("foo", `---\nname: foo\ndescription: ${"d".repeat(60)}\nallowed-tools:\n  - Read\n  - Grep\n---\n`);
+  const achados = emPtBR(checkSkill("foo", `---\nname: foo\ndescription: ${"d".repeat(60)}\nallowed-tools:\n  - Read\n  - Grep\n---\n`));
   assert.match(achados[0], /como lista YAML/,
     "quem escreveu a lista declarou duas ferramentas: dizer-lhe `presente e vazio` responde a erro que ele não cometeu");
 });
 
 test("allowed-tools com aspas vazias conta como vazio", () => {
-  const achados = checkSkill("foo", `---\nname: foo\ndescription: ${"d".repeat(60)}\nallowed-tools: ""\n---\n`);
+  const achados = emPtBR(checkSkill("foo", `---\nname: foo\ndescription: ${"d".repeat(60)}\nallowed-tools: ""\n---\n`));
   assert.match(achados[0], /presente e vazio/, "o parser não desfaz aspas, então `\"\"` escapava do trim");
 });
 
@@ -200,4 +205,20 @@ test("__proto__ como chave não contamina a leitura", () => {
   const lido = frontmatter("---\nname: foo\n__proto__:\n  author: x\n---\n");
   assert.equal(lido.author, undefined, "resolver `author` pela cadeia de protótipo é leitura que ninguém declarou");
   assert.deepEqual(Object.keys(lido), ["name"]);
+});
+
+test("should render the 17 skill problems in one language only, never mixing the other", () => {
+  const problemas = problemasDosDezesseteRamos();
+  assert.equal(new Set(problemas.map((problema) => problema.key)).size, 17);
+
+  const marcadoresPt = /(?<![\p{L}])(tem|não|sem|falta|difere|linhas|caracteres|ausente|veio|lista|presente|vazio|pede|mapa|texto)(?![\p{L}])/iu;
+  const marcadoresEn = /(?<![\p{L}])(must|is|not|no|without|missing|differs|characters|lines|empty|list|asks|came|map|has)(?![\p{L}])/iu;
+  for (const problema of problemas) {
+    const ptBR = renderText(getMessages("pt-BR"), problema);
+    const en = renderText(getMessages("en"), problema);
+    assert.match(ptBR, marcadoresPt, problema.key);
+    assert.doesNotMatch(ptBR, marcadoresEn, problema.key);
+    assert.match(en, marcadoresEn, problema.key);
+    assert.doesNotMatch(en, marcadoresPt, problema.key);
+  }
 });

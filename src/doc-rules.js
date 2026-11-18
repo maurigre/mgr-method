@@ -14,6 +14,7 @@ import path from "node:path";
 import { existsSync } from "node:fs";
 import { create } from "./findings.js";
 import { stripFencedBlocks } from "./markdown.js";
+import { text } from "./ui-text.js";
 
 // O artefato que estas regras alcançam, e só ele. A declaração de diff pertence ao fechamento: exigi-la
 // de um brief ou de uma spec seria acusar ausência de algo que aquele artefato nunca prometeu.
@@ -40,9 +41,9 @@ export const isDiffHeading = (texto) => {
 // proveniência porque ali a adesão era ZERO — a diferença é de grau, e ela é grande.
 const semDeclaracaoDeDiff = (file) => create({
   code: "DOC-3", severity: "error", file, line: 1,
-  message: "fechamento sem a declaração do diff da documentação: a Fase 6 pede a atualização incremental, e nada a registra aqui",
-  remediation: "Acrescente uma seção nomeando o que mudou na documentação do projeto, e os arquivos tocados. O título é livre — a seção é reconhecida por conter `diff` e `sdd` ou `doc`.",
-  example: "## Diff do SDD\n\n- `docs/sdd/02-architecture.md` — o módulo novo entrou no diagrama",
+  message: text("artifactDoc3Message"),
+  remediation: text("artifactDoc3Remediation"),
+  example: text("artifactDoc3Example"),
 });
 
 // DOC-4 — a seção existe e não diz NADA verificável: nem arquivo que exista, nem a declaração de que
@@ -59,9 +60,9 @@ const semDeclaracaoDeDiff = (file) => create({
 // dois mecanismos existem juntos.
 const diffSemFato = (secao, file) => create({
   code: "DOC-4", severity: "error", file, line: secao.line,
-  message: `a seção \`${secao.title}\` não nomeia arquivo que exista nem declara que não houve alteração: não há o que verificar`,
-  remediation: "Nomeie os arquivos de documentação que a feature tocou, ou declare que nenhuma alteração foi necessária — com a razão. Caminho que não resolve é o defeito que a DOC-2 da fonte única reprova.",
-  example: "## Diff do SDD\n\n- `03-contracts.md` — o comando novo entrou na tabela\n\nou\n\n## Diff do SDD\n\nNenhuma alteração necessária: a feature não muda contrato nem arquitetura.",
+  message: text("artifactDoc4Message", secao.title),
+  remediation: text("artifactDoc4Remediation"),
+  example: text("artifactDoc4Example"),
 });
 
 const HEADING = /^(#{1,6})\s+(.+?)\s*$/;

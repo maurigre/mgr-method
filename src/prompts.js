@@ -10,6 +10,46 @@ import { EFFORT_LEVELS } from "./plugin.js";
 
 export const CANCELLED = Symbol("cancelled");
 
+/**
+ * Adaptador de prompts no idioma escolhido (QUAL-8, achado B-3 do review de 2026-11-17).
+ *
+ * A biblioteca de prompts traz textos proprios em ingles: "Yes"/"No" no `confirm`, "Please select at
+ * least one option" no `multiselect` obrigatorio, "Canceled"/"Something went wrong" no spinner e o
+ * rodape de teclas ("to navigate", "Enter: confirm") do `select` e do `multiselect`, que ela nao
+ * deixa traduzir: ele e desligado e a dica de teclas da tabela vai na segunda linha da pergunta.
+ * Todo prompt da CLI passa por aqui, e o texto vem da tabela do idioma, lida na hora da chamada
+ * (`tabelaAtual`), porque a CLI refina o idioma depois de montar o adaptador. A biblioteca chega por
+ * parametro: este modulo esta no fecho do runtime e nao a importa.
+ */
+export function promptsNoIdioma(clack, tabelaAtual) {
+  const localizarSpinner = () => clack.updateSettings({
+    messages: { cancel: tabelaAtual().promptCancelled, error: tabelaAtual().promptFailed },
+  });
+  const comDica = (opcoes, dica) => ({ ...opcoes, showInstructions: false, message: `${opcoes.message}\n${dica}` });
+  return {
+    select: (opcoes) => clack.select(comDica(opcoes, tabelaAtual().promptSelectHint)),
+    text: (opcoes) => clack.text(opcoes),
+    isCancel: (valor) => clack.isCancel(valor),
+    confirm: (opcoes) => clack.confirm({ active: tabelaAtual().promptYes, inactive: tabelaAtual().promptNo, ...opcoes }),
+    // A validacao do `required` da biblioteca tem frase fixa em ingles: pergunta-se sem ela e, se a
+    // selecao volta vazia, avisa-se pela tabela e pergunta-se de novo.
+    // `required` ausente conta como obrigatorio, como na biblioteca.
+    multiselect: async (opcoes) => {
+      const pergunta = comDica(opcoes, tabelaAtual().promptMultiselectHint);
+      if (opcoes.required === false) return clack.multiselect(pergunta);
+      for (;;) {
+        const escolha = await clack.multiselect({ ...pergunta, required: false });
+        if (clack.isCancel(escolha) || escolha.length) return escolha;
+        clack.log.warn(tabelaAtual().promptSelectAtLeastOne);
+      }
+    },
+    spinner: () => {
+      localizarSpinner();
+      return clack.spinner();
+    },
+  };
+}
+
 // Escolhas das perguntas de modelo e origem. `skip` é o default de todas (ADR-0017): nada é
 // gravado sem resposta explícita.
 const OTHER_CHOICE = "other";

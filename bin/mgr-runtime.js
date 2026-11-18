@@ -16,6 +16,7 @@ import { specNext, specStatus, specValidate } from "../src/commands/spec.js";
 import { parseArgs } from "../src/cli-args.js";
 import { ids as engineIds } from "../src/engines/index.js";
 import { readManifest } from "../src/manifest.js";
+import { renderError } from "../src/errors.js";
 import { getMessages } from "../src/messages.js";
 import { projectRoot } from "../src/project-root.js";
 import { detectUserLanguage } from "../src/prompts.js";
@@ -87,9 +88,9 @@ async function main() {
       case "version": case "--version": case "-v": {
         let version = manifest.version;
         try { version = readVersion(); } catch { /* fica a versão do manifesto */ }
-        console.log(`mgr-method ${version ?? "unknown"} (runtime do projeto)`);
+        console.log(version == null ? M.runtimeVersionLineUnknown : M.runtimeVersionLine(version));
         if (manifest.version && version !== manifest.version) {
-          console.error(`runtime em ${version}, manifesto em ${manifest.version}: rode npx mgr-method@${manifest.version} update`);
+          console.error(M.runtimeVersionSkew(version, manifest.version));
         }
         return 0;
       }
@@ -102,7 +103,7 @@ async function main() {
         return 1;
     }
   } catch (commandError) {
-    console.error(M.errorPrefix(commandError.message));
+    console.error(M.errorPrefix(renderError(M, commandError)));
     return 1;
   }
 }

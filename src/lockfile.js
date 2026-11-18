@@ -3,6 +3,7 @@
 // Chaves gravadas em ordem determinística para minimizar conflito de merge.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { UsageError } from "./errors.js";
 
 export const LOCKFILE_NAME = "mgr-skills.lock";
 export const LOCKFILE_VERSION = 1;
@@ -29,16 +30,25 @@ export const emptyLockfile = () => ({ lockfileVersion: LOCKFILE_VERSION, registr
 export function readLockfile(repo) {
   const file = lockfilePath(repo);
   if (!existsSync(file)) return null;
-  const lockfile = JSON.parse(readFileSync(file, "utf8"));
+  let lockfile;
+  try {
+    lockfile = JSON.parse(readFileSync(file, "utf8"));
+  } catch (cause) {
+    // O texto do JSON.parse e da plataforma e nao entra na frase mostrada (P-10); fica como causa.
+    throw new UsageError("fileNotJson", [LOCKFILE_NAME], { cause });
+  }
+  if (lockfile === null || typeof lockfile !== "object" || Array.isArray(lockfile)) {
+    throw new UsageError("fileNotObject", [LOCKFILE_NAME]);
+  }
   if (lockfile.lockfileVersion !== LOCKFILE_VERSION) {
-    throw new Error(`unsupported lockfileVersion in ${LOCKFILE_NAME}: ${lockfile.lockfileVersion} (expected ${LOCKFILE_VERSION})`);
+    throw new UsageError("lockfileVersionUnsupported", [LOCKFILE_NAME, lockfile.lockfileVersion, LOCKFILE_VERSION]);
   }
   for (const [name, entry] of Object.entries(lockfile.skills || {})) {
     if (!INSTALL_DIR_RE.test(entry?.dir || "")) {
-      throw new Error(`unsafe install dir in ${LOCKFILE_NAME} for ${name}: ${JSON.stringify(entry?.dir)}`);
+      throw new UsageError("lockfileInstallDirUnsafe", [LOCKFILE_NAME, name, JSON.stringify(entry?.dir)]);
     }
     if (entry.replaces !== undefined && !METHOD_SKILL_RE.test(entry.replaces)) {
-      throw new Error(`invalid "replaces" in ${LOCKFILE_NAME} for ${name}: ${JSON.stringify(entry.replaces)} (expected a method skill name in kebab-case)`);
+      throw new UsageError("lockfileReplacesInvalid", [LOCKFILE_NAME, name, JSON.stringify(entry.replaces)]);
     }
   }
   return lockfile;
@@ -73,7 +83,7 @@ export function upsertSkill(lockfile, name, entry, origin) {
 
 export function removeSkill(lockfile, name) {
   if (!lockfile || !lockfile.skills[name]) {
-    throw new Error(`skill not in ${LOCKFILE_NAME}: ${name}`);
+    throw new UsageError("skillNotInLockfile", [LOCKFILE_NAME, name]);
   }
   const skills = { ...lockfile.skills };
   delete skills[name];

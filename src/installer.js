@@ -16,6 +16,7 @@ import * as engineDescriptors from "./engines/index.js";
 import { previewPlan, readAgents, requestOf, readPersonal, readRuntimeVersioning, writeAgentPolicies, writeOrigin, writePersonal, writeRuntimeVersioning } from "./registry.js";
 import { readManifest, writeManifest, writeEnv, readEnvProjectId, MODEL_RUNTIME, MODEL_LAYERED, MODEL_CORE_RUNTIME } from "./manifest.js";
 import * as catalog from "./catalog.js";
+import { UsageError } from "./errors.js";
 
 const KNOWN_PROJECT = [".claude/skills", ".github/skills", ".agents/skills", ".cursor/skills"];
 const KNOWN_GLOBAL = [".claude/skills", ".copilot/skills", ".agents/skills"];
@@ -44,9 +45,9 @@ export function detect(repo) {
 export function engineSkillsDir(engine, scope, repo) {
   // O `get` do descritor lança com a mensagem dele; aqui a mensagem é OUTRA e observável — um teste
   // a afirma desde antes desta mudança, e trocá-la seria degradar o que a pessoa lê.
-  if (!engineDescriptors.ids().includes(engine)) throw new Error(`motor inválido: ${engine}`);
+  if (!engineDescriptors.ids().includes(engine)) throw new UsageError("invalidEngine", [engine]);
   const rel = engineDescriptors.get(engine).skillsDir[scope];
-  if (!rel) throw new Error(`escopo desconhecido: ${scope} (use project | global)`);
+  if (!rel) throw new UsageError("unknownScope", [scope]);
   return scope === "project" ? path.join(repo, rel) : path.join(os.homedir(), rel);
 }
 
@@ -101,7 +102,7 @@ export function installedLawsRef(engine, scope, repo) {
 // engineSkillsDir faz para skills, mas sem um segundo mapa por motor aqui dentro.
 export function engineAgentsDir(engine, scope, repo) {
   const rel = engineDescriptors.get(engine).agentsDir[scope];
-  if (!rel) throw new Error(`escopo desconhecido: ${scope} (use project | global)`);
+  if (!rel) throw new UsageError("unknownScope", [scope]);
   return scope === "project" ? path.join(repo, rel) : path.join(os.homedir(), rel);
 }
 
@@ -513,7 +514,7 @@ export function versionSet(manifest) {
 export function uninstall(scope, repo) {
   const core = coreDir(scope, repo);
   const man = readManifest(core);
-  if (!man) throw new Error("nenhuma instalação MGR encontrada — nada a desinstalar");
+  if (!man) throw new UsageError("noInstallationToUninstall");
   const removed = [];
   const dirs = man.skillsDirs || (man.skillsDir ? [man.skillsDir] : []);
   for (const d of dirs) {
@@ -552,7 +553,7 @@ export function uninstall(scope, repo) {
 // (DT-6): `applyUpdate` recebe a resposta e o `execute` grava só a fonte `answered`.
 export function planUpdate(scope, repo, { replaced = {}, lockfile = null, projectId = null } = {}) {
   const prior = readManifest(coreDir(scope, repo));
-  if (!prior) throw new Error("nenhuma instalação MGR encontrada — rode `mgr install` antes");
+  if (!prior) throw new UsageError("noInstallationToUpdate");
   const engines = (prior.engines || [prior.engine]).filter((x) => x && x !== "custom");
   // DT-17: alvo custom é preservado pelo dir que o manifesto gravou, e não vira claude-code.
   const custom = (prior.engines || [prior.engine]).includes("custom") && (prior.skillsDirs || []).length > 0;

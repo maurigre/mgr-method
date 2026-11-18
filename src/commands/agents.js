@@ -4,6 +4,7 @@
 // (registry, builder); o `apply` também lê o disco e grava o arquivo do agente, e só delega a troca
 // do frontmatter ao builder.
 import * as installer from "../installer.js";
+import { renderError } from "../errors.js";
 import * as catalogo from "../catalog.js";
 import { CONFIGURED, LOCAL_CONFIG_NAME, configPath, misplacedTeamKeys, readAgents, readPersonal, writeAgentPolicy } from "../registry.js";
 import * as engineDescriptors from "../engines/index.js";
@@ -11,11 +12,14 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { agentFrontmatter, gateSummary, inheritingModel, isOurAgent, replaceAgentFrontmatter } from "../builder.js";
 
+const CAMPO_MODELO = "model";
+const CAMPO_ESFORCO = "effort";
+
 const engineIds = engineDescriptors.ids;
 
 // `mgr agents` — qual modelo e qual esforço cada intenção usa, e DE ONDE veio cada valor
 // (ADR-0017). A decisão vem do núcleo: `readAgents` diz o valor e a origem, `gateSummary` diz o que
-// o motor sustenta. Aqui só se escolhe a palavra.
+// o motor sustenta. Aqui só se entrega o estado de cada campo; a frase é da tabela do idioma.
 export function agents({ root, cwd, flags, positional, io, M }) {
   if (positional[0] === "set") return agentsSet({ root, cwd, flags, positional: positional.slice(1), io, M });
   if (positional[0] === "apply") return agentsApply({ root, cwd, flags, positional: positional.slice(1), io, M });
@@ -53,22 +57,19 @@ export function agents({ root, cwd, flags, positional, io, M }) {
     return 0;
   }
 
-  const palavraDaOrigem = (origem) =>
-    (origem === CONFIGURED ? M.agentsSourceConfigured : M.agentsSourceDefault);
+  // Sem valor pode ser incapacidade do MOTOR ou escolha do autor, e chamar as duas de "não
+  // suportado" faz a saída mentir sobre a plataforma — o claude-code suporta `effort`. A cola
+  // entrega o ESTADO; a frase de cada estado é da tabela do idioma (QUAL-8).
+  const estadoDoCampo = (valor, origem, campo, skipped) => (valor
+    ? { value: valor, state: origem === CONFIGURED ? "configured" : "default" }
+    : { state: skipped.includes(campo) ? "unsupported" : "inherited" });
   for (const intent of intents) {
     io.out(M.agentsIntent(intent, catalogo.AGENTS[intent].agent));
     for (const engine of motores) {
       const { model, effort, skipped } = gateSummary(engine, policies[intent]);
-      const textoDoModelo = model
-        ? M.agentsValueFrom(model, palavraDaOrigem(sources[intent].model[engine]))
-        : (skipped.includes("model") ? M.agentsUnsupported : M.agentsInherited);
-      // Mesma forma do ramo do `model` logo acima: sem valor pode ser incapacidade do MOTOR ou
-      // escolha do autor, e chamar as duas de "não suportado" faz a saída mentir sobre a
-      // plataforma — o claude-code suporta `effort`.
-      const textoDoEsforco = effort
-        ? M.agentsValueFrom(effort, palavraDaOrigem(sources[intent].effort))
-        : (skipped.includes("effort") ? M.agentsUnsupported : M.agentsInherited);
-      io.out(M.agentsEngine(engine, textoDoModelo, textoDoEsforco));
+      io.out(M.agentsEngineLine(engine,
+        estadoDoCampo(model, sources[intent].model[engine], CAMPO_MODELO, skipped),
+        estadoDoCampo(effort, sources[intent].effort, CAMPO_ESFORCO, skipped)));
     }
   }
   // O aviso do default: sem modelo declarado, o agente roda no da sessão. Some quando todas as
@@ -93,7 +94,7 @@ function avisaChavesIgnoradas(core, io, M) {
   try {
     ({ ignoredTeam: ignoradas, ignoredUnknown: desconhecidas } = readPersonal(core));
   } catch (error) {
-    io.err(M.errorPrefix(error.message));
+    io.err(M.errorPrefix(renderError(M, error)));
   }
   if (ignoradas.length) io.err(M.personalKeysIgnored(LOCAL_CONFIG_NAME, ignoradas.join(", ")));
   if (desconhecidas.length) io.err(M.personalKeysUnknown(LOCAL_CONFIG_NAME, desconhecidas.join(", ")));
@@ -156,7 +157,7 @@ export function agentsApply({ root, io, M }) {
 // `mgr agents set` — escreve a política de UMA intenção e diz o que passou a valer (ADR-0017).
 //
 // A decisão de MERGE e a validação são do núcleo (`writeAgentPolicy`); aqui só se resolve para
-// QUAIS motores escrever, e se escolhe a palavra. Este comando NÃO roda o `update`: reescrever o
+// QUAIS motores escrever, e se entrega o estado de cada campo. Este comando NÃO roda o `update`: reescrever o
 // arquivo do agente sem o autor pedir mexeria no disco dele por conta própria.
 //
 // `model` é mapa POR MOTOR e `effort` é da intenção inteira — por isso `--engine` só tem efeito
@@ -213,9 +214,10 @@ function agentsSet({ root, flags, positional, io, M }) {
     : (motores.length ? motores : engineIds());
   for (const engine of mostrados) {
     const { model, effort, skipped } = gateSummary(engine, policy);
-    io.out(M.agentsEngine(engine,
-      model || (skipped.includes("model") ? M.agentsUnsupported : M.agentsInherited),
-      effort || (skipped.includes("effort") ? M.agentsUnsupported : M.agentsInherited)));
+    const estado = (valor, campo) => (valor
+      ? { value: valor, state: "value" }
+      : { state: skipped.includes(campo) ? "unsupported" : "inherited" });
+    io.out(M.agentsEngineLine(engine, estado(model, CAMPO_MODELO), estado(effort, CAMPO_ESFORCO)));
   }
   io.out("");
   // Uma frase por campo ESCRITO: os dois campos passam a valer em momentos diferentes, e dizer só

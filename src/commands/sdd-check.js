@@ -6,9 +6,12 @@ const CHAVE_DA_FALHA = {
   empty: "sddCheckEmpty",
 };
 
-const linhaDoAviso = (M, { code, file }) => {
+const linhaDoAviso = (M, aviso) => {
+  const { code, file } = aviso;
   if (code === "no-review-rules") return M.sddCheckNoReviewRules();
   if (code === "missing-canonical") return M.sddCheckMissingCanonical(file);
+  if (code === "guide-behind-source") return M.sddCheckGuideBehindSource(file, aviso.missing);
+  if (code === "guide-source-unavailable") return M.sddCheckGuideSourceUnavailable(file, aviso.field);
   return M.sddCheckOutOfList(file);
 };
 

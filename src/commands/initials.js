@@ -4,12 +4,14 @@ import path from "node:path";
 import * as installer from "../installer.js";
 import { INITIALS_PATTERN, LOCAL_CONFIG_NAME, readInitials, writeInitials } from "../registry.js";
 
+const COMANDO = "spec initials";
+
 // `mgr spec initials [--json]` — lê as iniciais pessoais da pessoa (camada pessoal, DT-5).
 // `mgr spec initials set <x>` — grava. Sem posicional, lê; o `set` é o único verbo aceito.
 export function initials({ root, positional, flags = {}, io, M }) {
   if (positional.length === 0) return initialsRead({ root, flags, io, M });
   if (positional[0] === "set") return initialsSet({ root, positional: positional.slice(1), io, M });
-  io.err(M.errorPrefix(M.unknownCommand(`spec initials ${positional[0]}`)));
+  io.err(M.errorPrefix(M.unknownCommand(`${COMANDO} ${positional[0]}`)));
   return 1;
 }
 

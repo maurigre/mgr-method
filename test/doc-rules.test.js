@@ -4,6 +4,9 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { COMPLETION_FILE, check, isDiffHeading, parse } from "../src/doc-rules.js";
 import { tempDir } from "../scripts/lib/tmp.mjs";
+import { findingTexts } from "../src/findings.js";
+import { getMessages } from "../src/messages.js";
+import { renderText } from "../src/ui-text.js";
 
 const repoTemporario = () => tempDir("mgr-doc-");
 
@@ -50,7 +53,7 @@ test("fechamento sem a seção de diff reprova com DOC-3", () => {
   const [achado] = doFechamento("# Completion\n\n## O que mudou\n\nalgo\n\n## Testes\n\nverdes\n");
   assert.equal(achado.code, "DOC-3");
   assert.equal(achado.severity, "error");
-  assert.match(achado.message, /sem a declaração do diff/);
+  assert.match(renderText(getMessages("pt-BR"), findingTexts(achado).message), /sem a declaração do diff/);
 });
 
 test("a seção com arquivo que EXISTE passa, e o nome vale sem o diretório", () => {
@@ -70,7 +73,7 @@ test("a seção que só cita arquivo INEXISTENTE reprova com DOC-4", () => {
   const [achado] = doFechamento("# Completion\n\n## Diff do SDD\n\n- `99-nao-existe.md`: algo\n");
   assert.equal(achado.code, "DOC-4");
   assert.equal(achado.severity, "error");
-  assert.match(achado.message, /não nomeia arquivo que exista nem declara/);
+  assert.match(renderText(getMessages("pt-BR"), findingTexts(achado).message), /não nomeia arquivo que exista nem declara/);
 });
 
 // As QUATRO formas medidas em disco, mais a negação canônica em português, que a primeira heurística

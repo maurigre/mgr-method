@@ -11,6 +11,7 @@ import { CANCELLED, REMOVAL_ASK, REMOVAL_ASSUMED, REMOVAL_NO_CONSENT, askRuntime
 import { DEFECT, FIX_UPDATE, NO_FIX, runtimeVersioningCheck } from "../src/doctor.js";
 import { runtimeVersioning } from "../src/commands/runtime-versioning.js";
 import { getMessages } from "../src/messages.js";
+import { UsageError } from "../src/errors.js";
 
 const coreComConfig = (conteudo) => {
   const coreDir = tempDir("mgr-rv-core-");
@@ -325,15 +326,15 @@ test("should leave the config untouched on update when there is no answer", () =
 });
 
 const DOCTOR_MC_DC = [
-  { nome: "absent choice and ignore absent", choice: { state: "absent" }, ignoreState: "absent", expected: "o arquivo de ignorar como o metodo o grava (runtimeVersioning: unversioned)", found: "ausente" },
-  { nome: "absent choice and ignore outdated", choice: { state: "absent" }, ignoreState: "outdated", expected: "o arquivo de ignorar como o metodo o grava (runtimeVersioning: unversioned)", found: "difere do que o metodo grava" },
+  { nome: "absent choice and ignore absent", choice: { state: "absent" }, ignoreState: "absent", expected: "the ignore file as the method writes it (runtimeVersioning: unversioned)", found: "absent" },
+  { nome: "absent choice and ignore outdated", choice: { state: "absent" }, ignoreState: "outdated", expected: "the ignore file as the method writes it (runtimeVersioning: unversioned)", found: "differs from what the method writes" },
   { nome: "absent choice and ignore current", choice: { state: "absent" }, ignoreState: "current", expected: null },
-  { nome: "unversioned choice and ignore absent", choice: { state: "recorded", value: "unversioned" }, ignoreState: "absent", expected: "o arquivo de ignorar como o metodo o grava (runtimeVersioning: unversioned)", found: "ausente" },
+  { nome: "unversioned choice and ignore absent", choice: { state: "recorded", value: "unversioned" }, ignoreState: "absent", expected: "the ignore file as the method writes it (runtimeVersioning: unversioned)", found: "absent" },
   { nome: "unversioned choice and ignore current", choice: { state: "recorded", value: "unversioned" }, ignoreState: "current", expected: null },
   { nome: "versioned choice and ignore absent", choice: { state: "recorded", value: "versioned" }, ignoreState: "absent", expected: null },
-  { nome: "versioned choice and ignore current", choice: { state: "recorded", value: "versioned" }, ignoreState: "current", expected: "sem arquivo de ignorar (runtimeVersioning: versioned)", found: "presente" },
-  { nome: "versioned choice and ignore outdated", choice: { state: "recorded", value: "versioned" }, ignoreState: "outdated", expected: "sem arquivo de ignorar (runtimeVersioning: versioned)", found: "presente" },
-  { nome: "invalid choice regardless of the ignore file", choice: { state: "invalid", value: "Versioned" }, ignoreState: "current", expected: "runtimeVersioning: versioned | unversioned, ou ausente", found: "valor \"Versioned\"" },
+  { nome: "versioned choice and ignore current", choice: { state: "recorded", value: "versioned" }, ignoreState: "current", expected: "no ignore file (runtimeVersioning: versioned)", found: "present" },
+  { nome: "versioned choice and ignore outdated", choice: { state: "recorded", value: "versioned" }, ignoreState: "outdated", expected: "no ignore file (runtimeVersioning: versioned)", found: "present" },
+  { nome: "invalid choice regardless of the ignore file", choice: { state: "invalid", value: "Versioned" }, ignoreState: "current", expected: "runtimeVersioning: versioned | unversioned, or absent", found: "value \"Versioned\"" },
 ];
 
 for (const { nome, choice, ignoreState, expected, found } of DOCTOR_MC_DC) {
@@ -355,7 +356,7 @@ test("should point the achado at the config file and offer no fix for an invalid
   const [achado] = runtimeVersioningCheck({ choice: { state: "invalid", value: 42 }, ignoreState: "absent", file: IGNORE_REL, configFile: ".mgr-core/config.json" });
   assert.equal(achado.file, ".mgr-core/config.json");
   assert.equal(achado.fix, NO_FIX);
-  assert.equal(achado.found, "valor 42");
+  assert.equal(achado.found, "value 42");
 });
 
 test("should offer mgr update and point at the ignore file for the two ignore conditions", () => {
@@ -369,7 +370,7 @@ test("should offer mgr update and point at the ignore file for the two ignore co
 
 test("should report the unreadable config text when the config cannot be read", () => {
   const [achado] = runtimeVersioningCheck({ choice: { state: "invalid", value: "config.json ilegivel" }, ignoreState: "absent", file: IGNORE_REL, configFile: ".mgr-core/config.json" });
-  assert.equal(achado.found, "config.json ilegivel");
+  assert.equal(achado.found, "config.json unreadable");
 });
 
 const coletor = () => {
@@ -438,7 +439,7 @@ test("should refuse a config that is not JSON leaving the config and the ignore 
   writeFileSync(path.join(coreDir("project", repo), CONFIG_NAME), "{ not json", "utf8");
   const antes = fotografia(repo);
   const { io, out } = coletor();
-  assert.throws(() => runtimeVersioning({ root: repo, positional: ["set", "versioned"], io, M: msg, gitIndex: gitProibido }), SyntaxError);
+  assert.throws(() => runtimeVersioning({ root: repo, positional: ["set", "versioned"], io, M: msg, gitIndex: gitProibido }), (erro) => erro instanceof UsageError && erro.key === "fileNotJson");
   assert.deepEqual(out, []);
   assert.deepEqual(fotografia(repo), antes);
 });

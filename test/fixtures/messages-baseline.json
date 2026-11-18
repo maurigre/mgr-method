@@ -11,11 +11,6 @@
     ],
     "agentsAliasNote": "`reviewGate` and `agents.review` are both set: `agents.review` wins. Remove `reviewGate` to keep one source.",
     "agentsEffortNote": "Changing `effort` only takes effect after `mgr update`: it lives in the agent file, and the invocation cannot override it. Changing `model` takes effect on the next invocation.",
-    "agentsEngine": [
-      "  a            model=b  effort=c",
-      "THROWS:TypeError"
-    ],
-    "agentsInherited": "inherited from the session",
     "agentsInheritWarning": [
       "Running on the session model: a. No model is published by default — the list of models belongs to your account, not to this tool. Declare one per intent in `.mgr-core/config.json` to get the benefit.",
       "Running on the session model: x. No model is published by default — the list of models belongs to your account, not to this tool. Declare one per intent in `.mgr-core/config.json` to get the benefit."
@@ -44,16 +39,9 @@
       "written to `agents.a` — b",
       "written to `agents.x` — y"
     ],
-    "agentsSourceConfigured": "configured",
-    "agentsSourceDefault": "default",
     "agentsUnknown": [
       "unknown intent `a` (expected b)",
       "unknown intent `x` (expected y)"
-    ],
-    "agentsUnsupported": "not supported by this engine",
-    "agentsValueFrom": [
-      "a (b)",
-      "x (y)"
     ],
     "agentWritten": [
       "  agent a written to b",
@@ -100,12 +88,6 @@
       "  not overwritten: a exists and was not written by MGR",
       "  not overwritten: x exists and was not written by MGR"
     ],
-    "gateEffortInherited": "session effort",
-    "gateKept": [
-      "  kept: a lost the MGR marker and was left untouched",
-      "  kept: x lost the MGR marker and was left untouched"
-    ],
-    "gateModelInherited": "inherits the session model",
     "gateSkipped": [
       "  a: b not supported by this engine — declared, not applied",
       "  x: y not supported by this engine — declared, not applied"
@@ -196,10 +178,6 @@
       "agents   →   a",
       "agents   →   x"
     ],
-    "planGateEngine": [
-      "  a: model=b effort=c",
-      "  x: model=y effort=2"
-    ],
     "planGateHint": "(one agent per intent; the review runs in its own)",
     "planHooks": [
       "hooks    →   a",
@@ -261,7 +239,6 @@
       "locked in x."
     ],
     "pluginNeedsTty": "`mgr add` requires an interactive terminal: every install is confirmed by a human and there is no bypass flag.",
-    "pluginNoPermissions": "none declared",
     "pluginProposalCategory": [
       "category:    a",
       "category:    x"
@@ -285,10 +262,6 @@
     "pluginProposalOrigin": [
       "origin:      a (b)",
       "origin:      x (y)"
-    ],
-    "pluginProposalPermissions": [
-      "permissions: a",
-      "permissions: x"
     ],
     "pluginProposalTitle": "Plugin skill to install",
     "pluginProposalTrust": [
@@ -565,22 +538,9 @@
       "  gate:    a",
       "  gate:    x"
     ],
-    "statusGateEngine": [
-      "    a: model=b effort=c",
-      "    x: model=y effort=2"
-    ],
-    "statusGateOff": "off (every intent disabled in `agents`)",
-    "statusGateSource": [
-      "    from: a",
-      "    from: x"
-    ],
     "statusInstalledAt": [
       "  at:      a",
       "  at:      x"
-    ],
-    "statusLaws": [
-      "  laws:    a",
-      "  laws:    x"
     ],
     "statusNone": "No MGR installation found (project or global).",
     "statusOldModel": "runtime-launcher (OLD — run `mgr update` to migrate)",
@@ -689,11 +649,6 @@
     ],
     "agentsAliasNote": "`reviewGate` e `agents.review` estão os dois escritos: `agents.review` vence. Apague o `reviewGate` para ficar com uma fonte só.",
     "agentsEffortNote": "Mudar o `effort` só passa a valer depois de `mgr update`: ele vive no arquivo do agente, e a invocação não tem como sobrepô-lo. Mudar o `model` vale já na próxima invocação.",
-    "agentsEngine": [
-      "  a            modelo=b  esforço=c",
-      "THROWS:TypeError"
-    ],
-    "agentsInherited": "herdado da sessão",
     "agentsInheritWarning": [
       "Rodando no modelo da sessão: a. Nenhum modelo é publicado por default — a lista de modelos é da sua conta, não desta ferramenta. Declare um por intenção em `.mgr-core/config.json` para ter o benefício.",
       "Rodando no modelo da sessão: x. Nenhum modelo é publicado por default — a lista de modelos é da sua conta, não desta ferramenta. Declare um por intenção em `.mgr-core/config.json` para ter o benefício."
@@ -722,16 +677,9 @@
       "escrito em `agents.a` — b",
       "escrito em `agents.x` — y"
     ],
-    "agentsSourceConfigured": "configurado",
-    "agentsSourceDefault": "default",
     "agentsUnknown": [
       "intenção `a` desconhecida (esperado b)",
       "intenção `x` desconhecida (esperado y)"
-    ],
-    "agentsUnsupported": "não suportado por este motor",
-    "agentsValueFrom": [
-      "a (b)",
-      "x (y)"
     ],
     "agentWritten": [
       "  agente a gravado em b",
@@ -778,12 +726,6 @@
       "  não sobrescrito: a já existe e não foi escrito pelo MGR",
       "  não sobrescrito: x já existe e não foi escrito pelo MGR"
     ],
-    "gateEffortInherited": "esforço da sessão",
-    "gateKept": [
-      "  preservado: a perdeu o marcador do MGR e não foi tocado",
-      "  preservado: x perdeu o marcador do MGR e não foi tocado"
-    ],
-    "gateModelInherited": "herda o modelo da sessão",
     "gateSkipped": [
       "  a: b não suportado por este motor — declarado, não aplicado",
       "  x: y não suportado por este motor — declarado, não aplicado"
@@ -874,10 +816,6 @@
       "agentes  →   a",
       "agentes  →   x"
     ],
-    "planGateEngine": [
-      "  a: modelo=b esforço=c",
-      "  x: modelo=y esforço=2"
-    ],
     "planGateHint": "(um agente por intenção; a revisão roda no próprio)",
     "planHooks": [
       "hooks    →   a",
@@ -939,7 +877,6 @@
       "travada em x."
     ],
     "pluginNeedsTty": "`mgr add` exige terminal interativo: toda instalação é confirmada por uma pessoa e não há flag de bypass.",
-    "pluginNoPermissions": "nenhuma declarada",
     "pluginProposalCategory": [
       "categoria:   a",
       "categoria:   x"
@@ -963,10 +900,6 @@
     "pluginProposalOrigin": [
       "origem:      a (b)",
       "origem:      x (y)"
-    ],
-    "pluginProposalPermissions": [
-      "permissões:  a",
-      "permissões:  x"
     ],
     "pluginProposalTitle": "Skill plugável a instalar",
     "pluginProposalTrust": [
@@ -1243,22 +1176,9 @@
       "  gate:    a",
       "  gate:    x"
     ],
-    "statusGateEngine": [
-      "    a: modelo=b esforço=c",
-      "    x: modelo=y esforço=2"
-    ],
-    "statusGateOff": "desligado (todas as intenções desligadas em `agents`)",
-    "statusGateSource": [
-      "    origem: a",
-      "    origem: x"
-    ],
     "statusInstalledAt": [
       "  em:      a",
       "  em:      x"
-    ],
-    "statusLaws": [
-      "  leis:    a",
-      "  leis:    x"
     ],
     "statusNone": "Nenhuma instalação MGR encontrada (projeto ou global).",
     "statusOldModel": "runtime-launcher (ANTIGO — rode `mgr update` para migrar)",

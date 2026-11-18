@@ -135,7 +135,7 @@ test("should keep the runtime out of git status and print the default lines on a
   assert.equal(resultado.code, 0, resultado.out);
   assert.equal(readFileSync(projetoAlvo.path(IGNORE), "utf8"), TEXTO_IGNORE);
   assert.deepEqual(sobOrRuntime(statusDoGit(projetoAlvo.repo)), []);
-  assert.ok(tem(resultado.out, msg.planRuntimeUnversioned(msg.runtimeSourceDefault)), resultado.out);
+  assert.ok(tem(resultado.out, msg.planRuntimeLine("unversioned", "default")), resultado.out);
   assert.ok(tem(resultado.out, msg.runtimeDefaultApplied), resultado.out);
   assert.ok(!("runtimeVersioning" in lerConfig(projetoAlvo)));
 });
@@ -149,14 +149,14 @@ test("should leave the runtime files untracked and write no ignore file when ver
   assert.ok(statusDoGit(projetoAlvo.repo).includes("?? .mgr-core/runtime/package.json"));
 });
 
-for (const [valor, plano] of [["versioned", msg.planRuntimeVersioned], ["unversioned", msg.planRuntimeUnversioned]]) {
+for (const valor of ["versioned", "unversioned"]) {
   test(`should announce the recorded ${valor} choice on install and keep config.json byte for byte`, () => {
     const projetoAlvo = projeto();
     gravaConfig(projetoAlvo, { runtimeVersioning: valor });
     const antes = bytes(projetoAlvo.path(CONFIG));
     const resultado = instala(projetoAlvo);
     assert.equal(resultado.code, 0, resultado.out);
-    assert.ok(tem(resultado.out, plano(msg.runtimeSourceRecorded)), resultado.out);
+    assert.ok(tem(resultado.out, msg.planRuntimeLine(valor, "recorded")), resultado.out);
     assert.equal(bytes(projetoAlvo.path(CONFIG)), antes);
   });
 }
@@ -167,8 +167,8 @@ test("should neither ask nor write the ignore file on a global install", () => {
   assert.equal(resultado.code, 0, resultado.out);
   assert.ok(existsSync(path.join(projetoAlvo.home, RUNTIME)));
   assert.ok(!existsSync(path.join(projetoAlvo.home, IGNORE)));
-  assert.ok(!tem(resultado.out, msg.planRuntimeUnversioned(msg.runtimeSourceDefault)));
-  assert.ok(!tem(resultado.out, msg.planRuntimeVersioned(msg.runtimeSourceDefault)));
+  assert.ok(!tem(resultado.out, msg.planRuntimeLine("unversioned", "default")));
+  assert.ok(!tem(resultado.out, msg.planRuntimeLine("versioned", "default")));
   assert.ok(!tem(resultado.out, msg.runtimeDefaultApplied));
 });
 
@@ -197,8 +197,8 @@ for (const valor of ["unversioned", "versioned"]) {
     assert.equal(resultado.code, 0, resultado.out);
     const ausentes = [
       msg.runtimeVersioningNew(PACOTE),
-      msg.planRuntimeUnversioned(msg.runtimeSourceRecorded),
-      msg.planRuntimeVersioned(msg.runtimeSourceRecorded),
+      msg.planRuntimeLine("unversioned", "recorded"),
+      msg.planRuntimeLine("versioned", "recorded"),
       msg.runtimeIgnoreToWrite(IGNORE),
       msg.runtimeIgnoreToRewrite(IGNORE),
       msg.runtimeIgnoreToRemove(IGNORE),
@@ -407,8 +407,8 @@ test("should report one defect when the choice is unversioned by default and the
   assert.deepEqual(achados.map(recorte), [{
     severity: DEFECT,
     file: IGNORE,
-    expected: "o arquivo de ignorar como o metodo o grava (runtimeVersioning: unversioned)",
-    found: "ausente",
+    expected: "the ignore file as the method writes it (runtimeVersioning: unversioned)",
+    found: "absent",
   }]);
 });
 
@@ -421,8 +421,8 @@ test("should report one defect when the choice is unversioned and the ignore fil
   assert.deepEqual(achados.map(recorte), [{
     severity: DEFECT,
     file: IGNORE,
-    expected: "o arquivo de ignorar como o metodo o grava (runtimeVersioning: unversioned)",
-    found: "difere do que o metodo grava",
+    expected: "the ignore file as the method writes it (runtimeVersioning: unversioned)",
+    found: "differs from what the method writes",
   }]);
 });
 
@@ -435,8 +435,8 @@ test("should report one defect when the choice is versioned and the ignore file 
   assert.deepEqual(achados.map(recorte), [{
     severity: DEFECT,
     file: IGNORE,
-    expected: "sem arquivo de ignorar (runtimeVersioning: versioned)",
-    found: "presente",
+    expected: "no ignore file (runtimeVersioning: versioned)",
+    found: "present",
   }]);
 });
 
@@ -448,8 +448,8 @@ test("should report one defect when the recorded value is invalid", () => {
   assert.deepEqual(achados.map(recorte), [{
     severity: DEFECT,
     file: CONFIG,
-    expected: "runtimeVersioning: versioned | unversioned, ou ausente",
-    found: "valor \"Versioned\"",
+    expected: "runtimeVersioning: versioned | unversioned, or absent",
+    found: "value \"Versioned\"",
   }]);
 });
 

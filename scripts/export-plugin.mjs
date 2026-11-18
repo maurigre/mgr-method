@@ -11,7 +11,8 @@
 import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { aggregateChecksum, assertValidManifest, MANIFEST_NAME } from "../src/plugin.js";
+import { aggregateChecksum, MANIFEST_NAME } from "../src/plugin.js";
+import { assertValidManifest } from "../src/plugin-installer.js";
 import { ARCH_RULES_TOKEN, USER_LANGUAGE_FALLBACK, USER_LANGUAGE_TOKEN } from "../src/catalog.js";
 import { FRONTMATTER_RE } from "../src/adapters.js";
 

@@ -13,6 +13,7 @@
 // Dado puro, sem IO: mesmo padrão de `checkSkill` em src/validator.js.
 import claudeCode from "./claude-code.js";
 import copilot from "./copilot.js";
+import { UsageError } from "../errors.js";
 
 const ENGINES = { "claude-code": claudeCode, copilot };
 
@@ -21,7 +22,7 @@ export const ids = () => Object.keys(ENGINES).sort();
 export function get(id) {
   const engine = ENGINES[id];
   if (!engine) {
-    throw new Error(`unknown engine: ${id} (expected ${ids().join(" | ")})`);
+    throw new UsageError("unknownEngine", [id, ids()]);
   }
   return engine;
 }

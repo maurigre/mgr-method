@@ -11,18 +11,28 @@
 import { Buffer } from "node:buffer";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { aggregateChecksum, assertValidManifest, MANIFEST_NAME, parseSkillName, sha256 } from "./plugin.js";
+import { aggregateChecksum, isSkillName, manifestProblems, MANIFEST_NAME, parseSkillName, sha256 } from "./plugin.js";
 import { listRegistries, resolve } from "./registry.js";
 import { LOCKFILE_NAME, readLockfile, removeSkill, upsertSkill, writeLockfile } from "./lockfile.js";
 import { readManifest } from "./manifest.js";
-import { applyToEngine, resolveInstallDirName } from "./adapters.js";
+import { applyToEngine, copilotWarnings, resolveInstallDirName } from "./adapters.js";
+import { InvariantError, UsageError } from "./errors.js";
+
+// Lanca o erro localizado quando o manifest tem problemas; o plugin.js fica autonomo (vendorizado).
+export function assertValidManifest(manifest) {
+  const problems = manifestProblems(manifest);
+  if (problems.length) {
+    throw new UsageError("pluginManifestFileInvalid", [MANIFEST_NAME, problems]);
+  }
+  return manifest;
+}
 
 // Exit code próprio do cancelamento pelo usuário (contrato de CLI da spec seção 5).
 export const CANCELLED_EXIT_CODE = 2;
 
-export class InstallCancelled extends Error {
+export class InstallCancelled extends UsageError {
   constructor(name) {
-    super(`installation cancelled by the user: ${name}`);
+    super("installCancelled", [name]);
     this.name = "InstallCancelled";
     this.exitCode = CANCELLED_EXIT_CODE;
   }
@@ -33,7 +43,7 @@ export class InstallCancelled extends Error {
 export function assertSafePath(filePath) {
   const normalized = path.normalize(filePath);
   if (path.isAbsolute(normalized) || normalized.split(/[\\/]/).includes("..")) {
-    throw new Error(`unsafe file path in registry entry: ${JSON.stringify(filePath)}`);
+    throw new UsageError("unsafeRegistryFilePath", [filePath]);
   }
   return normalized;
 }
@@ -44,20 +54,25 @@ export async function download(entry, { fetchImpl }) {
   const files = [];
   for (const file of entry.files) {
     const filePath = assertSafePath(file.path);
-    const response = await fetchImpl(file.url);
+    let response;
+    try {
+      response = await fetchImpl(file.url);
+    } catch (cause) {
+      throw new UsageError("skillFileUnreachable", [file.url], { cause });
+    }
     if (!response.ok) {
-      throw new Error(`skill file unavailable: ${file.url} (HTTP ${response.status})`);
+      throw new UsageError("skillFileUnavailable", [file.url, response.status]);
     }
     const content = Buffer.from(await response.arrayBuffer());
     const digest = sha256(content);
     if (digest !== file.sha256) {
-      throw new Error(`checksum mismatch for ${filePath}: expected ${file.sha256}, got ${digest}`);
+      throw new UsageError("fileChecksumMismatch", [filePath, file.sha256, digest]);
     }
     files.push({ path: filePath, content });
   }
   const checksum = aggregateChecksum(files);
   if (checksum !== entry.checksum) {
-    throw new Error(`aggregate checksum mismatch for ${entry.name}: expected ${entry.checksum}, got ${checksum}`);
+    throw new UsageError("aggregateChecksumMismatch", [entry.name, entry.checksum, checksum]);
   }
   return { files, checksum };
 }
@@ -68,11 +83,19 @@ export async function download(entry, { fetchImpl }) {
 export function manifestFromFiles(files, entry) {
   const file = files.find((candidate) => candidate.path === MANIFEST_NAME);
   if (!file) {
-    throw new Error(`skill package has no ${MANIFEST_NAME}: ${entry.name}`);
+    throw new UsageError("skillPackageNoManifest", [MANIFEST_NAME, entry.name]);
   }
-  const manifest = assertValidManifest(JSON.parse(file.content.toString("utf8")));
+  let conteudo;
+  try {
+    conteudo = JSON.parse(file.content.toString("utf8"));
+  } catch (cause) {
+    throw new UsageError("skillPackageManifestNotJson", [MANIFEST_NAME, entry.name], { cause });
+  }
+  const manifest = assertValidManifest(conteudo);
   if (manifest.name !== entry.name || manifest.version !== entry.version) {
-    throw new Error(`${MANIFEST_NAME} does not match the registry index: index has ${entry.name}@${entry.version}, manifest has ${manifest.name}@${manifest.version}`);
+    throw new UsageError("pluginManifestIndexMismatch", [
+      MANIFEST_NAME, entry.name, entry.version, manifest.name, manifest.version,
+    ]);
   }
   return manifest;
 }
@@ -92,7 +115,15 @@ function writeSkillFiles(installedDir, files) {
 function hasCollision(lockfile, name) {
   const { skill } = parseSkillName(name);
   return Object.keys(lockfile?.skills || {})
-    .some((locked) => locked !== name && parseSkillName(locked).skill === skill);
+    .some((locked) => locked !== name && nomeCurtoTravado(locked) === skill);
+}
+
+// O nome vem do lockfile, arquivo do usuario: fora de forma e erro de uso que nomeia o arquivo,
+// nunca o `Error` canonico ingles do `parseSkillName` (que `renderError` mostraria como defeito do
+// MGR). O `src/plugin.js` continua autonomo; a frase mostrada e da camada de idioma (QUAL-8).
+function nomeCurtoTravado(locked) {
+  if (!isSkillName(locked)) throw new UsageError("lockfileSkillNameInvalid", [LOCKFILE_NAME, JSON.stringify(locked)]);
+  return parseSkillName(locked).skill;
 }
 
 const displayPath = (repo, absolute) => {
@@ -141,15 +172,13 @@ const classifyAll = (context, dir, name) => context.targets.map((target) => {
 function refuseForeign(classified, name) {
   const foreign = classified.find((item) => item.kind === TARGET_FOREIGN);
   if (foreign) {
-    throw new Error(
-      `cannot install ${name}: ${foreign.installedDir} already holds another skill (no ${MANIFEST_NAME} for ${name})`,
-    );
+    throw new UsageError("pluginTargetHoldsOtherSkill", [name, foreign.installedDir, MANIFEST_NAME]);
   }
 }
 
 async function installOne(name, context, state) {
   if (state.pending.has(name)) {
-    throw new Error(`circular "extends" chain involving ${name}`);
+    throw new UsageError("pluginExtendsCircular", [name]);
   }
   const installedBefore = state.installed.find((result) => result.name === name);
   if (installedBefore) return installedBefore;
@@ -157,7 +186,7 @@ async function installOne(name, context, state) {
   const { entry, category, origin } = await resolve(name, context.registries, { fetchImpl: context.fetchImpl });
   const locked = state.lockfile?.skills?.[name];
   if (locked && locked.version !== entry.version) {
-    throw new Error(`${name} is locked at ${locked.version}; updating a plugin is not supported yet (remove it first)`);
+    throw new UsageError("pluginLockedAtVersion", [name, locked.version]);
   }
 
   const { files, checksum } = await download(entry, { fetchImpl: context.fetchImpl });
@@ -188,10 +217,7 @@ async function installOne(name, context, state) {
   const collision = alvosClassificados.find((item) => item.kind === TARGET_METHOD_SKILL);
   if (collision) {
     if (typeof context.resolveCollision !== "function") {
-      throw new Error(
-        `${name} collides with the method skill "${collision.methodSkill}" in ${collision.installedDir}. `
-        + "Resolving it requires an interactive choice; run `mgr add` instead",
-      );
+      throw new UsageError("pluginCollidesWithMethodSkill", [name, collision.methodSkill, collision.installedDir]);
     }
     const alongsideDir = resolveInstallDirName(parseSkillName(name).skill, origin.name, true);
     const choice = await context.resolveCollision({
@@ -232,23 +258,26 @@ async function installOne(name, context, state) {
   if (manifest.extends) lockEntry.extends = manifest.extends;
 
   state.lockfile = upsertSkill(state.lockfile, name, lockEntry, origin);
-  const result = { name, dir, dirs, entry: lockEntry, warnings: warningsOf(applied) };
+  const result = { name, dir, dirs, entry: lockEntry, warnings: warningsOf(applied, manifest) };
   state.installed.push(result);
   return result;
 }
 
-const warningsOf = (applied) => Object.entries(applied)
-  .flatMap(([engine, block]) => (block.warnings || []).map((warning) => ({ engine, warning })));
+// Para a tela, o aviso é descritor (renderizado no idioma escolhido); o `applied.warnings`
+// gravado no lockfile segue em inglês canônico (DT-23). Só o copilot degrada hoje.
+const warningsOf = (applied, manifest) => Object.entries(applied)
+  .flatMap(([engine, block]) => (block.warnings?.length ? copilotWarnings(manifest) : [])
+    .map((warning) => ({ engine, warning })));
 
 // Instala a skill plugável (e a base, quando o manifest declara `extends` — DT-5).
 // `targets` = [{engine, dir}] (pastas dos motores, vindas da borda); `confirm` = callback
 // obrigatório de confirmação humana; `fetchImpl` = fetch injetado (Humble Object).
 export async function add(name, { repo, coreDir, targets, fetchImpl, confirm, resolveCollision }) {
   if (typeof confirm !== "function") {
-    throw new Error("mgr add requires a human confirmation callback (there is no bypass in this phase)");
+    throw new InvariantError("addRequiresConfirmCallback");
   }
   if (!targets?.length) {
-    throw new Error("mgr add requires at least one engine target");
+    throw new UsageError("addRequiresTarget");
   }
   const context = {
     repo, targets, fetchImpl, confirm, resolveCollision,
@@ -271,13 +300,13 @@ export function remove(name, { repo, targets }) {
   const lockfile = readLockfile(repo);
   const entry = lockfile?.skills?.[name];
   if (!entry) {
-    throw new Error(`skill not installed as a plugin: ${name}`);
+    throw new UsageError("pluginNotInstalled", [name]);
   }
   const dependents = Object.entries(lockfile.skills)
     .filter(([, locked]) => locked.extends === name)
     .map(([dependent]) => dependent);
   if (dependents.length) {
-    throw new Error(`${name} is extended by ${dependents.join(", ")}; remove the extending skill first`);
+    throw new UsageError("pluginHasDependents", [name, dependents]);
   }
 
   const removed = [];
@@ -313,7 +342,9 @@ export async function restore({ repo, targets, fetchImpl }) {
   for (const [name, locked] of Object.entries(lockfile.skills)) {
     const { entry } = await resolve(name, registries, { fetchImpl });
     if (entry.version !== locked.version || entry.checksum !== locked.checksum) {
-      throw new Error(`${name} does not match ${LOCKFILE_NAME}: locked ${locked.version} (${locked.checksum}), registry serves ${entry.version} (${entry.checksum})`);
+      throw new UsageError("lockfileEntryMismatch", [
+        name, LOCKFILE_NAME, locked.version, locked.checksum, entry.version, entry.checksum,
+      ]);
     }
     const { files } = await download(entry, { fetchImpl });
     const manifest = manifestFromFiles(files, entry);
@@ -341,7 +372,7 @@ export async function restore({ repo, targets, fetchImpl }) {
 function lockedDirOf(lockfile, baseName, extendingName) {
   const base = lockfile.skills[baseName];
   if (!base) {
-    throw new Error(`${LOCKFILE_NAME} is inconsistent: ${extendingName} extends ${baseName}, which is not locked`);
+    throw new UsageError("lockfileExtendsNotLocked", [LOCKFILE_NAME, extendingName, baseName]);
   }
   return base.dir;
 }

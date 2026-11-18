@@ -52,8 +52,8 @@ export function instalacaoLimpaDoisMotores({ arch = "layered", language = "java"
  * Instalacao com os tres defeitos que a fatia nasceu para achar, plantados um a um:
  * skill orfa em disco, manifesto atras do pacote, e hook apontando para binario inexistente.
  */
-export function instalacaoComDefeitos() {
-  const repo = instalacaoLimpa();
+export function instalacaoComDefeitos({ userLanguage } = {}) {
+  const repo = instalacaoLimpa({ userLanguage });
   const skills = path.join(repo, ".claude", "skills");
 
   // A orfa sai de uma skill JA INSTALADA, nao da fonte crua: e o caso real (resto de uma instalacao

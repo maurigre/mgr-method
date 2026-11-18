@@ -8,7 +8,7 @@ import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const BLOCO = ["<!-- >>> mgr-method (managed block: mgr uninstall removes it) >>> -->", "linha um", "linha dois", "<!-- <<< mgr-method <<< -->"];
 const ABERTURA = BLOCO[0];
-const MSG_SEM_FECHO = (file) => `bloco do mgr-method sem linha de fecho em ${file}; corrija o arquivo à mão`;
+const MSG_SEM_FECHO = (file) => `mgr-method block has no closing line in ${file}; fix the file by hand`;
 
 const diretorioTemporario = () => tempDir("mgr-managed-block-");
 

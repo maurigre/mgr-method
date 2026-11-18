@@ -5,6 +5,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "../src/plan-parser.js";
 import { check, checkConsistency, checkPresence } from "../src/plan-rules.js";
+import { findingTexts } from "../src/findings.js";
+import { getMessages } from "../src/messages.js";
+import { renderText } from "../src/ui-text.js";
 
 const plano = (corpo, comMarcador = true) =>
   parse(`${comMarcador ? "<!-- mgr-plan-format: 1 -->\n" : ""}${corpo}`);
@@ -16,7 +19,7 @@ test("PLAN-1 acusa dependência para task que não existe", () => {
   assert.equal(finding.code, "PLAN-1");
   assert.equal(finding.task, "P0.1");
   assert.match(finding.message, /P9\.9/);
-  assert.match(finding.remediation, /Ids válidos aqui: P0\.1/);
+  assert.match(renderText(getMessages("pt-BR"), findingTexts(finding).remediation), /Ids válidos aqui: P0\.1/);
 });
 
 test("PLAN-1 não acusa dependência que existe", () => {
@@ -77,7 +80,7 @@ test("PLAN-0 avisa sobre o formato não declarado e NÃO reprova", () => {
   const findings = checkPresence(legado, "f");
   assert.deepEqual(codigos(findings), ["PLAN-0"]);
   assert.equal(findings[0].severity, "warning");
-  assert.match(findings[0].remediation, /nenhum plano existente é reprovado/);
+  assert.match(renderText(getMessages("pt-BR"), findingTexts(findings[0]).remediation), /nenhum plano existente é reprovado/);
 });
 
 test("PLAN-4 NÃO roda sem marcador, mesmo com task sem done_when", () => {
@@ -89,11 +92,11 @@ test("PLAN-4 roda com marcador e nomeia o que falta", () => {
   const semNada = plano("### P0.1 — a\n");
   const [finding] = checkPresence(semNada, "f");
   assert.equal(finding.code, "PLAN-4");
-  assert.match(finding.message, /sem done_when e sem artifact/);
-  assert.match(finding.remediation, /QUANTIDADE exatos \(L4\.3\)/);
+  assert.match(renderText(getMessages("pt-BR"), findingTexts(finding).message), /sem done_when e sem artifact/);
+  assert.match(renderText(getMessages("pt-BR"), findingTexts(finding).remediation), /QUANTIDADE exatos \(L4\.3\)/);
 
   const soArtifact = plano("### P0.1 — a\n- **artifact:** 1 módulo\n");
-  assert.match(checkPresence(soArtifact, "f")[0].message, /sem done_when$/);
+  assert.match(renderText(getMessages("pt-BR"), findingTexts(checkPresence(soArtifact, "f")[0]).message), /sem done_when$/);
 });
 
 test("PLAN-4 não acusa task completa", () => {
@@ -106,7 +109,7 @@ test("PLAN-5 avisa quando bloqueante depende de complementar", () => {
   const aviso = checkPresence(parsed, "f").find((f) => f.code === "PLAN-5");
   assert.ok(aviso);
   assert.equal(aviso.severity, "warning");
-  assert.match(aviso.message, /P0 depende de `P2\.1`, que é P2/);
+  assert.match(renderText(getMessages("pt-BR"), findingTexts(aviso).message), /P0 depende de `P2\.1`, que é P2/);
 });
 
 test("PLAN-5 não avisa na ordem natural", () => {
@@ -179,7 +182,7 @@ test("PLAN-6 avisa sobre status fora do vocabulário, e só sobre ele", () => {
   assert.equal(aviso.code, "PLAN-6");
   assert.equal(aviso.severity, "warning", "campo novo nunca reprova plano escrito antes dele");
   assert.equal(aviso.task, "P0.1");
-  assert.match(aviso.message, /status `concluído` não é `todo` nem `done`/);
+  assert.match(renderText(getMessages("pt-BR"), findingTexts(aviso).message), /status `concluído` não é `todo` nem `done`/);
 });
 
 test("PLAN-6 vale também no plano legado, e continua aviso", () => {

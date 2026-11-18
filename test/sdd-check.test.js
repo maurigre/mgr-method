@@ -400,3 +400,150 @@ test("should rethrow a read error other than ENOTDIR", () => {
 
   assert.throws(() => describeSdd(temporario(), { exists: () => true, listMd }), erro);
 });
+
+const FONTE_DE_QUALIDADE = [
+  "# Quality",
+  "## Universal rules (language-agnostic) — they reprove",
+  "1. (QUAL-1) rule. 2. (SEC-1) rule. 3. (PERF-1) rule.",
+  "## Language profile (record only the project's one) — they reprove",
+  "1. (TS-1) profile rule. 2. (QUAL-99) a mention outside the universal section.",
+].join("\n");
+
+function instalacaoComGuia(guia, { manifesto = { architecture: "layered", skillsDirs: [".claude/skills"] }, semArquivo = null, qualidade = FONTE_DE_QUALIDADE, arquitetura = "(INV-1) rule.", diretorioNoLugarDe = null, guiaComoDiretorio = false, manifestoComoDiretorio = false } = {}) {
+  const raiz = comDocs(["CONSTITUTION.md"]);
+  const caminhoDoGuia = path.join(raiz, "docs", "sdd", "09-review-rules.md");
+  if (guiaComoDiretorio) mkdirSync(caminhoDoGuia);
+  else if (guia !== null) writeFileSync(caminhoDoGuia, guia);
+  mkdirSync(path.join(raiz, ".mgr-core"), { recursive: true });
+  const caminhoDoManifesto = path.join(raiz, ".mgr-core", "manifest.json");
+  if (manifestoComoDiretorio) mkdirSync(caminhoDoManifesto);
+  else writeFileSync(caminhoDoManifesto, typeof manifesto === "string" ? manifesto : JSON.stringify(manifesto));
+  const fontes = {
+    "_shared/quality/quality-rules.md": qualidade,
+    "_shared/arch/cross-cutting-rules.md": "1. (DES-1) rule. 2. (PAT-1) rule.",
+    "arch-layered/SKILL.md": arquitetura,
+  };
+  for (const [relativo, texto] of Object.entries(fontes)) {
+    if (relativo === semArquivo) continue;
+    const arquivo = path.join(raiz, ".claude", "skills", ...relativo.split("/"));
+    mkdirSync(path.dirname(arquivo), { recursive: true });
+    if (relativo === diretorioNoLugarDe) mkdirSync(arquivo);
+    else writeFileSync(arquivo, texto);
+  }
+  return raiz;
+}
+
+const avisosDoGuia = (raiz) => inspectSdd(raiz).warnings.filter(({ code }) => code.startsWith("guide-"));
+
+test("should warn guide-behind-source with exactly the universal ids the guide lacks in stable order", () => {
+  const raiz = instalacaoComGuia("(QUAL-1) (DES-1) (INV-1)");
+  assert.deepEqual(avisosDoGuia(raiz), [{ code: "guide-behind-source", file: "09-review-rules.md", missing: ["SEC-1", "PERF-1", "PAT-1"] }]);
+});
+
+test("should not warn when the guide has every universal id of the sources", () => {
+  const raiz = instalacaoComGuia("QUAL-1 SEC-1 PERF-1 DES-1 PAT-1 INV-1");
+  assert.deepEqual(avisosDoGuia(raiz), []);
+});
+
+test("should ignore language profile ids and ids outside the universal section of the quality source", () => {
+  const raiz = instalacaoComGuia("QUAL-1 SEC-1 PERF-1 DES-1 PAT-1 INV-1");
+  const resultado = inspectSdd(raiz);
+  assert.ok(resultado.ok);
+  assert.ok(!JSON.stringify(resultado.warnings).includes("TS-1"));
+  assert.ok(!JSON.stringify(resultado.warnings).includes("QUAL-99"));
+});
+
+test("should keep the sdd-check exit code at 0 when the guide is behind the source", () => {
+  const raiz = instalacaoComGuia("QUAL-1");
+  const { io } = coletor();
+  assert.equal(sddCheck({ root: raiz, io, M: getMessages("en"), flags: { json: true } }), 0);
+});
+
+const FONTE_DE_ARQUITETURA = path.join(".claude", "skills", "arch-layered", "SKILL.md");
+const FONTE_DE_QUALIDADE_INSTALADA = path.join(".claude", "skills", "_shared", "quality", "quality-rules.md");
+const SEM_CAMPO = (file) => ({ code: "guide-source-unavailable", file });
+const COM_CAMPO = (field) => ({ code: "guide-source-unavailable", file: ".mgr-core/manifest.json", field });
+
+for (const [caso, opcoes, aviso] of [
+  ["an unreadable manifest", { manifesto: "{ nao e json" }, SEM_CAMPO(".mgr-core/manifest.json")],
+  ["a manifest whose root is a string", { manifesto: "\"x\"" }, SEM_CAMPO(".mgr-core/manifest.json")],
+  ["a manifest whose root is a number", { manifesto: "7" }, SEM_CAMPO(".mgr-core/manifest.json")],
+  ["a manifest whose root is an array", { manifesto: "[1]" }, SEM_CAMPO(".mgr-core/manifest.json")],
+  ["a manifest whose root is null", { manifesto: "null" }, SEM_CAMPO(".mgr-core/manifest.json")],
+  ["a manifest that exists but cannot be read", { manifestoComoDiretorio: true }, SEM_CAMPO(".mgr-core/manifest.json")],
+  ["an architecture given as an array", { manifesto: { architecture: ["layered"], skillsDirs: [".claude/skills"] } }, COM_CAMPO("architecture")],
+  ["a review guide that cannot be read", { guiaComoDiretorio: true }, SEM_CAMPO(path.join("docs", "sdd", "09-review-rules.md"))],
+  ["a manifest without architecture", { manifesto: { skillsDirs: [".claude/skills"] } }, COM_CAMPO("architecture")],
+  ["an empty architecture", { manifesto: { architecture: "", skillsDirs: [".claude/skills"] } }, COM_CAMPO("architecture")],
+  ["an architecture outside the catalog", { manifesto: { architecture: "mvc", skillsDirs: [".claude/skills"] } }, COM_CAMPO("architecture")],
+  ["an architecture that tries to leave the skills folder", { manifesto: { architecture: "x/../../..", skillsDirs: [".claude/skills"] } }, COM_CAMPO("architecture")],
+  ["a manifest whose skills dirs have no _shared", { manifesto: { architecture: "layered", skillsDirs: ["nada"] } }, COM_CAMPO("skillsDirs")],
+  ["skills dirs that are not an array", { manifesto: { architecture: "layered", skillsDirs: ".claude/skills" } }, COM_CAMPO("skillsDirs")],
+  ["skills dirs whose only element is not a string", { manifesto: { architecture: "layered", skillsDirs: [7] } }, COM_CAMPO("skillsDirs")],
+  ["a deleted source file", { semArquivo: "arch-layered/SKILL.md" }, SEM_CAMPO(FONTE_DE_ARQUITETURA)],
+  ["a source path that is a directory", { diretorioNoLugarDe: "arch-layered/SKILL.md" }, SEM_CAMPO(FONTE_DE_ARQUITETURA)],
+  ["a quality source without the universal section", { qualidade: "# Quality\n(QUAL-1) (SEC-1)" }, SEM_CAMPO(FONTE_DE_QUALIDADE_INSTALADA)],
+]) {
+  test(`should warn guide-source-unavailable naming what failed for ${caso}`, () => {
+    const raiz = instalacaoComGuia("QUAL-1", opcoes);
+    assert.deepEqual(avisosDoGuia(raiz), [aviso]);
+  });
+}
+
+test("should take the universal ids up to the end of the file when the universal section is the last one", () => {
+  const raiz = instalacaoComGuia("DES-1 PAT-1 INV-1", { qualidade: "# Quality\n## Universal rules\n(QUAL-1) (SEC-1)" });
+  assert.deepEqual(avisosDoGuia(raiz), [{ code: "guide-behind-source", file: "09-review-rules.md", missing: ["QUAL-1", "SEC-1"] }]);
+});
+
+test("should ignore an id of another family that a source only mentions", () => {
+  const raiz = instalacaoComGuia("QUAL-1 SEC-1 PERF-1 DES-1 PAT-1 INV-1", { arquitetura: "(INV-1) rule; see also (DES-9) and (TST-4)." });
+  assert.deepEqual(avisosDoGuia(raiz), []);
+});
+
+test("should order the missing ids of one family by number, not as text", () => {
+  const qualidade = "# Quality\n## Universal rules\n(QUAL-1) (SEC-10) (SEC-2)\n## Language profile\n";
+  const raiz = instalacaoComGuia("QUAL-1 DES-1 PAT-1 INV-1", { qualidade });
+  assert.deepEqual(avisosDoGuia(raiz), [{ code: "guide-behind-source", file: "09-review-rules.md", missing: ["SEC-2", "SEC-10"] }]);
+});
+
+test("should read the sources from the first skills dir that has them when an earlier one does not", () => {
+  const raiz = instalacaoComGuia("QUAL-1", { manifesto: { architecture: "layered", skillsDirs: ["sem-fontes", ".claude/skills"] } });
+  mkdirSync(path.join(raiz, "sem-fontes"), { recursive: true });
+  assert.deepEqual(avisosDoGuia(raiz), [{ code: "guide-behind-source", file: "09-review-rules.md", missing: ["SEC-1", "PERF-1", "DES-1", "PAT-1", "INV-1"] }]);
+});
+
+test("should not check the guide when the installation has no review guide yet", () => {
+  const raiz = instalacaoComGuia(null);
+  assert.deepEqual(avisosDoGuia(raiz), []);
+});
+
+test("should not check the guide against any source when there is no installation", () => {
+  const raiz = comDocs(["CONSTITUTION.md", "09-review-rules.md"]);
+  assert.deepEqual(avisosDoGuia(raiz), []);
+});
+
+for (const idioma of ["en", "pt-BR"]) {
+  const tabela = getMessages(idioma);
+
+  test(`should print the guide-behind-source warning to stderr in ${idioma} through the language layer`, () => {
+    const raiz = instalacaoComGuia("QUAL-1 DES-1 INV-1");
+    const { io, out, err } = coletor();
+    assert.equal(sddCheck({ root: raiz, io, M: tabela, flags: {} }), 0);
+    assert.ok(err.includes(tabela.sddCheckGuideBehindSource("09-review-rules.md", ["SEC-1", "PERF-1", "PAT-1"])), err.join("\n"));
+    assert.equal(out.length, 1);
+  });
+
+  test(`should print the guide-source-unavailable warning to stderr in ${idioma} through the language layer`, () => {
+    const raiz = instalacaoComGuia("QUAL-1", { manifesto: "{ nao e json" });
+    const { io, err } = coletor();
+    assert.equal(sddCheck({ root: raiz, io, M: tabela, flags: {} }), 0);
+    assert.ok(err.includes(tabela.sddCheckGuideSourceUnavailable(".mgr-core/manifest.json")), err.join("\n"));
+  });
+
+  test(`should name the unusable manifest field in the ${idioma} warning`, () => {
+    const raiz = instalacaoComGuia("QUAL-1", { manifesto: { architecture: "mvc", skillsDirs: [".claude/skills"] } });
+    const { io, err } = coletor();
+    assert.equal(sddCheck({ root: raiz, io, M: tabela, flags: {} }), 0);
+    assert.ok(err.includes(tabela.sddCheckGuideSourceUnavailable(".mgr-core/manifest.json", "architecture")), err.join("\n"));
+  });
+}

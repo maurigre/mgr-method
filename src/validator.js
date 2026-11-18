@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import * as bundle from "./bundle.js";
+import { text as say } from "./ui-text.js";
 
 const NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
@@ -69,9 +70,9 @@ function checkOptionalFields(name, meta, { listaYaml = false } = {}) {
 
   if (meta.compatibility !== undefined) {
     if (typeof meta.compatibility !== "string") {
-      problems.push(`${name}: \`compatibility\` tem de ser texto (o padrão define string de 1 a ${MAX_COMPATIBILITY})`);
+      problems.push(say("skillIssueCompatibilityNotText", name, MAX_COMPATIBILITY));
     } else if (meta.compatibility.length > MAX_COMPATIBILITY) {
-      problems.push(`${name}: \`compatibility\` com ${meta.compatibility.length} caracteres (> ${MAX_COMPATIBILITY})`);
+      problems.push(say("skillIssueCompatibilityTooLong", name, meta.compatibility.length, MAX_COMPATIBILITY));
     }
   }
 
@@ -82,14 +83,14 @@ function checkOptionalFields(name, meta, { listaYaml = false } = {}) {
     // Lista YAML tem mensagem própria: quem a escreveu declarou ferramentas, e "presente e vazio"
     // responderia a um erro que ele não cometeu.
     if (listaYaml) {
-      problems.push(`${name}: \`allowed-tools\` como lista YAML: o padrão pede as ferramentas separadas por espaço numa linha`);
+      problems.push(say("skillIssueAllowedToolsYamlList", name));
       return problems;
     }
     if (typeof ferramentas !== "string") {
-      problems.push(`${name}: \`allowed-tools\` tem de ser texto com as ferramentas separadas por espaço`);
+      problems.push(say("skillIssueAllowedToolsNotText", name));
     } else if (SO_ASPAS_OU_VAZIO.test(ferramentas)) {
       // As aspas entram porque o parser não as desfaz, e `""` escaparia do `trim()`.
-      problems.push(`${name}: \`allowed-tools\` presente e vazio: declare as ferramentas ou remova o campo`);
+      problems.push(say("skillIssueAllowedToolsEmpty", name));
     }
   }
 
@@ -99,16 +100,16 @@ function checkOptionalFields(name, meta, { listaYaml = false } = {}) {
     // `metadata:` sem nada abaixo chega como string vazia, e quem escreveu isso pretendia um mapa.
     const vazio = meta.metadata === "" || (typeof meta.metadata === "object" && Object.keys(meta.metadata).length === 0);
     if (vazio) {
-      problems.push(`${name}: \`metadata\` presente e vazio: declare as chaves ou remova o campo`);
+      problems.push(say("skillIssueMetadataEmpty", name));
     } else if (typeof meta.metadata !== "object") {
-      problems.push(`${name}: \`metadata\` tem de ser um mapa de chave e valor, não texto`);
+      problems.push(say("skillIssueMetadataNotMap", name));
     } else {
       // Sequência YAML faz o parser fabricar a chave `"- author"`; profundidade 2 deixa valor vazio
       // como rastro do nível descartado. Nenhum dos dois é mapa string->string.
       const invalida = Object.entries(meta.metadata)
         .find(([chave, valor]) => !CHAVE_DE_MAPA.test(chave) || valor === "");
       if (invalida) {
-        problems.push(`${name}: \`metadata\` tem de ser um mapa de chave e valor de um nível; \`${invalida[0]}\` não é`);
+        problems.push(say("skillIssueMetadataNotOneLevel", name, invalida[0]));
       }
     }
   }
@@ -121,35 +122,35 @@ export function checkSkill(name, text) {
   const problems = [];
   const meta = frontmatter(text);
   if (Object.keys(meta).length === 0) {
-    problems.push(`${name}: sem frontmatter YAML (--- ... ---)`);
+    problems.push(say("skillIssueNoFrontmatter", name));
     return problems;
   }
   // Campo obrigatório lido como mapa é forma inválida: sem esta guarda, `(meta.description || "")`
   // devolve o objeto, `.length` é `undefined`, e uma skill sem descrição utilizável passa.
   for (const campo of ["name", "description"]) {
     if (meta[campo] !== undefined && typeof meta[campo] !== "string") {
-      problems.push(`${name}: \`${campo}\` tem de ser texto, e veio como mapa`);
+      problems.push(say("skillIssueFieldIsMap", name, campo));
     }
   }
   if (problems.length) return problems;
 
   const nm = meta.name || "";
-  if (!nm) problems.push(`${name}: frontmatter sem \`name\``);
+  if (!nm) problems.push(say("skillIssueNoName", name));
   else {
-    if (!NAME_RE.test(nm)) problems.push(`${name}: \`name\` não é kebab-case: ${nm}`);
-    if (nm !== name) problems.push(`${name}: \`name\` (${nm}) difere do nome da pasta`);
+    if (!NAME_RE.test(nm)) problems.push(say("skillIssueNameNotKebab", name, nm));
+    if (nm !== name) problems.push(say("skillIssueNameDiffersFromFolder", name, nm));
   }
   // O retorno antecipado acima garante que `nm` é texto.
   if (nm.length > MAX_NAME) {
-    problems.push(`${name}: \`name\` com ${nm.length} caracteres (> ${MAX_NAME})`);
+    problems.push(say("skillIssueNameTooLong", name, nm.length, MAX_NAME));
   }
   if ((meta.description || "").length < 40) {
-    problems.push(`${name}: \`description\` ausente ou curta demais (o que faz E quando usar)`);
+    problems.push(say("skillIssueDescriptionShort", name));
   }
   problems.push(...checkOptionalFields(name, meta, { listaYaml: LISTA_APOS_FERRAMENTAS.test(text) }));
   const nLines = text.split("\n").length;
   if (nLines > MAX_LINES) {
-    problems.push(`${name}: SKILL.md com ${nLines} linhas (> ${MAX_LINES}); use references/`);
+    problems.push(say("skillIssueTooManyLines", name, nLines, MAX_LINES));
   }
   return problems;
 }
@@ -160,7 +161,7 @@ export function validateSkill(name) {
   try {
     text = readFileSync(md, "utf8");
   } catch {
-    return [`${name}: falta SKILL.md`];
+    return [say("skillIssueMissingSkillMd", name)];
   }
   return checkSkill(name, text);
 }

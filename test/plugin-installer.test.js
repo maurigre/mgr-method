@@ -12,6 +12,9 @@ import { aggregateChecksum, sha256 } from "../src/plugin.js";
 import { addRegistry } from "../src/registry.js";
 import { readLockfile, LOCKFILE_NAME } from "../src/lockfile.js";
 import { tempDir } from "../scripts/lib/tmp.mjs";
+import { UsageError } from "../src/errors.js";
+import { renderError } from "../src/errors.js";
+import { getMessages } from "../src/messages.js";
 
 const INDEX_URL = "https://raw.example/mgr/index.json";
 
@@ -163,6 +166,41 @@ test("checksum agregado divergente e arquivo fora do ar são erros explícitos",
     download(entry, { fetchImpl: async () => ({ ok: false, status: 404 }) }),
     /skill file unavailable: .*HTTP 404/,
   );
+});
+
+test("should throw a UsageError with cause and without the platform text when the skill file fetch rejects", async () => {
+  const entry = {
+    name: "@mgr/junit-clean",
+    files: [{ path: "SKILL.md", url: "https://raw.example/a", sha256: sha256("body") }],
+    checksum: `sha256-${"0".repeat(64)}`,
+  };
+  const original = new TypeError("fetch failed");
+  const error = await download(entry, { fetchImpl: async () => { throw original; } }).then(() => null, (e) => e);
+  assert.ok(error instanceof UsageError);
+  assert.match(error.message, /https:\/\/raw\.example\/a/);
+  assert.doesNotMatch(error.message, /fetch failed/);
+  assert.equal(error.cause, original);
+});
+
+test("should keep the copilot warnings in the lockfile as the English text of today", async () => {
+  const { repo, coreDir, targets } = project();
+  const registry = stubRegistry([{ name: "@mgr/junit-clean" }]);
+  addRegistry(coreDir, { name: "mgr", url: registry.indexUrl, trusted: true });
+  await add("@mgr/junit-clean", { repo, coreDir, targets, fetchImpl: registry.fetchImpl, confirm: accept });
+  assert.deepEqual(readLockfile(repo).skills["@mgr/junit-clean"].applied.copilot.warnings, [
+    'model "Claude Sonnet 4.5" declared but copilot skills have no model field; ignored',
+    'effort "medium" not supported by copilot skills; effort is global only',
+  ]);
+});
+
+test("should name the file and keep the parser text out of the message when the lockfile is not JSON", () => {
+  const { repo } = project();
+  writeFileSync(path.join(repo, LOCKFILE_NAME), "{ not json");
+  const error = (() => { try { readLockfile(repo); } catch (erro) { return erro; } return null; })();
+  assert.ok(error instanceof UsageError);
+  assert.match(error.message, new RegExp(LOCKFILE_NAME.replace(/\./g, "\\.")));
+  assert.doesNotMatch(error.message, /Unexpected token|Expected property name/);
+  assert.ok(error.cause instanceof SyntaxError);
 });
 
 test("path de arquivo do registry fora da pasta da skill é recusado", () => {
@@ -536,4 +574,27 @@ test("installedPluginNames: presença parcial entre motores é divergência, nã
 
   assert.deepEqual(installedPluginNames(lockfile, []), [], "sem alvo algum não conta como presente");
   assert.deepEqual(installedPluginNames(null, targets), []);
+});
+
+test("should refuse an invalid skill name in the lockfile as a usage error naming the lockfile, never as an MGR defect", async () => {
+  const { repo, coreDir, targets } = project();
+  const registry = stubRegistry([{ name: "@mgr/junit-clean" }, { name: "@mgr/diagnosing-bugs" }]);
+  addRegistry(coreDir, { name: "mgr", url: registry.indexUrl, trusted: true });
+  await add("@mgr/junit-clean", { repo, coreDir, targets, fetchImpl: registry.fetchImpl, confirm: accept });
+  const arquivo = path.join(repo, LOCKFILE_NAME);
+  const lockfile = JSON.parse(readFileSync(arquivo, "utf8"));
+  lockfile.skills["nome sem escopo"] = { ...lockfile.skills["@mgr/junit-clean"], dir: "nome-sem-escopo" };
+  writeFileSync(arquivo, JSON.stringify(lockfile, null, 2) + "\n", "utf8");
+
+  let capturado;
+  await assert.rejects(
+    add("@mgr/diagnosing-bugs", { repo, coreDir, targets, fetchImpl: registry.fetchImpl, confirm: accept }),
+    (erro) => { capturado = erro; return erro instanceof UsageError; },
+  );
+  assert.equal(capturado.key, "lockfileSkillNameInvalid");
+  assert.deepEqual(capturado.params, [LOCKFILE_NAME, JSON.stringify("nome sem escopo")]);
+  for (const idioma of ["en", "pt-BR"]) {
+    const tabela = getMessages(idioma);
+    assert.equal(renderError(tabela, capturado), tabela.lockfileSkillNameInvalid(LOCKFILE_NAME, JSON.stringify("nome sem escopo")));
+  }
 });

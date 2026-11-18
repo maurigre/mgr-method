@@ -3,6 +3,7 @@
 import { fileURLToPath } from "node:url";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { UsageError } from "./errors.js";
 
 // Raiz do pacote = um nível acima de src/.
 const PKG_ROOT = fileURLToPath(new URL("../", import.meta.url));
@@ -15,7 +16,7 @@ export const RUNTIME_DIR_NAME = ".mgr-core";
 export function pkgDir(name) {
   const p = path.join(PKG_ROOT, name);
   if (!existsSync(p)) {
-    throw new Error(`recurso do MGR ausente: ${name} (esperado em ${p})`);
+    throw new UsageError("bundleResourceMissing", [name, p]);
   }
   return p;
 }

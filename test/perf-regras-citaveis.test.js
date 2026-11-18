@@ -16,7 +16,7 @@ test("shouldCountThirtyOneIdsWithPerfContiguousFromOneToFive", () => {
   );
   const ids = extractDefinedIds(conteudo);
 
-  assert.equal(ids.length, 31);
+  assert.equal(ids.length, 32);
 
   const perfIds = ids.filter((id) => id.startsWith("PERF-"));
   assert.deepEqual(perfIds, ["PERF-1", "PERF-2", "PERF-3", "PERF-4", "PERF-5"]);
@@ -34,7 +34,7 @@ test("shouldKeepTheFourPreviousPrefixesAtTheirCounts", () => {
   const jsCount = ids.filter((id) => id.startsWith("JS-")).length;
   const secCount = ids.filter((id) => id.startsWith("SEC-")).length;
 
-  assert.equal(qualCount, 7);
+  assert.equal(qualCount, 8);
   assert.equal(jqCount, 8);
   assert.equal(jsCount, 4);
   assert.equal(secCount, 7);
@@ -153,8 +153,8 @@ test("shouldReportWhenTheBaselineDisagreesWithTheFileOnDisk", () => {
     "utf8",
   );
   const baselineAnterior = {
-    total: 26,
-    prefixes: { QUAL: 7, JQ: 8, JS: 4, SEC: 7 },
+    total: 27,
+    prefixes: { QUAL: 8, JQ: 8, JS: 4, SEC: 7 },
   };
 
   const problemas = checkIdCensus(

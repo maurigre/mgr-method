@@ -8,8 +8,10 @@ import * as provValidator from "../prov-validator.js";
 import * as docValidator from "../doc-validator.js";
 import * as planNext from "../plan-next.js";
 import * as specStatusModel from "../spec-status.js";
-import { slugs } from "../artifacts.js";
-import { blocking, summarize } from "../findings.js";
+import { SPECS_DIR, slugs } from "../artifacts.js";
+import { blocking, findingTexts, summarize } from "../findings.js";
+import { getMessages } from "../messages.js";
+import { renderText } from "../ui-text.js";
 
 // `mgr spec validate` — valida artefato do PROJETO do usuário. Não confundir com `mgr validate`,
 // que valida autoria de SKILL.md: são contratos diferentes (ADR-0012). Aqui só há parse de flag,
@@ -29,7 +31,7 @@ export function specValidate({ root, cwd, flags, positional, io, M }) {
   const achados = [...planos.findings, ...specs.findings, ...proveniencia.findings, ...documentacao.findings];
 
   if (!arquivos.length) {
-    io.err(M.errorPrefix(M.specValidateNoSpecs(slug || path.join(repo, "specs"))));
+    io.err(M.errorPrefix(M.specValidateNoSpecs(slug || path.join(repo, SPECS_DIR))));
     return 1;
   }
 
@@ -56,9 +58,10 @@ export function specValidate({ root, cwd, flags, positional, io, M }) {
   let arquivoAtual = null;
   for (const finding of resultado.findings) {
     if (finding.file !== arquivoAtual) { io.out(M.specValidateHeader(finding.file)); arquivoAtual = finding.file; }
-    io.out(M.specValidateItem(finding.code, finding.severity, finding.task, finding.line, finding.message));
-    io.out(M.specValidateFix(finding.remediation));
-    for (const linha of finding.example.split("\n")) io.out(M.specValidateExample(linha));
+    const textos = findingTexts(finding);
+    io.out(M.specValidateItem(finding.code, finding.severity, finding.task, finding.line, renderText(M, textos.message)));
+    io.out(M.specValidateFix(renderText(M, textos.remediation)));
+    for (const linha of renderText(M, textos.example).split("\n")) io.out(M.specValidateExample(linha));
   }
   if (!resultado.findings.length) io.out(M.specValidateOk(resultado.tasks, resultado.criteria, resultado.files.length));
   io.out(M.specValidateSummary(resultado.summary.errors, resultado.summary.warnings));
@@ -94,7 +97,7 @@ export function specNext({ root, cwd, flags, positional, io, M }) {
   const resultado = planNext.nextTask(repo, { slug });
 
   if (resultado.outcome === "no-plan") {
-    io.err(M.errorPrefix(M.specNextNoPlan(slug || path.join(repo, "specs"))));
+    io.err(M.errorPrefix(M.specNextNoPlan(slug || path.join(repo, SPECS_DIR))));
     return 1;
   }
 
@@ -164,11 +167,11 @@ export function specStatus({ root, cwd, flags, positional, io, M }) {
   if (flags.all) {
     const todas = specStatusModel.statusAll(repo);
     if (!todas.length) {
-      io.err(M.errorPrefix(M.specStatusEmpty(path.join(repo, "specs"))));
+      io.err(M.errorPrefix(M.specStatusEmpty(path.join(repo, SPECS_DIR))));
       return 1;
     }
     if (flags.json) {
-      io.out(JSON.stringify({ schemaVersion: 1, basis: specStatusModel.BASIS, warning: M.specStatusWarning, features: todas }, null, 2));
+      io.out(JSON.stringify({ schemaVersion: 1, basis: specStatusModel.BASIS, warning: getMessages("en").specStatusWarning, features: todas }, null, 2));
       return 0;
     }
     for (const feature of todas) io.out(M.specStatusLine(feature.slug, resumoDeStatus(feature)));
@@ -186,7 +189,7 @@ export function specStatus({ root, cwd, flags, positional, io, M }) {
   }
 
   if (flags.json) {
-    io.out(JSON.stringify({ schemaVersion: 1, ...resultado, warning: M.specStatusWarning }, null, 2));
+    io.out(JSON.stringify({ schemaVersion: 1, ...resultado, warning: getMessages("en").specStatusWarning }, null, 2));
     return 0;
   }
 

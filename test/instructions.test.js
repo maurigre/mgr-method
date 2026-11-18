@@ -186,7 +186,7 @@ test("should neither read nor refuse an open block on global uninstall when the 
 
   assert.deepEqual(remover, []);
   assert.deepEqual(readFileSync(file), antes);
-  assert.throws(() => instructionsToRemove(repo, { scope: "project", projectInstalled: true }), /sem linha de fecho/);
+  assert.throws(() => instructionsToRemove(repo, { scope: "project", projectInstalled: true }), /has no closing line/);
 }));
 
 test("should remove the block when scope is global and the project has no own install", comRepo((repo) => {
@@ -314,7 +314,7 @@ const posicao = (saida, mensagem) => normaliza(saida).indexOf(normaliza(mensagem
 const sha256 = (conteudo) => createHash("sha256").update(conteudo).digest("hex");
 const shaDo = (arquivo) => sha256(readFileSync(arquivo));
 const blocoComQuebra = (bloco) => `${bloco.join("\n")}\n`;
-const abertoMensagem = (arquivo) => `bloco do mgr-method sem linha de fecho em ${arquivo}; corrija o arquivo à mão`;
+const abertoMensagem = (arquivo) => `mgr-method block has no closing line in ${arquivo}; fix the file by hand`;
 
 const run = (args, { cwd, home, input = "" }) =>
   spawnSync(process.execPath, [MGR, ...args], { encoding: "utf8", input, cwd, env: ambiente(home) });
@@ -903,5 +903,5 @@ test("should refuse --json with exit 1 and a message naming the missing closing 
 
   assert.deepEqual(out, []);
   assert.equal(err.length, 1);
-  assert.ok(err[0].includes("sem linha de fecho"));
+  assert.ok(err[0].includes("has no closing line"));
 }));

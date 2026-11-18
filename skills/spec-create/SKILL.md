@@ -27,6 +27,14 @@ does this: exit 0 = ready; exit 1 = missing, with the reason). If missing, STOP:
 NEVER infer a constitution or SDD at run time — the constitution is the product of deep
 analysis + human review, not improvisation.
 
+**Review guide behind the method (warn, then offer).** When `sdd-check` reports
+`guide-behind-source`, the review guide lacks citable rules that the installed method sources carry
+(the warning lists them), so the review of this feature could not cite them. Show the user the IDs
+and offer to update the guide before the PRD: rerun the guide steps of `spec-init` ("Review rules
+guide"), which keep the project's own rules and add the missing ones. `guide-source-unavailable`
+means the comparison could not run: say which file it names. Neither blocks the feature; staying
+silent about them does.
+
 ## MGR runtime (mandatory)
 
 `<project-root>` is the nearest directory, from the working directory upward, that contains
@@ -139,6 +147,14 @@ loud and never written does not reach it.
 Context and motivation · goal · use cases (actors + flow) · business rules ·
 constraints · out of scope (explicit) · success metrics · stakeholders.
 Critical rule: the PRD holds only the "what/why" — ZERO technical decisions.
+
+**Product interface language (ask, do not assume).** The PRD records in which language(s) the
+product talks to its own users — the text the product shows: CLI and UI output, error messages —
+and how that language is chosen. This is not `userLanguage`, which governs the conversation with
+the agent and the generated artifacts (`QUAL-7`). When the brief does not answer it, the PRD
+carries `[TO DEFINE]` with the question, and CHECKPOINT 1 asks it. `QUAL-8` is reviewed against
+this answer.
+
 **CHECKPOINT 1 (blocking):** approve / adjust / abort.
 
 ### Phase 3 — Technical spec (`03-spec.md`)

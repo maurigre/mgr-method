@@ -29,8 +29,10 @@ import { buildRuntime, gateSummary, inheritingModel, runtimeIgnoreEffect, runtim
 import { validateAll } from "../src/validator.js";
 import { printBanner } from "../src/banner.js";
 import { PERSONAL_LINES, planGitignore, removeGitignoreBlock, writeGitignoreBlock } from "../src/gitignore.js";
-import { GITIGNORE_DECLINE, GITIGNORE_WRITE, askRuntimeVersioning, collectInstallAnswers, consentEach, consentToGitignore, consentToBlock, BLOCK_WRITE, BLOCK_DECLINE, updateOutcome, consentToRemove, detectUserLanguage, removalMode, removalOutcome, CANCELLED, OUTCOME_KEPT_BY_CHOICE, OUTCOME_KEPT_NO_CONSENT, OUTCOME_REMOVED, REMOVE } from "../src/prompts.js";
+import { GITIGNORE_DECLINE, GITIGNORE_WRITE, askRuntimeVersioning, collectInstallAnswers, consentEach, consentToGitignore, consentToBlock, BLOCK_WRITE, BLOCK_DECLINE, updateOutcome, consentToRemove, detectUserLanguage, removalMode, removalOutcome, CANCELLED, OUTCOME_KEPT_BY_CHOICE, OUTCOME_KEPT_NO_CONSENT, OUTCOME_REMOVED, REMOVE, promptsNoIdioma } from "../src/prompts.js";
 import { getMessages } from "../src/messages.js";
+import { renderError } from "../src/errors.js";
+import { renderText } from "../src/ui-text.js";
 import { instructionsToRemove, planInstructions, removeInstructionBlock, writeInstructionBlock } from "../src/instructions.js";
 import {
   add as addPlugin, remove as removePlugin, restore as restorePlugins,
@@ -60,14 +62,9 @@ const isTTY = process.stdin.isTTY && process.stdout.isTTY;
 // flag --user-language > manifesto (project > global) > locale.
 let M = getMessages(detectUserLanguage(process.env));
 
-// Adaptador real de prompts; o src/prompts.js o recebe injetado (nos testes, um stub).
-const CLACK = {
-  multiselect: p.multiselect,
-  select: p.select,
-  confirm: p.confirm,
-  text: p.text,
-  isCancel: p.isCancel,
-};
+// Adaptador real de prompts, no idioma escolhido; o src/prompts.js o recebe injetado (nos testes,
+// um stub). A tabela e lida na hora da chamada, porque o main refina o `M` depois daqui.
+const CLACK = promptsNoIdioma(p, () => M);
 
 function bail(msg) { p.cancel(msg || M.aborted); process.exit(0); }
 
@@ -121,11 +118,11 @@ async function cmdInstall(flags, positional) {
     process.exit(1);
   }
   printBanner(M);
-  p.intro(pc.bgCyan(pc.black(" mgr install ")));
+  p.intro(pc.bgCyan(pc.black(M.installIntro)));
 
   const found = installer.detect(repo);
   if (found.length) {
-    p.note(found.map((f) => `[${f.scope}] ${f.path} — ${f.count} skill(s)`).join("\n"),
+    p.note(found.map((f) => M.existingSkillsLine(f.scope, f.path, f.count)).join("\n"),
       M.existingSkillsTitle);
   }
 
@@ -327,17 +324,17 @@ async function cmdInstall(flags, positional) {
     decisoesInstr.push({ item, decisao: decisaoBloco });
   }
   if (isTTY && !flags.yes) {
-    const ok = await p.confirm({ message: M.confirmInstall });
+    const ok = await CLACK.confirm({ message: M.confirmInstall });
     if (p.isCancel(ok) || !ok) bail();
   }
 
-  const s = p.spinner();
-  s.start(M.installing);
+  const spinner = CLACK.spinner();
+  spinner.start(M.installing);
   // Nome que esta versao ja nao distribui sai do conjunto mantido: reconstrui-lo lancaria e a RECUSA
   // viraria erro de instalacao. Ele e ANUNCIADO abaixo, nunca descartado em silencio.
   const { mantidas, semFonte } = installer.splitKept(aManter);
   const res = installer.execute(installer.keepDeclared(plan, mantidas), { abandoned: aRemover });
-  s.stop(M.installedAt(res.targets.map((t) => t.dir).join(" · ")));
+  spinner.stop(M.installedAt(res.targets.map((t) => t.dir).join(" · ")));
   if (res.migrated) p.log.info(M.migrationInfo(res.migrated.removed.length));
   // ADR-0031: a remoção do reviewGate é anunciada depois da escrita, como a migração de layout.
   if (res.reviewGateMigration.state === "migrated") p.log.warn(M.reviewGateMigrated(res.reviewGateMigration, arquivoConfig));
@@ -434,12 +431,12 @@ function pluginConfirmer() {
       M.pluginProposalOrigin(proposal.origin.name, proposal.origin.url),
       M.pluginProposalTrust(proposal.origin.trusted === true),
       M.pluginProposalCategory(proposal.category),
-      M.pluginProposalPermissions(proposal.permissions.length ? proposal.permissions.join(", ") : M.pluginNoPermissions),
+      M.pluginProposalPermissionsLine(proposal.permissions),
       M.pluginProposalChecksum(proposal.checksum),
       M.pluginProposalEngines(proposal.engines.join(", ")),
       ...(proposal.extends ? [M.pluginProposalExtends(proposal.extends)] : []),
     ].join("\n"), M.pluginProposalTitle);
-    const ok = await p.confirm({ message: M.pluginConfirm, initialValue: false });
+    const ok = await CLACK.confirm({ message: M.pluginConfirm, initialValue: false });
     return !p.isCancel(ok) && ok === true;
   };
 }
@@ -448,7 +445,7 @@ function pluginConfirmer() {
 // que não desfaz nada. Cancelar cai no mesmo caminho do `confirm` — nada é escrito.
 function pluginCollisionResolver() {
   return async (collision) => {
-    const choice = await p.select({
+    const choice = await CLACK.select({
       message: M.pluginCollisionQuestion(collision.methodSkill),
       initialValue: "alongside",
       options: [
@@ -468,7 +465,7 @@ async function cmdAdd(flags, positional) {
 
   const repo = path.resolve(".");
   const { scope, targets } = pluginTargets(flags, repo);
-  p.intro(pc.bgCyan(pc.black(" mgr add ")));
+  p.intro(pc.bgCyan(pc.black(M.addIntro)));
   p.log.step(M.pluginInstalling);
 
   let result;
@@ -484,7 +481,7 @@ async function cmdAdd(flags, positional) {
 
   for (const skill of result.installed) {
     p.log.success(M.pluginInstalled(skill.name, Object.values(skill.dirs).join(" · ")));
-    for (const { engine, warning } of skill.warnings) p.log.warn(M.pluginWarning(engine, warning));
+    for (const { engine, warning } of skill.warnings) p.log.warn(M.pluginWarning(engine, renderText(M, warning)));
   }
   p.outro(pc.green(M.pluginLocked(path.relative(repo, result.lockfile) || result.lockfile)));
   return 0;
@@ -574,7 +571,7 @@ async function cmdList(_flags, positional) {
       }
     } catch (error) {
       // Registry fora do ar não derruba o `list`: a parte local do comando já foi entregue.
-      console.log(pc.dim(M.pluginsAvailableError(registry.name, error.message)));
+      console.log(pc.dim(M.pluginsAvailableError(registry.name, renderError(M, error))));
     }
   }
   return 0;
@@ -610,7 +607,7 @@ async function cmdDetect(flags, positional) {
   console.log("");
   // Registry fora do ar e REPORTADO, como no `list`: sem isso o usuario leria "nenhuma skill
   // corresponde" quando a verdade e "nao consegui falar com o registry".
-  for (const falha of unreachable) console.log(pc.dim(M.pluginsAvailableError(falha.registry, falha.reason)));
+  for (const falha of unreachable) console.log(pc.dim(M.pluginsAvailableError(falha.registry, renderError(M, falha.error))));
   if (!suggestions.length) { console.log(M.suggestNone); return 0; }
   console.log(pc.bold(M.suggestTitle));
   for (const item of suggestions) console.log(M.suggestItem(item.name, item.version, item.ecosystem, item.evidence));
@@ -637,7 +634,7 @@ async function proposeDetected(repo, scope, targets) {
 
   let instaladas = 0;
   for (const item of sugestoes) {
-    const aceito = await p.confirm({ message: M.suggestConfirm(item.name), initialValue: false });
+    const aceito = await CLACK.confirm({ message: M.suggestConfirm(item.name), initialValue: false });
     if (p.isCancel(aceito) || !aceito) continue;
     const resultado = await addPlugin(item.name, {
       repo, coreDir: installer.coreDir(scope, repo), targets: motores,
@@ -645,7 +642,7 @@ async function proposeDetected(repo, scope, targets) {
     });
     for (const skill of resultado.installed) {
       p.log.success(M.pluginInstalled(skill.name, Object.values(skill.dirs).join(" · ")));
-      for (const { engine, warning } of skill.warnings) p.log.warn(M.pluginWarning(engine, warning));
+      for (const { engine, warning } of skill.warnings) p.log.warn(M.pluginWarning(engine, renderText(M, warning)));
     }
     instaladas += resultado.installed.length;
   }
@@ -692,15 +689,12 @@ function linhasDasLeis(plan) {
 //
 // Esta função serve o plano do install E o `mgr status`. O `cmdAgents` já distinguia; corrigir só
 // lá teria deixado a mentira viva nas duas superfícies que importam mais.
-function linhaDoMotor(engine, gate, formato = M.planGateEngine) {
+function linhaDoMotor(engine, gate, formato = M.planGateEngineLine) {
   const { model, effort, skipped } = gateSummary(engine, gate);
-  const texto = (valor, campo, herdado) =>
-    valor || (skipped.includes(campo) ? M.agentsUnsupported : herdado);
-  return formato(
-    engine,
-    texto(model, "model", M.gateModelInherited),
-    texto(effort, "effort", M.gateEffortInherited),
-  );
+  const estado = (valor, campo) => (valor
+    ? { value: valor, state: "value" }
+    : { state: skipped.includes(campo) ? "unsupported" : "inherited" });
+  return formato(engine, estado(model, "model"), estado(effort, "effort"));
 }
 
 // O plano lista UMA linha por intenção ligada e por motor, e não só a do gate (ADR-0017, §5).
@@ -806,13 +800,15 @@ function cmdTokens(flags, positional) {
   return veredito === tokens.OVER_BUDGET ? 1 : 0;
 }
 
+const COMANDO_SPEC = "spec";
+
 function cmdSpec(flags, positional) {
   const sub = positional[0];
   if (sub === "validate") return cmdSpecValidate(flags, positional.slice(1));
   if (sub === "next") return cmdSpecNext(flags, positional.slice(1));
   if (sub === "status") return cmdSpecStatus(flags, positional.slice(1));
   if (sub === "initials") return initials(commandIo(flags, positional.slice(1)));
-  console.error(M.errorPrefix(M.unknownCommand(`spec ${sub || ""}`.trim())));
+  console.error(M.errorPrefix(M.unknownCommand(`${COMANDO_SPEC} ${sub || ""}`.trim())));
   return 1;
 }
 
@@ -825,7 +821,7 @@ function cmdStatus(_f, positional) {
       // DT-2: os mesmos avisos de camada do install e do update, em stderr.
       warnLayers(man.core, repo);
       const model = man.model === "runtime-launcher" ? M.statusOldModel : (man.model || "self-contained");
-      console.log(pc.bold(`[${scope}]`) + ` MGR v${man.version} — ${(man.engines || [man.engine]).join(", ")} — ${model}`);
+      console.log(pc.bold(`[${scope}]`) + M.statusInstallSummary(man.version, (man.engines || [man.engine]).join(", "), model));
       console.log(M.statusProject(readPersonal(man.core).projectId ?? man.projectId ?? "—"));
       console.log(M.statusConfig(man.core));
       if (man.language || man.architecture) console.log(M.statusStack(man.language || "—", man.architecture || "—"));
@@ -838,19 +834,19 @@ function cmdStatus(_f, positional) {
       const { policies } = readAgents(man.core);
       const ligadas = catalogo.INTENTS.filter((intent) => policies[intent].enabled);
       if (!ligadas.length) {
-        console.log(M.statusGate(M.statusGateOff));
+        console.log(M.statusGateOffLine);
       } else if ((man.agents || []).length) {
         console.log(M.statusGate((man.agents || []).join(" · ")));
         for (const intent of ligadas) {
           console.log(M.planAgentIntent(intent, catalogo.AGENTS[intent].agent));
           for (const engine of (man.engines || [man.engine]).filter(Boolean)) {
             if (engine === "custom") continue;
-            console.log(`  ${linhaDoMotor(engine, policies[intent], M.statusGateEngine)}`);
+            console.log(`  ${linhaDoMotor(engine, policies[intent], M.statusGateEngineLine)}`);
           }
         }
       }
       const preambulo = readLawsPreamble(man.core);
-      console.log(M.statusLaws(preambulo.enabled ? M.planPreambleOn.trim() : M.planPreambleOff.trim()));
+      console.log(M.statusLawsLine(preambulo.enabled));
       console.log(M.statusInstalledAt(man.installedAt));
     }
   }
@@ -1072,7 +1068,7 @@ async function cmdUninstall(flags, positional) {
   const instrRemove = instructionsToRemove(repo, { scope, projectInstalled: Boolean(installer.detectPrior("project", repo)) });
   for (const { file } of instrRemove) console.log(M.instructionsToRemove(file));
   if (isTTY && !flags.yes) {
-    const ok = await p.confirm({ message: M.uninstallConfirm(scope), initialValue: false });
+    const ok = await CLACK.confirm({ message: M.uninstallConfirm(scope), initialValue: false });
     if (p.isCancel(ok) || !ok) bail();
   }
   const res = installer.uninstall(scope, repo);
@@ -1129,31 +1125,31 @@ function cmdAudit(flags) {
   for (const { name, outcome, branch, inferred, declared, undeclared, findings } of resultados) {
     // O `branch` é nulo quando o arquivo não abre, então a mensagem é própria.
     if (outcome === audit.UNREADABLE) {
-      console.log(`${pc.yellow("?")} ${name} — SKILL.md não pôde ser lido`);
+      console.log(`${pc.yellow("?")} ${M.auditSkillUnreadable(name)}`);
       continue;
     }
     if (branch === audit.NOTHING_TO_DECLARE) {
-      console.log(`${pc.green("✓")} ${name} — nenhuma das quatro classes`);
+      console.log(`${pc.green("✓")} ${M.auditNothingToDeclare(name)}`);
       continue;
     }
     console.log(cor[branch](`• ${name} — ${branch}`));
-    if (declared.length) console.log(`    declarado:     ${declared.join(", ")}`);
+    if (declared.length) console.log(M.auditDeclared(declared.join(", ")));
     // `inferred`, e não `undeclared`: este é o conjunto inferido, e o que sobra sai na linha abaixo.
-    console.log(`    inferido:      ${inferred.join(", ")}`);
+    console.log(M.auditInferred(inferred.join(", ")));
     if (undeclared.length && undeclared.length !== inferred.length) {
-      console.log(`    não declarado: ${undeclared.join(", ")}`);
+      console.log(M.auditUndeclared(undeclared.join(", ")));
     }
     // O trecho e a linha de cada achado, porque quem julga é o humano e ele precisa do fato para
     // descartar um falso positivo em segundos. É o veto do ADR-0007 a prometer scanner que garante
     // segurança, virando forma de saída.
     for (const { capability, line, excerpt } of findings) {
-      console.log(pc.dim(`      ${capability} · linha ${line}: ${excerpt}`));
+      console.log(pc.dim(M.auditFindingLine(capability, line, excerpt)));
     }
   }
 
   console.log("");
-  console.log("A inferência é a fonte de verdade (ADR-0007); a declaração é a afirmação que ela confere.");
-  console.log("Ausência de achado NÃO é atestado de segurança: a análise tem falsos positivos e negativos.");
+  console.log(M.auditFooterInference);
+  console.log(M.auditFooterNoAttestation);
   return bloqueia ? 1 : 0;
 }
 
@@ -1163,25 +1159,15 @@ function cmdValidate() {
     if (problems.length) {
       ok = false;
       console.log(pc.red(`✗ ${name}`));
-      for (const pr of problems) console.log(`    - ${pr}`);
+      for (const pr of problems) console.log(`    - ${renderText(M, pr)}`);
     } else console.log(pc.green(`✓ ${name}`));
   }
   return ok ? 0 : 1;
 }
 
 async function main() {
-  // DT-10: um dist/ gerado para outra versão do package.json ao lado não roda nenhum comando.
-  const versaoBundle = bundle.buildVersion();
-  if (versaoBundle !== null) {
-    const versaoPacote = bundle.packageVersion();
-    if (versaoPacote !== versaoBundle) {
-      console.error(`dist/mgr.min.js foi gerado para ${versaoBundle} e o pacote está em ${versaoPacote}: rode npm run build`);
-      return 1;
-    }
-  }
   const [, , command, ...rest] = process.argv;
   const { flags, positional, unknownFlag } = parseArgs(rest, { engines: installer.ENGINES });
-  if (unknownFlag) { console.error(M.unknownFlag(unknownFlag)); process.exit(1); }
   // Refina o idioma da CLI: flag > manifesto (project > global) > locale (default acima).
   const semRepoPosicional = PLUGIN_COMMANDS.includes(command) || SUBCOMMAND_COMMANDS.includes(command);
   const repo = !semRepoPosicional && positional[0] ? path.resolve(positional[0]) : projectRoot(process.cwd()).root;
@@ -1193,6 +1179,16 @@ async function main() {
       || installer.detectPrior("global", repo)?.userLanguage;
   } catch { /* idioma cai para o locale, que é o default de sempre */ }
   M = getMessages(flags.userLanguage || manifestLang || detectUserLanguage(process.env));
+  // DT-10: um dist/ gerado para outra versão do package.json ao lado não roda nenhum comando.
+  const versaoBundle = bundle.buildVersion();
+  if (versaoBundle !== null) {
+    const versaoPacote = bundle.packageVersion();
+    if (versaoPacote !== versaoBundle) {
+      console.error(M.distVersionMismatch(versaoBundle, versaoPacote));
+      return 1;
+    }
+  }
+  if (unknownFlag) { console.error(M.unknownFlag(unknownFlag)); process.exit(1); }
   try {
     switch (command) {
       case "install": return await cmdInstall(flags, positional);
@@ -1216,14 +1212,14 @@ async function main() {
       case "tokens": return cmdTokens(flags, positional);
       case "list": return await cmdList(flags, positional);
       case "version": case "--version": case "-v":
-        console.log(`mgr-method ${bundle.readVersion()}`); return 0;
+        console.log(M.versionLine(bundle.readVersion())); return 0;
       case undefined: case "help": case "--help": case "-h":
         printBanner(M); process.stdout.write(M.help); return 0;
       default:
         console.error(M.unknownCommand(command)); process.stdout.write(M.help); return 1;
     }
   } catch (e) {
-    console.error(pc.red(M.errorPrefix(e.message)));
+    console.error(pc.red(M.errorPrefix(renderError(M, e))));
     return 1;
   }
 }

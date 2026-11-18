@@ -7,6 +7,7 @@
 // Monorepo com módulos em subpastas fica de fora nesta versão — ampliar exige evidência.
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { UsageError } from "./errors.js";
 
 // Caminho presente ⇒ ecossistema. `application.*` não entra aqui: dele só interessa o
 // conteúdo (ver SERVICE_MARKERS), porque o arquivo em si não diz qual é o ecossistema.
@@ -140,7 +141,7 @@ export function lawsPreamble(lawsRef) {
 
 export function hookReport(suggestions, engine, { preamble = null } = {}) {
   if (!HOOK_ENGINES.includes(engine)) {
-    throw new Error(`invalid engine for hook report: ${engine} (expected ${HOOK_ENGINES.join(" | ")})`);
+    throw new UsageError("invalidHookReportEngine", [engine, HOOK_ENGINES]);
   }
   const blocos = preamble ? [preamble.join("\n")] : [];
 
@@ -174,7 +175,7 @@ export async function collectSuggestions(detected, registries, lockfile, { fetch
         if (!porNome.has(item.name)) porNome.set(item.name, item);
       }
     } catch (error) {
-      unreachable.push({ registry: registry.name, reason: error.message });
+      unreachable.push({ registry: registry.name, reason: error.message, error });
     }
   }
   return { suggestions: [...porNome.values()], unreachable };

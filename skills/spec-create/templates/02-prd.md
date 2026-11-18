@@ -7,6 +7,7 @@
 ## Business rules
 <!-- invariants, validations, exceptions -->
 ## Constraints
+<!-- product interface language policy (QUAL-8): language(s) the product shows its users, and how it is chosen; [TO DEFINE] when unknown -->
 ## Out of scope
 ## Success metrics
 ## Impacted stakeholders

@@ -6,6 +6,7 @@
 // troca só as linhas do bloco, e a remoção tira só essas linhas.
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { UsageError } from "./errors.js";
 
 // CRLF não muda a comparação: a marca é reconhecida com ou sem o `\r` do fim da linha.
 const semCr = (linha) => linha.replace(/\r$/, "");
@@ -32,7 +33,7 @@ export function locateBlock(lines, block, file) {
   if (start === -1) return { found: false };
   const end = lines.findIndex((linha, i) => i > start && semCr(linha) === fecho);
   if (end === -1) {
-    throw new Error(`bloco do mgr-method sem linha de fecho em ${file}; corrija o arquivo à mão`);
+    throw new UsageError("managedBlockNoClosingLine", [file]);
   }
   return { found: true, start, end };
 }

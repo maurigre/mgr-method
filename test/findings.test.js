@@ -1,28 +1,53 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { SEVERITIES, STRICT_EXEMPT, blocking, create, isError, summarize } from "../src/findings.js";
+import { SEVERITIES, STRICT_EXEMPT, blocking, create, findingTexts, isError, summarize } from "../src/findings.js";
+import { InvariantError } from "../src/errors.js";
+import { getMessages } from "../src/messages.js";
+import { renderText, text } from "../src/ui-text.js";
 
 const valido = {
   code: "PLAN-1", severity: "error", file: "04-plan.md", line: 12, task: "P0.1",
-  message: "depends_on aponta para P9.9, que não existe",
-  remediation: "Corrija o id ou crie a task P9.9.",
-  example: "- **depends_on:** [P0.1]",
+  message: text("artifactPlan1Message", "P9.9"),
+  remediation: text("artifactPlan1Remediation", "P9.9", ["P0.1"]),
+  example: text("artifactPlan1Example"),
 };
 
 test("um achado sem remediação não pode ser criado", () => {
-  assert.throws(() => create({ ...valido, remediation: undefined }), /sem `remediation`/);
-  assert.throws(() => create({ ...valido, remediation: "   " }), /sem `remediation`/);
+  assert.throws(() => create({ ...valido, remediation: undefined }), InvariantError);
+  assert.throws(() => create({ ...valido, remediation: undefined }), /has no `remediation`/);
+  assert.throws(() => create({ ...valido, remediation: text("chaveQueNaoExiste") }), /has no `remediation`/);
 });
 
 test("um achado sem exemplo não pode ser criado", () => {
-  assert.throws(() => create({ ...valido, example: undefined }), /sem `example`/);
-  assert.throws(() => create({ ...valido, example: "" }), /sem `example`/);
+  assert.throws(() => create({ ...valido, example: undefined }), /has no `example`/);
+  assert.throws(() => create({ ...valido, example: {} }), InvariantError);
 });
 
 test("code, message e severidade também são obrigatórios", () => {
-  assert.throws(() => create({ ...valido, code: "" }), /sem `code`/);
-  assert.throws(() => create({ ...valido, message: "" }), /sem `message`/);
-  assert.throws(() => create({ ...valido, severity: "critical" }), /severidade inválida: "critical"/);
+  assert.throws(() => create({ ...valido, code: "" }), /has no `code`/);
+  assert.throws(() => create({ ...valido, message: undefined }), /has no `message`/);
+  assert.throws(() => create({ ...valido, severity: "critical" }), /invalid severity: "critical"/);
+});
+
+test("should carry the canonical english text in the frozen finding", () => {
+  const finding = create(valido);
+  const en = getMessages("en");
+  assert.deepEqual(Object.keys(finding), ["code", "severity", "file", "line", "task", "message", "remediation", "example"]);
+  assert.equal(finding.message, renderText(en, valido.message));
+  assert.equal(finding.remediation, renderText(en, valido.remediation));
+  assert.equal(finding.example, renderText(en, valido.example));
+});
+
+test("should return the descriptors of a finding made by create", () => {
+  const finding = create(valido);
+  assert.deepEqual(findingTexts(finding), {
+    message: valido.message, remediation: valido.remediation, example: valido.example,
+  });
+});
+
+test("should throw InvariantError for a finding that did not come from create", () => {
+  const copia = { ...create(valido) };
+  assert.throws(() => findingTexts(copia), InvariantError);
 });
 
 test("o achado válido nasce pronto e imutável", () => {

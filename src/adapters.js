@@ -6,6 +6,9 @@
 // O bloco `applied` devolvido aqui vai ao lockfile (rastreabilidade D07, ADR-0006).
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { UsageError } from "./errors.js";
+import { getMessages } from "./messages.js";
+import { text as descriptor, renderText } from "./ui-text.js";
 
 export const PLUGIN_ENGINES = ["claude-code", "copilot"];
 
@@ -16,7 +19,7 @@ export const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---/;
 // Insere/substitui campos simples no frontmatter YAML preservando os existentes.
 export function injectFrontmatter(text, fields) {
   const match = text.match(FRONTMATTER_RE);
-  if (!match) throw new Error("SKILL.md has no YAML frontmatter to inject into");
+  if (!match) throw new UsageError("skillMdNoFrontmatterToInject");
   let frontmatter = match[1];
   for (const [key, value] of Object.entries(fields)) {
     const line = `${key}: ${value}`;
@@ -42,15 +45,22 @@ export function applyManifestToSkillMd(text, manifest) {
   return { text: Object.keys(fields).length ? injectFrontmatter(text, fields) : text, applied };
 }
 
-// Degradação explícita do copilot: o que foi declarado e não tem destino vira warning.
-export function copilotApplied(manifest) {
+// Degradação explícita do copilot: o que foi declarado e não tem destino vira aviso, devolvido
+// como DESCRITOR para a tela renderizar no idioma escolhido (DT-23).
+export function copilotWarnings(manifest) {
   const warnings = [];
   if (manifest.model?.copilot) {
-    warnings.push(`model "${manifest.model.copilot}" declared but copilot skills have no model field; ignored`);
+    warnings.push(descriptor("copilotModelIgnored", manifest.model.copilot));
   }
   if (manifest.effort) {
-    warnings.push(`effort "${manifest.effort}" not supported by copilot skills; effort is global only`);
+    warnings.push(descriptor("copilotEffortUnsupported", manifest.effort));
   }
+  return warnings;
+}
+
+// O lockfile é dado persistido: grava sempre o inglês canônico, em qualquer idioma (DT-23).
+export function copilotApplied(manifest) {
+  const warnings = copilotWarnings(manifest).map((aviso) => renderText(getMessages("en"), aviso));
   return warnings.length ? { warnings } : {};
 }
 
@@ -69,7 +79,7 @@ export function compositionHeader(extendsName, baseInstallPath) {
 
 export function injectCompositionHeader(text, header) {
   const match = text.match(FRONTMATTER_RE);
-  if (!match) throw new Error("SKILL.md has no YAML frontmatter to inject into");
+  if (!match) throw new UsageError("skillMdNoFrontmatterToInject");
   return text.replace(match[0], `${match[0]}\n\n${header}`);
 }
 
@@ -77,7 +87,7 @@ export function injectCompositionHeader(text, header) {
 // `extendsBase` = caminho instalado da skill base, quando o manifest declara `extends`.
 export function applyToEngine(engine, installedSkillDir, manifest, { extendsBase = null } = {}) {
   if (!PLUGIN_ENGINES.includes(engine)) {
-    throw new Error(`invalid engine for plugin install: ${engine} (expected ${PLUGIN_ENGINES.join(" | ")})`);
+    throw new UsageError("pluginEngineInvalid", [engine, PLUGIN_ENGINES]);
   }
   const skillMd = path.join(installedSkillDir, "SKILL.md");
   let text = readFileSync(skillMd, "utf8");

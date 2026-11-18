@@ -28,6 +28,23 @@ coding (not only at the end) and cited by the `code-analyzer` in reviews. Opt-in
    project (`userLanguage` in the manifest, resolved into each skill's `Output language:` line
    at install time). Generated file names and rule IDs (INV-/DES-/TST-/LOG-/MUT-/NAM-/QUAL-/
    JQ-/JS-) stay in English regardless of that language.
+8. (QUAL-8) Product interface text: every text the product shows its own user — CLI and UI
+   output, error messages included — comes out entirely in the language configured for the
+   product, and is kept out of the code, in a per-language text layer. The data a machine
+   consumes — codes, identifiers, fields of structured output such as JSON — is kept separate
+   from the displayed text and does not change with the language. A displayed sentence is
+   localized whole, never assembled from separately translated pieces. The project's test suite
+   has an automatic check that fails on output mixing languages and on interface text written
+   outside the text layer; when a change adds or alters interface text and the suite has no such
+   check, that absence is a reproval under this rule. Source for the first three duties:
+   Microsoft Learn, Globalization — "Make your app localizable" (ms.date 2026-08-29) and
+   "Externalize localizable resources" (ms.date 2024-03-26), read 2026-11-16: "its executable
+   code has been cleanly separated from its localizable resources"; "When a string is used both
+   internally in code and is also displayed to the user, the usage should be split into
+   separate strings"; "localize the entire sentence, rather than a single word". The mandatory
+   automatic check is a decision of this method, not a reading of the source, which names no
+   file format and no number. `QUAL-7` covers what the agent produces; this rule covers what
+   the product shows.
 
 ### Security (SEC-*) — OWASP ASVS 5.0.0, CWE 4.20, OWASP Top 10:2025 (sources read 2026-10-01)
 

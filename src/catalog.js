@@ -1,6 +1,9 @@
 // Catálogo de skills: classifica o que é núcleo, por arquitetura, por linguagem e opcional.
 // É a fonte da instalação SELETIVA — o instalador copia só o subconjunto que o projeto usa.
 
+import { UsageError } from "./errors.js";
+import { CLASS_ARCHITECTURE, CLASS_LANGUAGE, CLASS_OPTIONAL, CLASS_UNCLASSIFIED } from "./skill-class.js";
+
 // Núcleo do fluxo SDD (sempre instalado). code-analyzer entra por ser o revisor invocado
 // pelo spec-create; diagnosing-bugs, por ser a disciplina de diagnóstico de bug (útil em
 // qualquer projeto), fecha a lacuna do fluxo entre especificar/planejar/revisar.
@@ -34,12 +37,9 @@ export const LANGUAGE = {
 // Skills opcionais (o instalador pergunta).
 export const OPTIONAL = ["evidence-capture"];
 
-// Classe de uma skill, para a saida dizer POR QUE ela deixou o conjunto declarado. A quarta
-// existe para nao devolver sentinela: skill fora dos tres mapas tem classe propria, nao `null`.
-export const CLASS_ARCHITECTURE = "architecture";
-export const CLASS_LANGUAGE = "language";
-export const CLASS_OPTIONAL = "optional";
-export const CLASS_UNCLASSIFIED = "unclassified";
+// Classe de uma skill: as constantes moram em `src/skill-class.js` (modulo folha, MNT-2) e saem
+// daqui tambem, para quem ja as importava deste modulo.
+export { CLASS_ARCHITECTURE, CLASS_LANGUAGE, CLASS_OPTIONAL, CLASS_UNCLASSIFIED } from "./skill-class.js";
 
 export function skillClass(name) {
   if (Object.values(ARCHITECTURES).includes(name)) return CLASS_ARCHITECTURE;
@@ -123,6 +123,7 @@ export const RUNTIME_FILES = [
   "src/engines/claude-code.js",
   "src/engines/copilot.js",
   "src/engines/index.js",
+  "src/errors.js",
   "src/findings.js",
   "src/installer.js",
   "src/instructions.js",
@@ -144,10 +145,12 @@ export const RUNTIME_FILES = [
   "src/provenance.js",
   "src/registry.js",
   "src/sdd-check.js",
+  "src/skill-class.js",
   "src/spec-parser.js",
   "src/spec-rules.js",
   "src/spec-status.js",
   "src/spec-validator.js",
+  "src/ui-text.js",
 ];
 
 // Escolha do time sobre versionar o runtime (DT-1, DT-2). Ausente na config vale o padrao.
@@ -253,7 +256,7 @@ export function selectSkills({ architecture = null, language = null, optional = 
   const set = new Set([...CORE, ...TOOLING]);
   if (architecture) {
     const s = ARCHITECTURES[architecture];
-    if (!s) throw new Error(`arquitetura desconhecida: ${architecture} (use ${architectures().join(", ")})`);
+    if (!s) throw new UsageError("unknownArchitecture", [architecture, architectures()]);
     set.add(s);
   }
   if (language && LANGUAGE[language]) for (const s of LANGUAGE[language]) set.add(s);

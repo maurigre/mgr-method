@@ -61,7 +61,7 @@ test("should refuse --version with exit 1 and both versions when package.json ch
     writeJson(pacote, { ...readJson(pacote), version: versaoPacote });
     const resultado = runNode(copia, ["bin/mgr.cjs", "--version"]);
     assert.equal(resultado.status, 1);
-    assert.match(resultado.stderr, new RegExp(`gerado para ${versaoBuild} e o pacote está em ${versaoPacote}: rode npm run build`));
+    assert.match(resultado.stderr, new RegExp(`was built for ${versaoBuild} and the package is at ${versaoPacote}: run npm run build`));
     assert.equal(resultado.stdout, "");
   } finally {
     rmSync(copia, { recursive: true, force: true });
@@ -76,7 +76,7 @@ test("should print the runtime version without a warning when the manifest match
     const versao = readJson(path.join(projeto, ".mgr-core", "manifest.json")).version;
     const resultado = runNode(projeto, [runtime, "--version"]);
     assert.equal(resultado.status, 0, resultado.stderr);
-    assert.equal(resultado.stdout.trim(), `mgr-method ${versao} (runtime do projeto)`);
+    assert.equal(resultado.stdout.trim(), `mgr-method ${versao} (project runtime)`);
     assert.equal(resultado.stderr, "");
   } finally {
     rmSync(projeto, { recursive: true, force: true });
@@ -94,10 +94,91 @@ test("should warn on stderr with both versions and exit 0 when the manifest vers
     writeJson(manifesto, { ...readJson(manifesto), version: versaoManifesto });
     const resultado = runNode(projeto, [runtime, "--version"]);
     assert.equal(resultado.status, 0, resultado.stderr);
+    assert.match(resultado.stdout, /\(project runtime\)/);
+    assert.match(resultado.stderr, new RegExp(`runtime at ${versaoRuntime}, manifest at ${versaoManifesto}: run npx mgr-method@${versaoManifesto} update`));
+  } finally {
+    rmSync(projeto, { recursive: true, force: true });
+  }
+});
+
+test("should refuse with the pt-BR text, exit 1 and empty stdout when the dist is stale and the language is pt-BR", () => {
+  const copia = tempDir("mgr-build-");
+  try {
+    copyRepo(copia);
+    const build = runNode(copia, ["scripts/build.mjs"]);
+    assert.equal(build.status, 0, build.stderr);
+    const pacote = path.join(copia, "package.json");
+    const versaoBuild = readJson(pacote).version;
+    const versaoPacote = `${versaoBuild}-defasado`;
+    writeJson(pacote, { ...readJson(pacote), version: versaoPacote });
+    const resultado = runNode(copia, ["bin/mgr.cjs", "--version", "--user-language", "pt-BR"]);
+    assert.equal(resultado.status, 1);
+    assert.match(resultado.stderr, new RegExp(`gerado para ${versaoBuild} e o pacote está em ${versaoPacote}: rode npm run build`));
+    assert.equal(resultado.stdout, "");
+  } finally {
+    rmSync(copia, { recursive: true, force: true });
+  }
+});
+
+test("should refuse before any command, with exit 1 and empty stdout, when the dist is stale", () => {
+  const copia = tempDir("mgr-build-");
+  try {
+    copyRepo(copia);
+    const build = runNode(copia, ["scripts/build.mjs"]);
+    assert.equal(build.status, 0, build.stderr);
+    const pacote = path.join(copia, "package.json");
+    const versaoBuild = readJson(pacote).version;
+    writeJson(pacote, { ...readJson(pacote), version: `${versaoBuild}-defasado` });
+    for (const comando of ["validate", "audit", "help"]) {
+      const resultado = runNode(copia, ["bin/mgr.cjs", comando]);
+      assert.equal(resultado.status, 1, comando);
+      assert.match(resultado.stderr, /was built for/, comando);
+      assert.equal(resultado.stdout, "", comando);
+    }
+  } finally {
+    rmSync(copia, { recursive: true, force: true });
+  }
+});
+
+test("should print the runtime version with the pt-BR text when the language is pt-BR", () => {
+  const projeto = tempDir("mgr-runtime-");
+  try {
+    instalarProjeto(projeto);
+    const runtime = path.join(projeto, ".mgr-core", "runtime", "bin", "mgr-runtime.js");
+    const versao = readJson(path.join(projeto, ".mgr-core", "manifest.json")).version;
+    const resultado = runNode(projeto, [runtime, "--version", "--user-language", "pt-BR"]);
+    assert.equal(resultado.status, 0, resultado.stderr);
+    assert.equal(resultado.stdout.trim(), `mgr-method ${versao} (runtime do projeto)`);
+    assert.equal(resultado.stderr, "");
+  } finally {
+    rmSync(projeto, { recursive: true, force: true });
+  }
+});
+
+test("should warn in pt-BR on stderr with both versions when the manifest differs and the language is pt-BR", () => {
+  const projeto = tempDir("mgr-runtime-");
+  try {
+    instalarProjeto(projeto);
+    const runtime = path.join(projeto, ".mgr-core", "runtime", "bin", "mgr-runtime.js");
+    const manifesto = path.join(projeto, ".mgr-core", "manifest.json");
+    const versaoRuntime = readJson(manifesto).version;
+    const versaoManifesto = `${versaoRuntime}-divergente`;
+    writeJson(manifesto, { ...readJson(manifesto), version: versaoManifesto });
+    const resultado = runNode(projeto, [runtime, "--version", "--user-language", "pt-BR"]);
+    assert.equal(resultado.status, 0, resultado.stderr);
     assert.match(resultado.stdout, /\(runtime do projeto\)/);
     assert.match(resultado.stderr, new RegExp(`runtime em ${versaoRuntime}, manifesto em ${versaoManifesto}: rode npx mgr-method@${versaoManifesto} update`));
   } finally {
     rmSync(projeto, { recursive: true, force: true });
+  }
+});
+
+test("should print the same --version line in en and in pt-BR", () => {
+  const versao = readJson(path.join(ROOT, "package.json")).version;
+  for (const idioma of ["en", "pt-BR"]) {
+    const resultado = runNode(ROOT, ["bin/mgr.js", "--version", "--user-language", idioma]);
+    assert.equal(resultado.status, 0, resultado.stderr);
+    assert.equal(resultado.stdout.trim(), `mgr-method ${versao}`);
   }
 });
 

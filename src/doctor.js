@@ -5,8 +5,12 @@ import * as catalog from "./catalog.js";
 import * as engineDescriptors from "./engines/index.js";
 import { lockedDirsOf, orphanClass, routeReviewSkill, runtimeIgnoreState } from "./builder.js";
 import { diff } from "./lockfile.js";
-import { MODEL_CORE_RUNTIME } from "./manifest.js";
+import { MANIFEST_NAME, MODEL_CORE_RUNTIME, manifestShapeProblems } from "./manifest.js";
+export { problemText } from "./manifest.js";
 import { CONFIG_NAME, runtimeVersioningOf } from "./registry.js";
+import { InvariantError } from "./errors.js";
+import { getMessages } from "./messages.js";
+import { datum, renderText, text } from "./ui-text.js";
 
 // Verificacoes de integridade da instalacao (U2 do programa de superioridade).
 //
@@ -57,9 +61,35 @@ export const SKILL_ORFA_SEM_PROVA = "skill-orfa-sem-prova";
 // Classes de `orphanClass` (src/builder.js) para as quais o `update` tem o que oferecer.
 const CLASSES_CANDIDATAS = ["marked", "distributed"];
 
-const achado = ({ check, severity, file, expected, found, fix }) => ({
-  check, severity, file, expected, found, fix,
-});
+// Descritores de `expected`/`found` por achado (DT-12). Ficam fora do objeto: o achado segue com as
+// seis chaves e o `--json` o serializa inteiro.
+const descritoresDosAchados = new WeakMap();
+
+// A tabela `en` e obtida sob demanda, e nao no topo do modulo, por causa do ciclo de import
+// declarado em `src/errors.js`.
+let tabelaEn = null;
+const tabelaCanonica = () => {
+  tabelaEn ??= getMessages("en");
+  return tabelaEn;
+};
+
+const achado = ({ check, severity, file, expected, found, fix }) => {
+  const resultado = {
+    check, severity, file,
+    expected: renderText(tabelaCanonica(), expected),
+    found: renderText(tabelaCanonica(), found),
+    fix,
+  };
+  descritoresDosAchados.set(resultado, { expected, found });
+  return resultado;
+};
+
+/** Descritores `{ expected, found }` de um achado da fabrica; objeto de outra origem lanca. */
+export function findingText(finding) {
+  const descritores = descritoresDosAchados.get(finding);
+  if (!descritores) throw new InvariantError("invariantFindingNotFromFactory", []);
+  return descritores;
+}
 
 /**
  * Skill em disco que o manifesto nao declara.
@@ -83,8 +113,8 @@ export function orphanSkills({ declared, onDisk, skillsDir, classOf = () => "unk
       check: "orphan-skill",
       severity: DEFECT,
       file: `${skillsDir}/${name}`,
-      expected: "declarada no manifesto, ou ausente do disco",
-      found: "em disco e fora do manifesto",
+      expected: text("findingOrphanSkillExpected"),
+      found: text("findingOrphanSkillFound"),
       fix: CLASSES_CANDIDATAS.includes(classOf(name)) ? FIX_UPDATE : NO_FIX,
     }));
 }
@@ -97,8 +127,8 @@ export function missingSkills({ declared, onDisk, skillsDir }) {
       check: "missing-skill",
       severity: DEFECT,
       file: `${skillsDir}/${name}/SKILL.md`,
-      expected: "presente, porque o manifesto a declara",
-      found: "ausente",
+      expected: text("findingMissingSkillExpected"),
+      found: text("findingAbsent"),
       fix: FIX_UPDATE,
     }));
 }
@@ -111,8 +141,8 @@ export function missingAgents({ declared, exists }) {
       check: "missing-agent",
       severity: DEFECT,
       file: caminho,
-      expected: "presente, porque o manifesto o declara",
-      found: "ausente",
+      expected: text("findingMissingAgentExpected"),
+      found: text("findingAbsent"),
       fix: FIX_UPDATE,
     }));
 }
@@ -149,8 +179,8 @@ export function missingShared({ expected, exists, skillsDir }) {
       check: "missing-shared",
       severity: DEFECT,
       file: path.join(skillsDir, ...descritor.installed),
-      expected: "presente, porque o conjunto instalado a exige",
-      found: "ausente",
+      expected: text("findingMissingSharedExpected"),
+      found: text("findingAbsent"),
       fix: FIX_UPDATE,
     }));
 }
@@ -168,8 +198,8 @@ export function architectureSkill({ architecture, onDisk, skillsDir }) {
     check: "architecture-skill",
     severity: DEFECT,
     file: `${skillsDir}/${esperada}/SKILL.md`,
-    expected: `presente, porque o manifesto declara a arquitetura ${architecture}`,
-    found: "ausente",
+    expected: text("findingArchitectureSkillExpected", architecture),
+    found: text("findingAbsent"),
     fix: FIX_UPDATE,
   })];
 }
@@ -192,7 +222,7 @@ const corpoDe = (texto) => {
 function remediacaoDaCondicao(condicao) {
   const validas = [SKILL_DECLARADA, SKILL_ORFA, SKILL_ORFA_SEM_PROVA, FONTE_COMPARTILHADA];
   if (!condicao || !validas.includes(condicao)) {
-    throw new Error(`condicao invalida: "${condicao}"; valores validos sao ${validas.join(", ")}`);
+    throw new InvariantError("invariantFindingConditionInvalid", [condicao, validas.join(", ")]);
   }
   // So a orfa de origem desconhecida fica sem remediacao: a candidata o `mgr update` oferece remover.
   return condicao === SKILL_ORFA_SEM_PROVA ? NO_FIX : FIX_UPDATE;
@@ -226,8 +256,8 @@ export function divergentBody({ name, source, installed, file, condicao }) {
     check: "divergent-body",
     severity: DEFECT,
     file,
-    expected: `o corpo de ${name} como o pacote o traz`,
-    found: `difere a partir da linha ${ondeComeca} do corpo`,
+    expected: text("findingDivergentBodyExpected", name),
+    found: text("findingDivergentBodyFound", ondeComeca),
     fix,
   })];
 }
@@ -246,8 +276,8 @@ export function unresolvedTokens({ installed, file, condicao }) {
     check: "unresolved-token",
     severity: DEFECT,
     file,
-    expected: "todo token resolvido pelo install",
-    found: sobraram.join(" "),
+    expected: text("findingUnresolvedTokenExpected"),
+    found: datum(sobraram.join(" ")),
     fix,
   })];
 }
@@ -268,8 +298,8 @@ export function bodyCheckAvailability({ manifestVersion, packageVersion, file })
     check: "divergent-body",
     severity: UNAVAILABLE,
     file,
-    expected: "manifesto na versao do pacote, para a comparacao separar velho de adulterado",
-    found: `manifesto em ${manifestVersion} e pacote em ${packageVersion}: a divergencia de corpo aqui e esperada`,
+    expected: text("findingBodyCheckUnavailableExpected"),
+    found: text("findingBodyCheckUnavailableFound", manifestVersion, packageVersion),
     fix: FIX_UPDATE,
   })];
 }
@@ -286,8 +316,8 @@ function sourcesUnavailable({ check, manifestVersion, file }) {
     check,
     severity: UNAVAILABLE,
     file,
-    expected: "as fontes do pacote (skills, shared e arquivos do runtime) ao alcance, para a comparacao",
-    found: "as fontes do pacote nao estao no projeto: o runtime copiado nao as carrega",
+    expected: text("findingSourcesUnavailableExpected"),
+    found: text("findingSourcesUnavailableFound"),
     fix: `npx mgr-method@${manifestVersion} doctor`,
   })];
 }
@@ -310,8 +340,8 @@ export function sharedCheckAvailability({ manifestVersion, packageVersion, file 
     check: "missing-shared",
     severity: UNAVAILABLE,
     file,
-    expected: "manifesto na versao do pacote, para fontes compartilhadas estarem disponiveis",
-    found: `manifesto em ${manifestVersion} e pacote em ${packageVersion}: a ausencia de fonte compartilhada aqui e esperada`,
+    expected: text("findingSharedCheckUnavailableExpected"),
+    found: text("findingSharedCheckUnavailableFound", manifestVersion, packageVersion),
     fix: FIX_UPDATE,
   })];
 }
@@ -332,8 +362,8 @@ function runtimeVersion({ dirDoRuntime, dirExists, entryExists, copyVersion, man
       check: "runtime-version",
       severity: DEFECT,
       file: dirDoRuntime,
-      expected: "o runtime do MGR, com bin/mgr-runtime.js",
-      found: dirExists ? "bin/mgr-runtime.js ausente" : "diretorio do runtime ausente",
+      expected: text("findingRuntimeExpected"),
+      found: text(dirExists ? "findingRuntimeEntryAbsent" : "findingRuntimeDirAbsent"),
       fix: FIX_UPDATE,
     })];
   }
@@ -342,8 +372,8 @@ function runtimeVersion({ dirDoRuntime, dirExists, entryExists, copyVersion, man
     check: "runtime-version",
     severity: WARNING,
     file: `${dirDoRuntime}/package.json`,
-    expected: `versao ${manifestVersion}, a do manifesto`,
-    found: copyVersion === undefined ? "versao ilegivel ou ausente" : copyVersion,
+    expected: text("findingRuntimeVersionExpected", manifestVersion),
+    found: copyVersion === undefined ? text("findingRuntimeVersionUnreadable") : datum(copyVersion),
     fix: FIX_UPDATE,
   })];
 }
@@ -363,8 +393,10 @@ export function runtimeVersioningCheck({ choice, ignoreState, file, configFile }
       check: "runtime-versioning",
       severity: DEFECT,
       file: configFile,
-      expected: "runtimeVersioning: versioned | unversioned, ou ausente",
-      found: choice.value === CONFIG_ILEGIVEL ? CONFIG_ILEGIVEL : `valor ${JSON.stringify(choice.value)}`,
+      expected: text("findingRuntimeVersioningExpected"),
+      found: choice.value === CONFIG_ILEGIVEL
+        ? text("findingConfigUnreadable")
+        : text("findingConfigValue", JSON.stringify(choice.value)),
       fix: NO_FIX,
     })];
   }
@@ -374,8 +406,8 @@ export function runtimeVersioningCheck({ choice, ignoreState, file, configFile }
       check: "runtime-versioning",
       severity: DEFECT,
       file,
-      expected: "o arquivo de ignorar como o metodo o grava (runtimeVersioning: unversioned)",
-      found: ignoreState === "absent" ? "ausente" : "difere do que o metodo grava",
+      expected: text("findingIgnoreFileExpected"),
+      found: text(ignoreState === "absent" ? "findingAbsent" : "findingIgnoreFileDiffers"),
       fix: FIX_UPDATE,
     })];
   }
@@ -384,8 +416,8 @@ export function runtimeVersioningCheck({ choice, ignoreState, file, configFile }
       check: "runtime-versioning",
       severity: DEFECT,
       file,
-      expected: "sem arquivo de ignorar (runtimeVersioning: versioned)",
-      found: "presente",
+      expected: text("findingNoIgnoreFileExpected"),
+      found: text("findingPresent"),
       fix: FIX_UPDATE,
     })];
   }
@@ -415,8 +447,8 @@ export function runtimeBodies({ files }) {
       check: "divergent-body",
       severity: DEFECT,
       file,
-      expected: `${rel} do runtime como o pacote o traz`,
-      found: copy === null ? "ausente" : "difere do arquivo do pacote",
+      expected: text("findingRuntimeBodyExpected", rel),
+      found: text(copy === null ? "findingAbsent" : "findingRuntimeBodyDiffers"),
       fix: remediacaoDaCondicao(FONTE_COMPARTILHADA),
     }));
 }
@@ -653,8 +685,8 @@ export function staleInstall({ manifestVersion, packageVersion, file }) {
     check: "stale-install",
     severity: WARNING,
     file,
-    expected: `a versao do pacote, ${packageVersion}`,
-    found: manifestVersion,
+    expected: text("findingStaleInstallExpected", packageVersion),
+    found: datum(manifestVersion),
     fix: FIX_UPDATE,
   })];
 }
@@ -683,8 +715,8 @@ export function brokenHooks({ hooks, exists, file }) {
           check: "broken-hook",
           severity: DEFECT,
           file,
-          expected: `o binario de ${evento} presente`,
-          found: `${alvo} nao existe`,
+          expected: text("findingBrokenHookExpected", evento),
+          found: text("findingBrokenHookFound", alvo),
           fix: NO_FIX,
         }));
       }
@@ -708,8 +740,8 @@ export function lockfileDrift({ lockfile, installedPlugins, diff, file }) {
       check: "lockfile-drift",
       severity: UNAVAILABLE,
       file,
-      expected: "um lockfile, para haver o que comparar",
-      found: "sem lockfile: o projeto nao tem skill plugavel",
+      expected: text("findingLockfileUnavailableExpected"),
+      found: text("findingLockfileUnavailableFound"),
       fix: NO_FIX,
     })];
   }
@@ -720,8 +752,8 @@ export function lockfileDrift({ lockfile, installedPlugins, diff, file }) {
     check: "lockfile-drift",
     severity: DEFECT,
     file,
-    expected: `${nome} instalada, porque o lockfile a trava`,
-    found: "ausente",
+    expected: text("findingLockedAbsentExpected", nome),
+    found: text("findingAbsent"),
     fix: FIX_RESTORE,
   }));
 }
@@ -734,6 +766,37 @@ export function lockfileDrift({ lockfile, installedPlugins, diff, file }) {
 
 export const AUDITED = "audited";
 export const NO_INSTALL = "no-install";
+export const INVALID_MANIFEST = "invalid-manifest";
+
+// Leitura do manifesto que separa tres estados. `leJson` devolve null tanto para "nao existe" quanto
+// para "nao parseia", e o `null` valido do JSON tambem cai no mesmo saco (DT-3).
+const leManifesto = (caminho) => {
+  if (!existsSync(caminho)) return { state: "absent" };
+  try {
+    return { state: "read", manifest: JSON.parse(readFileSync(caminho, "utf8")) };
+  } catch (erro) {
+    return { state: "unreadable", detail: erro.message };
+  }
+};
+
+// Conjunto LETAL (DT-5): formas em que o doctor nao consegue seguir sem estourar. `element` em
+// `skills` e `unsafe-name` ficam fora: o doctor sobrevive e relata achados, e isso nao pode degradar.
+const CAMPOS_COM_ELEMENTO_LETAL = ["skillsDirs", "agents"];
+const eLetal = ({ kind, field }) => kind === "root" || kind === "container"
+  || (kind === "element" && CAMPOS_COM_ELEMENTO_LETAL.includes(field));
+
+const manifestoInvalido = (state, problems) => ({
+  outcome: INVALID_MANIFEST,
+  findings: [],
+  checks: 0,
+  manifest: {
+    file: path.posix.join(bundle.RUNTIME_DIR_NAME, MANIFEST_NAME),
+    state,
+    problems,
+    fix: NO_FIX,
+    prova: SEM_REMEDIACAO,
+  },
+});
 
 const leJson = (caminho) => {
   try {
@@ -802,8 +865,13 @@ const arquivosMdEmShared = (dirDoMotor) => {
  */
 export function diagnose(repo, { packageVersion, sources } = {}) {
   const coreDir = path.join(repo, bundle.RUNTIME_DIR_NAME);
-  const manifesto = leJson(path.join(coreDir, "manifest.json"));
-  if (!manifesto) return { outcome: NO_INSTALL, findings: [], checks: 0 };
+  const leitura = leManifesto(path.join(coreDir, MANIFEST_NAME));
+  if (leitura.state === "absent") return { outcome: NO_INSTALL, findings: [], checks: 0 };
+  if (leitura.state === "unreadable") return manifestoInvalido("unreadable", []);
+  // Porta antes de qualquer consumo do manifesto, com ou sem `sources: null` (DT-3).
+  const problemasLetais = manifestShapeProblems(leitura.manifest).filter(eLetal);
+  if (problemasLetais.length) return manifestoInvalido("read", problemasLetais);
+  const manifesto = leitura.manifest;
 
   // `sources: null` = as fontes do pacote (skills/, shared/, arquivos do runtime) NAO estao ao
   // alcance — o runtime copiado para o projeto nao as carrega (DT-16/D-14). `undefined` = fontes do
@@ -1052,4 +1120,7 @@ export function diagnose(repo, { packageVersion, sources } = {}) {
 
 /** Se o diagnostico BLOQUEIA: so `defect`. Aviso e indisponivel nao mudam o codigo de saida. */
 export const hasDefect = ({ findings }) => findings.some(({ severity }) => severity === DEFECT);
+
+/** Bloqueia com defeito OU com manifesto invalido: sem manifesto legivel nada foi conferido (DT-6). */
+export const blocks = (resultado) => resultado.outcome === INVALID_MANIFEST || hasDefect(resultado);
 

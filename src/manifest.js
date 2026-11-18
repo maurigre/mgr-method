@@ -9,6 +9,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { INSTALL_DIR_RE } from "./lockfile.js";
+import * as engineDescriptors from "./engines/index.js";
+import { UsageError } from "./errors.js";
+import { text } from "./ui-text.js";
 
 export const MANIFEST_NAME = "manifest.json";
 export const ENV_NAME = ".env";
@@ -41,18 +44,95 @@ export function writeManifest(dir, data) {
 export function readManifest(dir) {
   const p = manifestPath(dir);
   if (!existsSync(p)) return null;
-  const manifest = JSON.parse(readFileSync(p, "utf8"));
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(p, "utf8"));
+  } catch (cause) {
+    // O texto do JSON.parse e da plataforma e nao entra na frase mostrada (P-10); fica como causa.
+    throw new UsageError("fileNotJson", [MANIFEST_NAME], { cause });
+  }
   if (manifest.skills !== undefined) {
+    // `null` e tolerado pela funcao de forma (campo-array ausente), mas aqui sempre lancou: preserva.
     if (!Array.isArray(manifest.skills)) {
-      throw new Error(`invalid "skills" in ${MANIFEST_NAME}: ${JSON.stringify(manifest.skills)} (expected an array of skill names)`);
+      throw new UsageError("manifestInvalidSkills", [MANIFEST_NAME, JSON.stringify(manifest.skills)]);
     }
-    for (const name of manifest.skills) {
-      if (typeof name !== "string" || !INSTALL_DIR_RE.test(name)) {
-        throw new Error(`unsafe skill name in ${MANIFEST_NAME}: ${JSON.stringify(name)}`);
-      }
+    const [primeiro] = problemasDeSkills(manifest.skills);
+    if (primeiro) {
+      throw new UsageError("manifestUnsafeSkillName", [MANIFEST_NAME, JSON.stringify(manifest.skills[primeiro.posicao])]);
     }
   }
   return manifest;
+}
+
+const tipoDe = (v) => (v === undefined ? "absent" : v === null ? "null" : Array.isArray(v) ? "array" : typeof v);
+
+// Unica casa da regra de elemento de `skills` (typeof e INSTALL_DIR_RE), consumida pelo readManifest
+// e por manifestShapeProblems, para que as duas nunca divirjam.
+function problemasDeSkills(skills) {
+  const achados = [];
+  skills.forEach((nome, posicao) => {
+    if (typeof nome !== "string") achados.push({ kind: "element", posicao });
+    else if (!INSTALL_DIR_RE.test(nome)) achados.push({ kind: "unsafe-name", posicao });
+  });
+  return achados;
+}
+
+// Regra de forma do manifesto, pura (sem IO, sem throw): devolve o que esta fora de forma e deixa a
+// decisao de lancar ou relatar para cada consumidor, porque cada um age sobre a classe que o afeta
+// (`readManifest` so lanca em `skills`; o doctor relata so o que o mata). Ausente/null nos quatro
+// campos-array e tolerado (manifesto legado). `agentsDirs` nunca gera problema: ninguem o le.
+export function manifestShapeProblems(manifest) {
+  if (manifest === null || typeof manifest !== "object" || Array.isArray(manifest)) {
+    return [{ field: MANIFEST_NAME, kind: "root", expected: "object", found: tipoDe(manifest) }];
+  }
+  const problems = [];
+  for (const field of ["skills", "skillsDirs", "engines", "agents"]) {
+    const valor = manifest[field];
+    if (valor === undefined || valor === null) continue;
+    const expected = field === "skills" ? "array-of-skill-names" : "array-of-strings";
+    if (!Array.isArray(valor)) {
+      problems.push({ field, kind: "container", expected, found: tipoDe(valor) });
+    } else if (field === "skills") {
+      for (const { kind, posicao } of problemasDeSkills(valor)) {
+        problems.push(kind === "element"
+          ? { field, kind, expected, found: "non-string-element", position: posicao }
+          : { field, kind, expected: "safe-skill-name", found: "unsafe-name", position: posicao });
+      }
+    } else if (field !== "engines") {
+      valor.forEach((item, i) => {
+        if (typeof item !== "string") {
+          problems.push({ field, kind: "element", expected, found: "non-string-element", position: i });
+        }
+      });
+    }
+  }
+  if (Array.isArray(manifest.engines)) {
+    const reconhecidos = manifest.engines.filter((e) => engineDescriptors.ids().includes(e));
+    if (reconhecidos.length > 0) {
+      const invalido = reconhecidos.some((e) => engineDescriptors.get(e).skillsDir[manifest.scope] === undefined);
+      if (invalido) {
+        const chaves = [...new Set(reconhecidos.flatMap((e) => Object.keys(engineDescriptors.get(e).skillsDir)))];
+        problems.push({ field: "scope", kind: "container", expected: "scope-key", found: tipoDe(manifest.scope), allowed: chaves });
+      }
+    }
+  }
+  return problems;
+}
+
+// Escolhe a chave de mensagem do problema (DT-13), pura: nenhum idioma aqui, so a chave e os
+// parametros. `unsafe-name` tem frase propria (`manifestProblemUnsafeName`) e e checado antes de `element`.
+export function problemText(problem) {
+  const { field, kind, expected, found, position, allowed } = problem;
+  if (kind === "root") return text("manifestProblemRoot", field, found);
+  if (field === "scope") {
+    return found === "absent"
+      ? text("manifestProblemScopeAbsent", allowed.join(" | "))
+      : text("manifestProblemScope", allowed.join(" | "), found);
+  }
+  if (kind === "unsafe-name") return text("manifestProblemUnsafeName", field, position);
+  if (kind === "element") return text("manifestProblemElement", field, position);
+  if (expected === "array-of-skill-names") return text("manifestProblemSkillsList", found);
+  return text("manifestProblemStringList", field, found);
 }
 
 // Lê `MGR_PROJECT_ID=` do `.env` derivado. Forma discriminada: ausência do arquivo, da chave ou valor

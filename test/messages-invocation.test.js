@@ -92,7 +92,7 @@ const BASELINE = JSON.parse(
   readFileSync(new URL("./fixtures/messages-baseline.json", import.meta.url), "utf8"),
 );
 const BASELINE_ARGS = [["a", "b", "c", "d"], [["x"], ["y"], 2, 3]];
-const DELIBERADAS = ["agentsEffortNote", "agentsSetEffortEffect", "help", "planConfigHint"];
+const DELIBERADAS = ["agentsEffortNote", "agentsSetEffortEffect", "help", "planConfigHint", "agentsInheritWarning"];
 const EFFORT_KEYS = ["agentsEffortNote", "agentsSetEffortEffect"];
 
 function snapshotWithBaselineArgs(table) {
@@ -150,3 +150,90 @@ test("should keep every base help line present when the help message gains new l
     assert.deepEqual(missing, [], `lang ${lang}: help lines removed from the base`);
   }
 });
+
+test("should say por padrão instead of the English default in the pt-BR inherit warning", () => {
+  const aviso = getMessages("pt-BR").agentsInheritWarning("review");
+  assert.match(aviso, /Nenhum modelo é publicado por padrão/);
+  assert.doesNotMatch(aviso, /default/);
+});
+
+const campo = (value, state) => ({ value, state });
+
+const LINHAS_INTEIRAS = {
+  en: {
+    agents: {
+      configured: "  claude-code  model=opus (configured)  effort=opus (configured)",
+      default: "  claude-code  model=opus (default)  effort=opus (default)",
+      value: "  claude-code  model=opus  effort=opus",
+      unsupported: "  claude-code  model=not supported by this engine  effort=not supported by this engine",
+      inherited: "  claude-code  model=inherited from the session  effort=inherited from the session",
+    },
+    gateValue: "  copilot: model=opus effort=max",
+    gateUnsupported: "  copilot: model=not supported by this engine effort=not supported by this engine",
+    gateInherited: "  copilot: model=inherits the session model effort=session effort",
+    statusGateInherited: "    copilot: model=inherits the session model effort=session effort",
+    runtimeFonte: { answered: "answered; recorded in .mgr-core/config.json", recorded: "recorded in .mgr-core/config.json", default: "default, not recorded" },
+    runtimeNaoVersionado: (fonte) => `MGR runtime in git → not versioned (${fonte}): .mgr-core/runtime/.gitignore ignores the folder`,
+    runtimeVersionado: (fonte) => `MGR runtime in git → versioned (${fonte}): no ignore file in .mgr-core/runtime/`,
+    gateOff: "  gate:    off (every intent disabled in `agents`)",
+    leisLigado: "  laws:    session preamble: on (the central laws enter before the first message)",
+    leisDesligado: "  laws:    session preamble: off (lawsPreamble.enabled = false)",
+    semPermissoes: "permissions: none declared",
+    comPermissoes: "permissions: network, fs",
+  },
+  "pt-BR": {
+    agents: {
+      configured: "  claude-code  modelo=opus (configurado)  esforço=opus (configurado)",
+      default: "  claude-code  modelo=opus (padrão)  esforço=opus (padrão)",
+      value: "  claude-code  modelo=opus  esforço=opus",
+      unsupported: "  claude-code  modelo=não suportado por este motor  esforço=não suportado por este motor",
+      inherited: "  claude-code  modelo=herdado da sessão  esforço=herdado da sessão",
+    },
+    gateValue: "  copilot: modelo=opus esforço=max",
+    gateUnsupported: "  copilot: modelo=não suportado por este motor esforço=não suportado por este motor",
+    gateInherited: "  copilot: modelo=herda o modelo da sessão esforço=esforço da sessão",
+    statusGateInherited: "    copilot: modelo=herda o modelo da sessão esforço=esforço da sessão",
+    runtimeFonte: { answered: "respondido; gravado em .mgr-core/config.json", recorded: "gravado em .mgr-core/config.json", default: "padrão, não gravado" },
+    runtimeNaoVersionado: (fonte) => `Runtime do MGR no git → não versionado (${fonte}): .mgr-core/runtime/.gitignore ignora a pasta`,
+    runtimeVersionado: (fonte) => `Runtime do MGR no git → versionado (${fonte}): sem arquivo de ignorar em .mgr-core/runtime/`,
+    gateOff: "  gate:    desligado (todas as intenções desligadas em `agents`)",
+    leisLigado: "  leis:    preâmbulo de sessão: ligado (as leis centrais entram antes da primeira mensagem)",
+    leisDesligado: "  leis:    preâmbulo de sessão: desligado (lawsPreamble.enabled = false)",
+    semPermissoes: "permissões:  nenhuma declarada",
+    comPermissoes: "permissões:  network, fs",
+  },
+};
+
+for (const idioma of LANGS) {
+  const tabela = getMessages(idioma);
+  const esperado = LINHAS_INTEIRAS[idioma];
+
+  test(`should render every agents field state as one whole line in ${idioma}`, () => {
+    for (const [estado, linha] of Object.entries(esperado.agents)) {
+      const valor = campo("opus", estado);
+      assert.equal(tabela.agentsEngineLine("claude-code", valor, valor), linha);
+    }
+  });
+
+  test(`should render every gate field state as one whole line in ${idioma}`, () => {
+    assert.equal(tabela.planGateEngineLine("copilot", campo("opus", "value"), campo("max", "value")), esperado.gateValue);
+    assert.equal(tabela.planGateEngineLine("copilot", campo(undefined, "unsupported"), campo(undefined, "unsupported")), esperado.gateUnsupported);
+    assert.equal(tabela.planGateEngineLine("copilot", campo(undefined, "inherited"), campo(undefined, "inherited")), esperado.gateInherited);
+    assert.equal(tabela.statusGateEngineLine("copilot", campo(undefined, "inherited"), campo(undefined, "inherited")), esperado.statusGateInherited);
+  });
+
+  test(`should render every runtime plan value and source as one whole line in ${idioma}`, () => {
+    for (const [fonte, texto] of Object.entries(esperado.runtimeFonte)) {
+      assert.equal(tabela.planRuntimeLine("unversioned", fonte), esperado.runtimeNaoVersionado(texto));
+      assert.equal(tabela.planRuntimeLine("versioned", fonte), esperado.runtimeVersionado(texto));
+    }
+  });
+
+  test(`should render the status and plugin lines as whole lines in ${idioma}`, () => {
+    assert.equal(tabela.statusGateOffLine, esperado.gateOff);
+    assert.equal(tabela.statusLawsLine(true), esperado.leisLigado);
+    assert.equal(tabela.statusLawsLine(false), esperado.leisDesligado);
+    assert.equal(tabela.pluginProposalPermissionsLine([]), esperado.semPermissoes);
+    assert.equal(tabela.pluginProposalPermissionsLine(["network", "fs"]), esperado.comPermissoes);
+  });
+}

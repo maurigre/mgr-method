@@ -5,7 +5,7 @@ import * as catalog from "./catalog.js";
 import * as engineDescriptors from "./engines/index.js";
 import { lockedDirsOf, orphanClass, routeReviewSkill, runtimeIgnoreState } from "./builder.js";
 import { diff } from "./lockfile.js";
-import { MANIFEST_NAME, MODEL_CORE_RUNTIME, manifestShapeProblems } from "./manifest.js";
+import { MANIFEST_NAME, MODEL_CORE_RUNTIME, isLethalShapeProblem, manifestShapeProblems, problemRemedy, REMEDY } from "./manifest.js";
 export { problemText } from "./manifest.js";
 import { CONFIG_NAME, runtimeVersioningOf } from "./registry.js";
 import { InvariantError } from "./errors.js";
@@ -190,7 +190,7 @@ export function missingShared({ expected, exists, skillsDir }) {
  *
  * Arquitetura nula nao e defeito: e instalacao que nao escolheu arquitetura, e o install permite.
  */
-export function architectureSkill({ architecture, onDisk, skillsDir }) {
+export function architectureSkill({ architecture, onDisk, skillsDir, remedy }) {
   if (!architecture) return [];
   const esperada = `arch-${architecture}`;
   if (onDisk.includes(esperada)) return [];
@@ -200,7 +200,7 @@ export function architectureSkill({ architecture, onDisk, skillsDir }) {
     file: `${skillsDir}/${esperada}/SKILL.md`,
     expected: text("findingArchitectureSkillExpected", architecture),
     found: text("findingAbsent"),
-    fix: FIX_UPDATE,
+    fix: remedy === REMEDY.BY_HAND ? NO_FIX : FIX_UPDATE,
   })];
 }
 
@@ -520,6 +520,12 @@ export const CHECKS = [
         fix: FIX_UPDATE,
         prova: PROVA_FUNCIONA,
       },
+      {
+        condicao: "arquitetura-fora-de-forma",
+        fix: NO_FIX,
+        prova: SEM_REMEDIACAO,
+        razao: "declaração fora do catálogo: o `mgr update` recusa; corrija à mão",
+      },
     ],
   },
   {
@@ -779,24 +785,49 @@ const leManifesto = (caminho) => {
   }
 };
 
-// Conjunto LETAL (DT-5): formas em que o doctor nao consegue seguir sem estourar. `element` em
-// `skills` e `unsafe-name` ficam fora: o doctor sobrevive e relata achados, e isso nao pode degradar.
-const CAMPOS_COM_ELEMENTO_LETAL = ["skillsDirs", "agents"];
-const eLetal = ({ kind, field }) => kind === "root" || kind === "container"
-  || (kind === "element" && CAMPOS_COM_ELEMENTO_LETAL.includes(field));
 
-const manifestoInvalido = (state, problems) => ({
+// O `update` so alcanca o que recalcula: promete-se o comando quando HA problema e todos sao desse
+// remedio (DT-11). Sem problema (`unreadable`) ou com algum a mao, nao ha o que prometer.
+const todoProblemaERecalculavel = (problemas) =>
+  problemas.length > 0 && problemas.every(({ remedy }) => remedy === REMEDY.UPDATE);
+
+const blocoDoManifesto = (state, problems, manifesto) => {
+  const comRemedio = problems.map((problema) => ({ ...problema, remedy: problemRemedy(manifesto, problema) }));
+  const recalculavel = todoProblemaERecalculavel(comRemedio);
+  return {
+    file: path.posix.join(bundle.RUNTIME_DIR_NAME, MANIFEST_NAME),
+    state,
+    problems: comRemedio,
+    fix: recalculavel ? FIX_UPDATE : NO_FIX,
+    prova: recalculavel ? PROVA_FUNCIONA : SEM_REMEDIACAO,
+  };
+};
+
+const manifestoInvalido = (state, problems, manifesto) => ({
   outcome: INVALID_MANIFEST,
   findings: [],
   checks: 0,
-  manifest: {
-    file: path.posix.join(bundle.RUNTIME_DIR_NAME, MANIFEST_NAME),
-    state,
-    problems,
-    fix: NO_FIX,
-    prova: SEM_REMEDIACAO,
-  },
+  manifest: blocoDoManifesto(state, problems, manifesto),
 });
+
+/**
+ * Descritores das linhas de fechamento do bloco `manifest` (DT-11). A cola so renderiza.
+ *
+ * Tres casos: tudo recalculavel pelo `update`; mistura, em que os campos a mao vem primeiro porque o
+ * `update` recusa enquanto houver declaracao fora de forma; e o resto (a mao ou ilegivel).
+ */
+export function manifestRemedyText(manifestBlock) {
+  const { problems, fix } = manifestBlock;
+  if (fix === FIX_UPDATE) {
+    return [text("doctorManifestoUpdateRecalcula"), text("doctorResolvaCom", FIX_UPDATE)];
+  }
+  const aMao = problems.filter(({ remedy }) => remedy !== REMEDY.UPDATE);
+  if (aMao.length < problems.length) {
+    const campos = [...new Set(aMao.map(({ field }) => `\`${field}\``))].join(", ");
+    return [text("doctorManifestoMaoDepoisUpdate", campos)];
+  }
+  return [text("doctorSemRemediacaoAutomatica")];
+}
 
 const leJson = (caminho) => {
   try {
@@ -867,11 +898,17 @@ export function diagnose(repo, { packageVersion, sources } = {}) {
   const coreDir = path.join(repo, bundle.RUNTIME_DIR_NAME);
   const leitura = leManifesto(path.join(coreDir, MANIFEST_NAME));
   if (leitura.state === "absent") return { outcome: NO_INSTALL, findings: [], checks: 0 };
-  if (leitura.state === "unreadable") return manifestoInvalido("unreadable", []);
+  if (leitura.state === "unreadable") return manifestoInvalido("unreadable", [], undefined);
   // Porta antes de qualquer consumo do manifesto, com ou sem `sources: null` (DT-3).
-  const problemasLetais = manifestShapeProblems(leitura.manifest).filter(eLetal);
-  if (problemasLetais.length) return manifestoInvalido("read", problemasLetais);
+  const problemasDaForma = manifestShapeProblems(leitura.manifest);
+  const problemasLetais = problemasDaForma.filter(isLethalShapeProblem);
+  // O letal decide o desfecho; o bloco relata TODO problema e o remedio agregado sai de todos (DT-11, E-1 do
+  // gate isolado): prometer `mgr update` olhando so o letal mentia quando um nao letal e a mao.
+  if (problemasLetais.length) return manifestoInvalido("read", problemasDaForma, leitura.manifest);
   const manifesto = leitura.manifest;
+  const problemasNaoLetais = problemasDaForma.filter((problema) => !isLethalShapeProblem(problema));
+  const problemaDaArquitetura = problemasNaoLetais.find(({ field }) => field === "architecture");
+  const remedioDaArquitetura = problemaDaArquitetura && problemRemedy(manifesto, problemaDaArquitetura);
 
   // `sources: null` = as fontes do pacote (skills/, shared/, arquivos do runtime) NAO estao ao
   // alcance — o runtime copiado para o projeto nao as carrega (DT-16/D-14). `undefined` = fontes do
@@ -952,7 +989,12 @@ export function diagnose(repo, { packageVersion, sources } = {}) {
       declared: manifesto.agents ?? [],
       exists: (relativo) => existsSync(path.join(repo, relativo)),
     }),
-    ...architectureSkill({ architecture: manifesto.architecture, onDisk: emDisco, skillsDir: relativoDoDir }),
+    ...architectureSkill({
+      architecture: manifesto.architecture,
+      onDisk: emDisco,
+      skillsDir: relativoDoDir,
+      remedy: remedioDaArquitetura,
+    }),
     ...(semFontes
       ? sourcesUnavailable({ check: "stale-install", manifestVersion: manifesto.version, file: ".mgr-core/manifest.json" })
       : staleInstall({ manifestVersion: manifesto.version, packageVersion: versaoDoPacote, file: ".mgr-core/manifest.json" })),
@@ -1115,12 +1157,23 @@ export function diagnose(repo, { packageVersion, sources } = {}) {
     file: "mgr-skills.lock",
   }));
 
-  return { outcome: AUDITED, findings: achados, checks: CHECKS.length };
+  const blocoManifesto = problemasNaoLetais.length ? blocoDoManifesto("read", problemasNaoLetais, manifesto) : null;
+  // CA-26: com problema a mao no manifesto o `update` recusa; nenhum achado pode prometer o comando que vai
+  // recusar. O achado e refeito pela fabrica (DES-3/DES-8: nada ja construido e mutado).
+  const semPromessaDeUpdate = (item) => (item.fix === FIX_UPDATE
+    ? achado({ check: item.check, severity: item.severity, file: item.file, ...findingText(item), fix: NO_FIX })
+    : item);
+  const findings = blocoManifesto?.fix === NO_FIX ? achados.map(semPromessaDeUpdate) : achados;
+  const resultado = { outcome: AUDITED, findings, checks: CHECKS.length };
+  if (blocoManifesto) resultado.manifest = blocoManifesto;
+  return resultado;
 }
 
 /** Se o diagnostico BLOQUEIA: so `defect`. Aviso e indisponivel nao mudam o codigo de saida. */
 export const hasDefect = ({ findings }) => findings.some(({ severity }) => severity === DEFECT);
 
-/** Bloqueia com defeito OU com manifesto invalido: sem manifesto legivel nada foi conferido (DT-6). */
-export const blocks = (resultado) => resultado.outcome === INVALID_MANIFEST || hasDefect(resultado);
+/** Bloqueia com defeito, manifesto invalido (DT-6) ou problema de forma do manifesto no `audited` (DT-16). */
+export const blocks = (resultado) => resultado.outcome === INVALID_MANIFEST
+  || hasDefect(resultado)
+  || Boolean(resultado.manifest);
 

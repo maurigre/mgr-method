@@ -12,7 +12,7 @@ import { specNext, specStatus, specValidate } from "../src/commands/spec.js";
 import { detectHook, precompactHook, suggestionsFor } from "../src/commands/hooks.js";
 import { escreverSync, lerPayload, modificados } from "./hook-io.js";
 import { projectRoot } from "../src/project-root.js";
-import { LOCAL_CONFIG_NAME, ORIGINS, configPath, misplacedTeamKeys, readAgents, readOrigin, readPersonal, readRuntimeVersioning } from "../src/registry.js";
+import { LOCAL_CONFIG_NAME, ORIGINS, configPath, misplacedTeamKeys, readAgents, readPersonal, readRuntimeVersioning } from "../src/registry.js";
 import { indexedFiles } from "./git-index.js";
 import * as engineRegistry from "../src/engines/index.js";
 import * as tokens from "../src/tokens.js";
@@ -29,10 +29,12 @@ import { buildRuntime, gateSummary, inheritingModel, runtimeIgnoreEffect, runtim
 import { validateAll } from "../src/validator.js";
 import { printBanner } from "../src/banner.js";
 import { PERSONAL_LINES, planGitignore, removeGitignoreBlock, writeGitignoreBlock } from "../src/gitignore.js";
-import { GITIGNORE_DECLINE, GITIGNORE_WRITE, askRuntimeVersioning, collectInstallAnswers, consentEach, consentToGitignore, consentToBlock, BLOCK_WRITE, BLOCK_DECLINE, updateOutcome, consentToRemove, detectUserLanguage, removalMode, removalOutcome, CANCELLED, OUTCOME_KEPT_BY_CHOICE, OUTCOME_KEPT_NO_CONSENT, OUTCOME_REMOVED, REMOVE, promptsNoIdioma } from "../src/prompts.js";
+import { GITIGNORE_DECLINE, GITIGNORE_WRITE, askRuntimeVersioning, consentEach, consentToGitignore, consentToBlock, BLOCK_WRITE, BLOCK_DECLINE, updateOutcome, consentToRemove, detectUserLanguage, removalMode, replacementMode, removalOutcome, CANCELLED, OUTCOME_KEPT_BY_CHOICE, OUTCOME_KEPT_NO_CONSENT, OUTCOME_REMOVED, REMOVE, promptsNoIdioma } from "../src/prompts.js";
 import { getMessages } from "../src/messages.js";
 import { renderError } from "../src/errors.js";
 import { renderText } from "../src/ui-text.js";
+import { askInstall, effortFlagLevels, engineSupportsEffort, engineSupportsModel, recordedOriginOf } from "../src/install-interactive.js";
+import { MANIFEST_NAME, QUESTION_FIELDS, problemText, readUserLanguage } from "../src/manifest.js";
 import { instructionsToRemove, planInstructions, removeInstructionBlock, writeInstructionBlock } from "../src/instructions.js";
 import {
   add as addPlugin, remove as removePlugin, restore as restorePlugins,
@@ -46,7 +48,6 @@ import { diff as lockfileDiff, readLockfile, replacedByEngine, LOCKFILE_NAME } f
 import { detect } from "../src/detector.js";
 import { hookFilePath, planOwnedHooks, removeHook, rewriteOwnedHooks, runtimeCommand, syncOwnedHooks, writeHook, writtenEvents } from "../src/hooks.js";
 import { checkBareModelFlag, checkEffortFlags, mergeEfforts, parseArgs, resolveEffortFlags, resolveModelFlags } from "../src/cli-args.js";
-import { EFFORT_LEVELS } from "../src/plugin.js";
 
 const SCOPES = ["project", "global"];
 // Comandos de skill plugável: o posicional é o nome da skill/registry, nunca o repositório.
@@ -77,10 +78,7 @@ const hookEngines = (plan, flags) => (flags.noHooks
   ? []
   : plan.targets.map((target) => target.engine).filter((engine) => installer.ENGINES.includes(engine)));
 
-const engineSupportsModel = (id) => engineRegistry.ids().includes(id) && engineRegistry.get(id).capabilities.agentModel === true;
-const engineSupportsEffort = (id) => engineRegistry.ids().includes(id) && engineRegistry.get(id).capabilities.agentEffort === true;
 // Níveis aceitos pelas flags --effort-<intenção>: os do plugin mais `inherit`, que tira o campo do agente.
-const effortFlagLevels = [...EFFORT_LEVELS, catalogo.INHERIT];
 const effortFlagLevelsText = effortFlagLevels.join(" | ");
 // Texto único de cada recusa das flags de esforço: a recusa precoce e a autoritativa usam o mesmo.
 const effortRefusalText = ({ reason, intent, value }, engines) => ({
@@ -99,6 +97,7 @@ function warnLayers(core, repo) {
   if (misplacedTeamKeys(core).includes("projectId")) console.error(pc.yellow(M.projectIdPersonal));
   return localFile;
 }
+
 
 async function cmdInstall(flags, positional) {
   const repo = path.resolve(positional[0] || ".");
@@ -122,51 +121,30 @@ async function cmdInstall(flags, positional) {
 
   const found = installer.detect(repo);
   if (found.length) {
-    p.note(found.map((f) => M.existingSkillsLine(f.scope, f.path, f.count)).join("\n"),
+    p.note(found.map((f) => M.existingSkillsLine(M.scopeLabel(f.scope), f.path, f.count)).join("\n"),
       M.existingSkillsTitle);
   }
 
-  const skillsDir = flags.skillsDir ? path.resolve(flags.skillsDir) : null;
+  const skillsDirFlag = flags.skillsDir ? path.resolve(flags.skillsDir) : null;
+  let skillsDir;
+  let skillsDirDeclared;
+  const askQuestions = !skillsDirFlag && isTTY && !flags.yes;
   let engines = flags.engines;
   let scope = flags.scope;
   let language = flags.language || null;
   let architecture = flags.arch || null;
   let userLanguage = flags.userLanguage || null;
   let projectId = flags.projectId || null;
-  const optional = [];
+  let optional = [];
+  let allSkills = flags.allSkills;
   let answeredModels = {};
   let answeredEfforts = {};
   let answeredOrigin = null;
   let answeredRuntimeVersioning = null;
-  const recordedOriginOf = (core) => {
-    const lida = readOrigin(core);
-    return lida.state === "recorded" ? lida.origin : null;
-  };
 
-  if (!skillsDir && isTTY && !flags.yes) {
-    // Chamado pelo nucleo DEPOIS de motores e escopo serem conhecidos. Flag de modelo invalida nao
-    // recusa aqui; a validacao autoritativa, antes de qualquer escrita, segue depois das perguntas.
-    const contextFor = (chosenEngines, chosenScope) => {
-      const core = installer.coreDir(chosenScope, repo);
-      const agents = readAgents(core);
-      const resolved = resolveModelFlags(flags, { engines: chosenEngines, supportsModel: engineSupportsModel });
-      const effortsByFlag = resolveEffortFlags(flags, { engines: chosenEngines, supportsEffort: engineSupportsEffort, levels: effortFlagLevels });
-      return {
-        flagModels: resolved.ok ? resolved.models : {},
-        flagEfforts: effortsByFlag.ok ? effortsByFlag.efforts : {},
-        configured: agents.sources,
-        enabledIntents: catalogo.INTENTS.filter((intent) => agents.policies[intent].enabled !== false),
-        originRecorded: Boolean(flags.origin) || recordedOriginOf(core) !== null,
-        runtimeVersioningRecorded: readRuntimeVersioning(core).state !== "absent",
-      };
-    };
-    const answers = await collectInstallAnswers(
-      CLACK,
-      { engines, scope, language, architecture, userLanguage, projectId },
-      {
-        repo, allSkills: flags.allSkills, env: process.env, msg: M, contextFor,
-      }
-    );
+  if (askQuestions) {
+    // A recusa antes da primeira pergunta, os padrões e o contexto moram no núcleo (P3.1); a borda só liga o clack.
+    const answers = await askInstall(CLACK, { flags, repo, env: process.env, msg: M });
     if (answers === CANCELLED) bail();
     ({ engines, scope, language, architecture, userLanguage, projectId } = answers);
     optional.push(...answers.optional);
@@ -178,10 +156,23 @@ async function cmdInstall(flags, positional) {
   }
   // Sem TTY/-y e sem flag: herda o locale — nunca grava null em instalação nova
   // (o backfill pt-BR do update é só para manifestos da era sem o campo).
-  userLanguage = userLanguage || detectUserLanguage(process.env);
-  if (!engines.length) engines = ["claude-code"];
+  // O explícito desta execução é montado ANTES dos padrões abaixo: o que o usuário não deu não é explícito.
   scope = scope || "project";
   if (!SCOPES.includes(scope)) { p.log.error(M.invalidScope(scope)); process.exit(1); }
+  // Uma resolução do manifesto anterior, antes de qualquer escrita (DT-6, DT-7): recusa sai pelo catch usual.
+  const explicit = installer.explicitOfInstall(engines, {
+    skillsDir: skillsDirFlag, language, architecture, userLanguage, optional, all: allSkills,
+  });
+  const read = installer.readPrior(scope, repo);
+  const { state: estadoAnterior, prior, declarations, repairs } = installer.resolvePrior(read, {
+    scope, repo, explicit, asked: askQuestions ? QUESTION_FIELDS : [], command: installer.COMMAND.INSTALL,
+    localeLanguage: detectUserLanguage(process.env),
+  });
+  // A precedência (DT-6) e o que não foi perguntado são decididos no núcleo; a borda só repassa.
+  ({ engines, skillsDir, skillsDirDeclared, language, architecture, userLanguage, optional, allSkills } = installer.effectiveInstallChoices({
+    declarations, askQuestions, skillsDirFlag, scope, repo, localeLanguage: detectUserLanguage(process.env),
+    answered: { engines, language, architecture, userLanguage, optional },
+  }));
   // As flags de modelo também são validadas ANTES de qualquer escrita (CA-32). Flag vence a pergunta.
   // Com `--skills-dir` o único motor é `custom` (o `planInstall` o usa), e ele não aceita modelo: resolver
   // contra o motor padrão gravaria política de um motor que nem foi instalado.
@@ -220,8 +211,7 @@ async function cmdInstall(flags, positional) {
   // Avisos de camada em stderr: o que foi ignorado nunca some em silêncio (DT-2).
   const localFile = warnLayers(core, repo);
 
-  const prior = installer.detectPrior(scope, repo);
-  if (prior) {
+  if (estadoAnterior === "read") {
     const migracao = installer.runtimeMigration(prior);
     if (prior.model === "runtime-launcher") p.log.warn(M.oldInstallWarn(prior.version));
     else if (migracao === "none") p.log.warn(M.resyncWarn);
@@ -230,9 +220,14 @@ async function cmdInstall(flags, positional) {
     else if (migracao === "relocate") p.log.warn(M.runtimeRelocated(prior.version ?? "?", destinoRuntime));
     if (installer.needsConfigMigration(prior)) p.log.warn(M.configMigrated(prior.version ?? "?", localFile));
   }
+  if (repairs.length) {
+    p.log.warn([M.manifestRepairTitle(MANIFEST_NAME), ...repairs.map((r) => renderText(M, problemText(r)))].join("\n"));
+  }
 
-  const replaced = replacedByEngine(readLockfile(repo));
-  const plan = installer.planInstall(engines, scope, repo, { skillsDir, language, architecture, userLanguage, optional, all: flags.allSkills, projectId, replaced, models, efforts, origin, runtimeVersioning: answeredRuntimeVersioning });
+  const lockfile = readLockfile(repo);
+  const replaced = replacedByEngine(lockfile);
+  const plan = installer.planInstall(engines, scope, repo, { skillsDir, skillsDirDeclared, language, architecture, userLanguage, optional, all: allSkills, projectId, replaced, models, efforts, origin, runtimeVersioning: answeredRuntimeVersioning, prior, declarations, lockfile });
+  const relOfItem = (item) => (plan.scope === "project" ? path.relative(plan.repo, item.path) : item.path);
   // O caminho do config como o usuário o lê (ADR-0031), um só para o plano e para o anúncio.
   const arquivoConfig = pathsForDisplay([configPath(installer.coreDir(plan.scope, plan.repo))], plan.scope, plan.repo);
   const motoresComHook = hookEngines(plan, flags);
@@ -278,6 +273,7 @@ async function cmdInstall(flags, positional) {
       ...(abandonadas.length
         ? [M.planAbandoned(abandonadas.map((saindo) => M.removalReason(saindo.name, saindo.class)))]
         : []),
+      ...plan.occupied.blocked.map((item) => M.enteringBlockedByPlugin(relOfItem(item), item.name)),
       // O hook mora em arquivo do usuário; ele vê no plano o que será escrito antes de
       // confirmar, e pode abortar. Consentimento visível sem pergunta nova (ADR-0009).
       ...(motoresComHook.length
@@ -310,6 +306,15 @@ async function cmdInstall(flags, positional) {
   // sai e parte do plano que a pessoa confirma, e o --dry-run segue sem perguntar e sem escrever.
   const decisao = await consentToRemove(CLACK, abandonadas, { mode: modoDeRemocao, msg: M });
   if (decisao === CANCELLED) bail();
+  // "Posse vale sempre": a substituição de pasta alheia usa o modo próprio, que não herda o `-y`.
+  const substituicao = await consentEach(CLACK, plan.occupied.replaceable.map((item) => ({ kind: "replace", item })), {
+    mode: replacementMode({ isTTY }), msg: M, messageOf: ({ item }) => M.confirmReplaceOne(relOfItem(item), item.name),
+  });
+  if (substituicao === CANCELLED) bail();
+  const substituidas = new Set(substituicao.remove.map(({ item }) => item.path));
+  const recusadas = plan.occupied.replaceable.filter((item) => !substituidas.has(item.path));
+  for (const recusada of recusadas) console.log(M.enteringKeptNotOurs(relOfItem(recusada), recusada.name));
+  const skip = installer.skippedByConsent({ occupied: plan.occupied }, { declinedReplacements: recusadas });
   const aRemover = decisao === REMOVE ? abandonadas : [];
   // O que fica em disco continua DECLARADO. Sem isto, recusar (ou nao ter terminal para perguntar)
   // criaria uma orfa NOVA, que nao tem remediacao, e a mensagem que cita o `-y` seria falsa: na
@@ -333,9 +338,11 @@ async function cmdInstall(flags, positional) {
   // Nome que esta versao ja nao distribui sai do conjunto mantido: reconstrui-lo lancaria e a RECUSA
   // viraria erro de instalacao. Ele e ANUNCIADO abaixo, nunca descartado em silencio.
   const { mantidas, semFonte } = installer.splitKept(aManter);
-  const res = installer.execute(installer.keepDeclared(plan, mantidas), { abandoned: aRemover });
+  const res = installer.execute(installer.withoutEntering(installer.keepDeclared(plan, mantidas), skip), { abandoned: aRemover });
   spinner.stop(M.installedAt(res.targets.map((t) => t.dir).join(" · ")));
   if (res.migrated) p.log.info(M.migrationInfo(res.migrated.removed.length));
+  // O caminho declarado que difere do recalculado nunca é removido, e é anunciado (E-4 do gate isolado).
+  for (const ignorado of res.migrated?.ignored ?? []) p.log.warn(M.uninstallPathIgnored(ignorado));
   // ADR-0031: a remoção do reviewGate é anunciada depois da escrita, como a migração de layout.
   if (res.reviewGateMigration.state === "migrated") p.log.warn(M.reviewGateMigrated(res.reviewGateMigration, arquivoConfig));
   p.log.success(M.runtimeWritten(pathsForDisplay([res.runtime.dir], plan.scope, plan.repo), res.runtime.files));
@@ -406,7 +413,7 @@ async function cmdInstall(flags, positional) {
     reportGitIndex({ repo: plan.repo, relDir: relRuntime, gitIndex: indexedFiles, M, info: (t) => p.log.info(t), warn: (t) => p.log.warn(t) });
   }
   p.outro(pc.green(M.done));
-  return 0;
+  return skip.length ? 1 : 0;
 }
 
 
@@ -418,7 +425,7 @@ function pluginTargets(flags, repo) {
   const prior = installer.detectPrior(scope, repo);
   const engines = (flags.engines.length ? flags.engines : (prior?.engines || []))
     .filter((engine) => installer.ENGINES.includes(engine));
-  const chosen = engines.length ? engines : ["claude-code"];
+  const chosen = engines.length ? engines : engineRegistry.DEFAULT_ENGINES;
   return { scope, targets: chosen.map((engine) => ({ engine, dir: installer.engineSkillsDir(engine, scope, repo) })) };
 }
 
@@ -884,8 +891,8 @@ async function cmdUpdate(flags, positional) {
   const repo = positional[0] ? path.resolve(positional[0]) : projectRoot(process.cwd()).root;
   let scope = flags.scope;
   if (!scope) {
-    scope = installer.detectPrior("global", repo) && !installer.detectPrior("project", repo)
-      ? "global" : "project";
+    // DT-7: o escopo sai da presença do manifesto no disco, não da leitura dele (que pode estar malformado).
+    scope = installer.scopeByManifestPresence(repo);
   }
   // Passo 1 (DT-11): config inválida falha ANTES de qualquer escrita; o que a camada ignorou vai a stderr.
   const core = installer.coreDir(scope, repo);
@@ -899,8 +906,14 @@ async function cmdUpdate(flags, positional) {
 
   // Passo 2: o plano. Nada é escrito até o `installer.update`.
   const lockfile = readLockfile(repo);
+  // DT-8: o manifesto é lido e normalizado uma vez; a recusa sai pelo catch comum, antes de qualquer escrita.
+  const read = installer.readPrior(scope, repo);
+  const { state, prior: priorResolved, declarations, repairs } = installer.resolvePrior(read, {
+    scope, repo, explicit: {}, command: installer.COMMAND.UPDATE,
+  });
   const planned = installer.planUpdate(scope, repo, {
     replaced: replacedByEngine(lockfile), lockfile, projectId: flags.projectId || null,
+    state, prior: priorResolved, declarations,
   });
   const { prior, entering, abandoned, orphans, migration } = planned;
   const relOf = (item) => (scope === "project" ? path.relative(repo, item.path) : item.path);
@@ -908,6 +921,10 @@ async function cmdUpdate(flags, positional) {
 
   // Passo 3: o que muda, antes de qualquer pergunta. A migração de config abre a lista, antes de
   // qualquer linha de diferença (DT-11, passo 3).
+  if (repairs.length) {
+    console.log(M.manifestRepairTitle(MANIFEST_NAME));
+    for (const reparo of repairs) console.log(renderText(M, problemText(reparo)));
+  }
   if (migration.config) console.log(M.configMigrated(prior.version ?? "?", localFile));
   const destinoRuntime = pathsForDisplay([installer.runtimeDir(scope, repo)], scope, repo);
   if (migration.runtime === "copy") console.log(M.runtimeMigrated(prior.version ?? "?", destinoRuntime));
@@ -950,13 +967,19 @@ async function cmdUpdate(flags, positional) {
 
   // Passo 4: o núcleo enumera o que se pergunta (`consentItems`) e particiona a decisão (`partitionConsent`);
   // a borda só pergunta item a item, na ordem, com a mensagem de cada natureza.
-  const decisao = await consentEach(CLACK, itens, {
-    mode: removalMode({ isTTY, yes: flags.yes }),
-    msg: M,
-    messageOf: ({ kind, item }) => (kind === "replace" ? M.confirmReplaceOne(relOf(item), item.name) : M.confirmRemoveOne(relOf(item))),
+  // "Posse vale sempre": a substituição de arquivo alheio usa o modo próprio, que não herda o `--yes`.
+  const messageOf = ({ kind, item }) => (kind === "replace" ? M.confirmReplaceOne(relOf(item), item.name) : M.confirmRemoveOne(relOf(item)));
+  const decisaoRemocao = await consentEach(CLACK, itens.filter(({ kind }) => kind !== "replace"), {
+    mode: removalMode({ isTTY, yes: flags.yes }), msg: M, messageOf,
   });
-  if (decisao === CANCELLED) bail();
+  if (decisaoRemocao === CANCELLED) bail();
+  const decisaoSubstituicao = await consentEach(CLACK, itens.filter(({ kind }) => kind === "replace"), {
+    mode: replacementMode({ isTTY }), msg: M, messageOf,
+  });
+  if (decisaoSubstituicao === CANCELLED) bail();
+  const decisao = { remove: [...decisaoRemocao.remove, ...decisaoSubstituicao.remove] };
   const part = installer.partitionConsent(planned, new Set(decisao.remove.map(({ item }) => item.path)));
+  for (const recusada of part.declinedReplacements) console.log(M.enteringKeptNotOurs(relOf(recusada), recusada.name));
 
   // D-13: o .gitignore também é convergido no update, só no escopo project e só sem o bloco gerenciado.
   const decisaoGitignore = precisaGitignore
@@ -1025,6 +1048,7 @@ async function cmdUpdate(flags, positional) {
     }
   }
   if (res.migrated) console.log(pc.dim(M.updateMigrated));
+  for (const ignorado of res.migrated?.ignored ?? []) console.log(M.uninstallPathIgnored(ignorado));
   console.log(pc.green(M.updateDone(scope, res.skills.length, res.targets.map((t) => t.dir).join(" · "))));
 
   // O `update` reescreve o frontmatter dos agentes a partir do config, e fazia isso em SILÊNCIO:
@@ -1065,6 +1089,10 @@ async function cmdUpdate(flags, positional) {
 async function cmdUninstall(flags, positional) {
   const repo = path.resolve(positional[0] || ".");
   const scope = flags.scope || "project";
+  // O plano roda antes de qualquer remoção: a recusa (sem instalação ou manifesto recusado) sai
+  // pelo catch comum, e os caminhos ignorados são avisados antes da confirmação.
+  const plan = installer.planUninstall(scope, repo);
+  for (const item of plan.ignored) console.log(M.uninstallPathIgnored(item.path));
   const instrRemove = instructionsToRemove(repo, { scope, projectInstalled: Boolean(installer.detectPrior("project", repo)) });
   for (const { file } of instrRemove) console.log(M.instructionsToRemove(file));
   if (isTTY && !flags.yes) {
@@ -1173,11 +1201,12 @@ async function main() {
   const repo = !semRepoPosicional && positional[0] ? path.resolve(positional[0]) : projectRoot(process.cwd()).root;
   // Manifesto corrompido não pode derrubar o processo ANTES do try: num hook, um stack trace no
   // stderr é exatamente o ruído no contexto do agente que a DT-8 do ADR-0018 quer impedir.
-  let manifestLang = null;
-  try {
-    manifestLang = installer.detectPrior("project", repo)?.userLanguage
-      || installer.detectPrior("global", repo)?.userLanguage;
-  } catch { /* idioma cai para o locale, que é o default de sempre */ }
+  // DT-4: `readUserLanguage` nunca lança e só olha o idioma; os outros campos não o apagam.
+  const idiomaDe = (escopo) => {
+    const lido = readUserLanguage(installer.coreDir(escopo, repo));
+    return lido.state === "declared" ? lido.value : null;
+  };
+  const manifestLang = idiomaDe("project") || idiomaDe("global");
   M = getMessages(flags.userLanguage || manifestLang || detectUserLanguage(process.env));
   // DT-10: um dist/ gerado para outra versão do package.json ao lado não roda nenhum comando.
   const versaoBundle = bundle.buildVersion();

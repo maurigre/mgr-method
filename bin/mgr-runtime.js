@@ -15,7 +15,7 @@ import { sddCheck } from "../src/commands/sdd-check.js";
 import { specNext, specStatus, specValidate } from "../src/commands/spec.js";
 import { parseArgs } from "../src/cli-args.js";
 import { ids as engineIds } from "../src/engines/index.js";
-import { readManifest } from "../src/manifest.js";
+import { readManifest, readUserLanguage } from "../src/manifest.js";
 import { renderError } from "../src/errors.js";
 import { getMessages } from "../src/messages.js";
 import { projectRoot } from "../src/project-root.js";
@@ -52,7 +52,9 @@ async function main() {
   const { flags, positional, unknownFlag } = parseArgs(rest, { engines: engineIds() });
   const root = projectRoot(process.cwd()).root;
   const manifest = readManifestSafe(root);
-  const lang = flags.userLanguage || manifest.userLanguage || detectUserLanguage(process.env);
+  // DT-4: o idioma nao depende dos outros campos do manifesto; um manifesto malformado nao o apaga.
+  const declarado = readUserLanguage(path.join(root, RUNTIME_DIR_NAME));
+  const lang = flags.userLanguage || (declarado.state === "declared" ? declarado.value : null) || detectUserLanguage(process.env);
   const self = path.relative(root, fileURLToPath(import.meta.url)).split(path.sep).join("/");
   const invocation = `node ${self}`;
   const lifecycle = `npx mgr-method@${manifest.version ?? "latest"}`;

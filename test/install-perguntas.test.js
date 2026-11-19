@@ -496,3 +496,158 @@ test("should exit 1 with the no-model-engine message when only a skills dir is c
   assert.equal(fs.existsSync(path.join(project, ".mgr-core")), false);
   assert.equal(fs.existsSync(destino), false, "a recusa vem antes de qualquer escrita");
 });
+
+function askComAnterior(respostas = {}) {
+  const chamadas = [];
+  const perguntar = (tipo) => async (opcoes) => {
+    chamadas.push({ tipo, ...opcoes });
+    return opcoes.message in respostas ? respostas[opcoes.message] : opcoes.initialValue ?? opcoes.initialValues;
+  };
+  const ask = {
+    multiselect: perguntar("multiselect"),
+    select: perguntar("select"),
+    text: perguntar("text"),
+    confirm: perguntar("confirm"),
+    isCancel: () => false,
+  };
+  return { ask, chamadas };
+}
+
+async function coletarComAnterior(anterior, { respostas, allSkills = false, semPrevious = false } = {}) {
+  const { ask, chamadas } = askComAnterior(respostas);
+  const opcoes = { repo: ".", allSkills, msg, enabledIntents: [] };
+  if (!semPrevious) opcoes.previous = () => anterior;
+  const out = await collectInstallAnswers(ask, { scope: "project", projectId: "projeto" }, opcoes);
+  const pergunta = (mensagem) => chamadas.find((c) => c.message === mensagem);
+  return { out, chamadas, pergunta };
+}
+
+const declaracoesCompletas = {
+  engines: ["copilot"],
+  architecture: "clean",
+  language: "java",
+  userLanguage: "pt-BR",
+  optional: ["evidence-capture"],
+};
+
+test("should preselect every previous declaration in its question", async () => {
+  const { out, pergunta } = await coletarComAnterior(declaracoesCompletas);
+
+  assert.deepEqual(pergunta(msg.qEngines).initialValues, ["copilot"]);
+  assert.equal(pergunta(msg.qArchitecture).initialValue, "clean");
+  assert.equal(pergunta(msg.qLanguage).initialValue, "java");
+  assert.equal(pergunta(msg.qOutputLanguage).initialValue, "pt-BR");
+  assert.equal(pergunta(msg.qOptionalEvidence).initialValue, true);
+  assert.deepEqual(out.engines, ["copilot"]);
+  assert.equal(out.architecture, "clean");
+  assert.equal(out.language, "java");
+  assert.equal(out.userLanguage, "pt-BR");
+  assert.deepEqual(out.optional, ["evidence-capture"]);
+});
+
+test("should preselect other and record null when the previous language is not in the catalog", async () => {
+  const { out, pergunta } = await coletarComAnterior({ language: "cobol" }, { respostas: { [msg.qLanguage]: "outra" } });
+
+  assert.equal(pergunta(msg.qLanguage).initialValue, "outra");
+  assert.equal(out.language, null);
+});
+
+test("should preselect other and suggest the previous text when the user language is not en or pt-BR", async () => {
+  const { pergunta } = await coletarComAnterior({ userLanguage: "es-ES" });
+
+  assert.equal(pergunta(msg.qOutputLanguage).initialValue, "outro");
+  assert.equal(pergunta(msg.qWhichLanguage).initialValue, "es-ES");
+});
+
+test("should fall back to today's fixed defaults when previous returns nothing", async () => {
+  const { pergunta } = await coletarComAnterior({});
+
+  assert.deepEqual(pergunta(msg.qEngines).initialValues, ["claude-code"]);
+  assert.equal(pergunta(msg.qArchitecture).initialValue, "hexagonal");
+  assert.equal(pergunta(msg.qLanguage).initialValue, "java");
+  assert.equal(pergunta(msg.qOutputLanguage).initialValue, "en");
+  assert.equal(pergunta(msg.qOptionalEvidence).initialValue, false);
+});
+
+test("should fall back to the same defaults when no previous option is given", async () => {
+  const comOpcao = await coletarComAnterior({});
+  const semOpcao = await coletarComAnterior(null, { semPrevious: true });
+
+  const iniciais = (c) => c.chamadas.map((q) => [q.message, q.initialValue ?? q.initialValues]);
+  assert.deepEqual(iniciais(semOpcao), iniciais(comOpcao));
+});
+
+test("should skip architecture and language when the inherited declarations say allSkills", async () => {
+  const { chamadas, out } = await coletarComAnterior({ allSkills: true });
+  const perguntadas = chamadas.map((c) => c.message);
+
+  assert.ok(!perguntadas.includes(msg.qArchitecture));
+  assert.ok(!perguntadas.includes(msg.qLanguage));
+  assert.ok(perguntadas.includes(msg.qOutputLanguage));
+  assert.equal(out.architecture, null);
+  assert.equal(out.language, null);
+});
+
+test("should preselect the none option and record null when the previous architecture is null", async () => {
+  const { out, pergunta } = await coletarComAnterior({ architecture: null });
+
+  assert.equal(pergunta(msg.qArchitecture).initialValue, "none");
+  assert.equal(out.architecture, null);
+});
+
+test("should preselect and record layered when it was the previous architecture", async () => {
+  const { out, pergunta } = await coletarComAnterior({ architecture: "layered" });
+
+  assert.equal(pergunta(msg.qArchitecture).initialValue, "layered");
+  assert.equal(out.architecture, "layered");
+});
+
+test("should have non-empty none labels in every language table", () => {
+  for (const idioma of ["en", "pt-BR"]) {
+    const tabela = getMessages(idioma);
+    assert.equal(typeof tabela.archNoneLabel, "string");
+    assert.notEqual(tabela.archNoneLabel.trim(), "");
+    assert.equal(typeof tabela.archNoneHint, "string");
+    assert.notEqual(tabela.archNoneHint.trim(), "");
+  }
+});
+
+test("should build the none option of the architecture select from the message table", async () => {
+  for (const idioma of ["en", "pt-BR"]) {
+    const tabela = getMessages(idioma);
+    const { ask, chamadas } = askComAnterior();
+    await collectInstallAnswers(ask, { scope: "project", projectId: "projeto" }, {
+      repo: ".", msg: tabela, enabledIntents: [],
+    });
+    const opcaoNenhuma = chamadas.find((c) => c.message === tabela.qArchitecture).options.find((o) => o.value === "none");
+
+    assert.equal(opcaoNenhuma.label, tabela.archNoneLabel);
+    assert.equal(opcaoNenhuma.hint, tabela.archNoneHint);
+  }
+});
+
+test("should preselect the recorded project id and keep it when the answer is the default", async () => {
+  const { ask, chamadas } = askComAnterior();
+  const out = await collectInstallAnswers(ask, { scope: "project" }, {
+    repo: path.join(path.sep, "pasta-do-repo"), allSkills: false, msg, enabledIntents: [],
+    previous: () => ({ ...declaracoesCompletas, projectId: "id-gravado" }),
+  });
+  assert.equal(chamadas.find((c) => c.message === msg.qProjectId).initialValue, "id-gravado");
+  assert.equal(out.projectId, "id-gravado");
+});
+
+test("should preselect the folder name as project id when nothing is recorded", async () => {
+  const { ask, chamadas } = askComAnterior();
+  await collectInstallAnswers(ask, { scope: "project" }, {
+    repo: path.join(path.sep, "pasta-do-repo"), allSkills: false, msg, enabledIntents: [], previous: () => ({}),
+  });
+  assert.equal(chamadas.find((c) => c.message === msg.qProjectId).initialValue, "pasta-do-repo");
+});
+
+test("should preselect the folder name as project id when the recorded id is empty", async () => {
+  const { ask, chamadas } = askComAnterior();
+  await collectInstallAnswers(ask, { scope: "project" }, {
+    repo: path.join(path.sep, "pasta-do-repo"), allSkills: false, msg, enabledIntents: [], previous: () => ({ projectId: "" }),
+  });
+  assert.equal(chamadas.find((c) => c.message === msg.qProjectId).initialValue, "pasta-do-repo");
+});

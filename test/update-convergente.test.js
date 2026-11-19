@@ -8,7 +8,8 @@ import { MODEL_RUNTIME, manifestPath, writeManifest } from "../src/manifest.js";
 import { markSkill } from "../src/builder.js";
 import * as bundle from "../src/bundle.js";
 import * as catalog from "../src/catalog.js";
-import { CANCELLED, consentEach, removalMode, REMOVAL_ASK, REMOVAL_ASSUMED, REMOVAL_NO_CONSENT, updateOutcome } from "../src/prompts.js";
+import { getMessages } from "../src/messages.js";
+import { CANCELLED, consentEach, removalMode, replacementMode, REMOVAL_ASK, REMOVAL_ASSUMED, REMOVAL_NO_CONSENT, updateOutcome } from "../src/prompts.js";
 import { cpSync } from "node:fs";
 import { execFile, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
@@ -769,19 +770,49 @@ test("should list a blocked folder among the skipped names even when everything 
   });
 });
 
-test("should replace an unmarked folder named like an entering skill with -y and declare the name", async () => {
+test("should keep an unmarked folder named like an entering skill with -y, not declare the name and exit 1", async () => {
   await withProcessProject(async ({ repo, home }) => {
     await installLayered(home, repo);
-    const pacote = readFileSync(skillsPath(repo, ENTERING, "SKILL.md"), "utf8");
     undeclareEntering(repo);
+    const userContent = "---\nname: configure-agents\ndescription: minha\n---\ncorpo do usuario\n";
     mkdirSync(skillsPath(repo, ENTERING), { recursive: true });
-    writeFileSync(skillsPath(repo, ENTERING, "SKILL.md"), "---\nname: configure-agents\ndescription: minha\n---\ncorpo do usuario\n", "utf8");
+    writeFileSync(skillsPath(repo, ENTERING, "SKILL.md"), userContent, "utf8");
 
     const result = await mgr(home, ["update", "-y", repo]);
-    assert.equal(result.code, 0, result.stdout + result.stderr);
-    assert.equal(readFileSync(skillsPath(repo, ENTERING, "SKILL.md"), "utf8"), pacote, "the content becomes the package's");
-    assert.ok(declaredSkills(repo).includes(ENTERING), "the name stays declared");
+    const rel = path.relative(repo, skillsPath(repo, ENTERING));
+    assert.equal(result.code, 1, result.stdout + result.stderr);
+    assert.equal(readFileSync(skillsPath(repo, ENTERING, "SKILL.md"), "utf8"), userContent);
+    assert.equal(declaredSkills(repo).includes(ENTERING), false);
+    assert.ok(result.stdout.includes(getMessages("en").enteringKeptNotOurs(rel, ENTERING)), result.stdout);
   });
+});
+
+test("should replace the unmarked folder when a simulated terminal answers yes and keep it without terminal", async () => {
+  {
+    const repo = path.join(path.sep, "simulated", "repo");
+    const dir = path.join(repo, "skills");
+    const item = { name: "livre", dir, path: path.join(dir, "livre") };
+    const planned = { abandoned: [], orphans: { candidates: [] }, occupied: { replaceable: [item], blocked: [] } };
+    const items = [{ kind: "replace", item }];
+    const msg = getMessages("en");
+    const messageOf = ({ item: one }) => msg.confirmReplaceOne(path.relative(repo, one.path), one.name);
+    const calls = [];
+    const stubAsk = { confirm: async (options) => { calls.push(options); return true; }, isCancel: () => false };
+
+    const asked = await consentEach(stubAsk, items, { mode: replacementMode({ isTTY: true }), msg, messageOf });
+    assert.deepEqual(asked.remove, items);
+    assert.deepEqual(asked.keep, []);
+    assert.equal(calls.length, 1);
+    const part = partitionConsent(planned, new Set(asked.remove.map((one) => one.item.path)));
+    assert.deepEqual(part.declinedReplacements, []);
+    assert.deepEqual(skippedByConsent(planned, part), []);
+
+    calls.length = 0;
+    const unasked = await consentEach(stubAsk, items, { mode: replacementMode({ isTTY: false }), msg, messageOf });
+    assert.equal(calls.length, 0);
+    assert.deepEqual(unasked.remove, []);
+    assert.deepEqual(unasked.keep, items);
+  }
 });
 
 test("should never overwrite a declared skill whose folder carries mgr-manifest.json, not even with -y", async () => {

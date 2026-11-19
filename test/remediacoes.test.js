@@ -464,8 +464,8 @@ describe("runner", () => {
 
   test("shouldSeparateWhatWasCheckedFromWhatWasNot", () => {
     const { conferidas, naoConferidas } = relatorioDeCobertura(CHECKS);
-    assert.equal(conferidas.length, 25,
-      "sao 25 condicoes conferidas, e nao 26: dizer 26 seria contar como verificada uma que nao foi");
+    assert.equal(conferidas.length, 26,
+      "sao 26 condicoes conferidas, e nao 27: dizer 27 seria contar como verificada uma que nao foi");
     assert.deepEqual(naoConferidas.map((x) => `${x.id}/${x.condicao}`), ["lockfile-drift/travado-ausente"],
       "a nao medida aparece NOMEADA, senao 18 verdes seriam lidos como toda remediacao provada");
     assert.ok(naoConferidas[0].razao && naoConferidas[0].razao.length > 0,
@@ -489,7 +489,7 @@ describe("runner", () => {
 
     assert.ok(problemas.some((p) => p.includes("passo 2")),
       "o passo 2 existe para pegar predicado que ja casa antes do plantio, ou plantio que nao "
-      + "plantou: sem um caso que o exercite, removê-lo nao deixaria nada vermelho e os 25 casos "
+      + "plantou: sem um caso que o exercite, removê-lo nao deixaria nada vermelho e os 26 casos "
       + "continuariam passando sem essa garantia");
   });
 });

@@ -229,3 +229,43 @@ test("should make InstallCancelled a UsageError with the cancelled exit code", (
   assert.equal(error.key, "installCancelled");
   assert.equal(renderError(PT, error), renderText(PT, text("installCancelled", "junit")));
 });
+
+const DETAIL_LINES = [text("aborted"), text("unknownFlag", "--y")];
+
+test("should keep the details on the error and append their lines to the en message", () => {
+  const error = new UsageError("unknownFlag", ["--x"], { details: DETAIL_LINES });
+  assert.deepEqual(error.details, DETAIL_LINES);
+  assert.equal(error.message, [EN.unknownFlag("--x"), EN.aborted, EN.unknownFlag("--y")].join("\n"));
+});
+
+test("should default the details to an empty list and keep the message a single line", () => {
+  const error = new UsageError("unknownFlag", ["--x"], { cause: new Error("root") });
+  assert.deepEqual(error.details, []);
+  assert.equal(error.message, EN.unknownFlag("--x"));
+});
+
+for (const [lang, tabela] of [
+  ["en", EN],
+  ["pt-BR", PT],
+]) {
+  test(`should render a UsageError with details as the key line plus one line per detail in ${lang}`, () => {
+    const error = new UsageError("unknownFlag", ["--x"], { details: DETAIL_LINES });
+    assert.equal(
+      renderError(tabela, error),
+      [tabela.unknownFlag("--x"), tabela.aborted, tabela.unknownFlag("--y")].join("\n"),
+      "key line first, then the details in the given order",
+    );
+  });
+
+  test(`should render a UsageError with empty details as a single line in ${lang}`, () => {
+    const error = new UsageError("unknownFlag", ["--x"], { details: [] });
+    assert.equal(renderError(tabela, error), tabela.unknownFlag("--x"));
+  });
+
+  test(`should fall back to unexpected when the table lacks a detail key in ${lang}`, () => {
+    const error = new UsageError("unknownFlag", ["--x"], { details: [text("aborted")] });
+    const incomplete = { ...tabela };
+    delete incomplete.aborted;
+    assert.equal(renderError(incomplete, error), tabela.unexpectedError(error.name));
+  });
+}

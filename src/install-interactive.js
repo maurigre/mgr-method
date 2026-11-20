@@ -5,22 +5,12 @@
  * teste passa um stub. Aqui moram a recusa antes da primeira pergunta, os padroes vindos da declaracao
  * anterior por escopo e o contexto de modelo, esforco, origem e versionamento do runtime. A borda so liga.
  */
-import { EFFORT_LEVELS } from "./plugin.js";
 import * as catalog from "./catalog.js";
-import * as engineDescriptors from "./engines/index.js";
+import { supportsEffort, supportsModel } from "./engines/index.js";
 import { readAgents, readOrigin, readRuntimeVersioning } from "./registry.js";
-import { resolveEffortFlags, resolveModelFlags } from "./cli-args.js";
+import { effortFlagLevels, resolveEffortFlags, resolveModelFlags } from "./cli-args.js";
 import { collectInstallAnswers, detectUserLanguage } from "./prompts.js";
 import { coreDir, explicitOfInstall, previousForQuestions, readPrior, scopeByManifestPresence } from "./installer.js";
-
-export const engineSupportsModel = (id) => engineDescriptors.ids().includes(id) && engineDescriptors.get(id).capabilities.agentModel === true;
-export const engineSupportsEffort = (id) => engineDescriptors.ids().includes(id) && engineDescriptors.get(id).capabilities.agentEffort === true;
-export const effortFlagLevels = [...EFFORT_LEVELS, catalog.INHERIT];
-
-export const recordedOriginOf = (core) => {
-  const lida = readOrigin(core);
-  return lida.state === "recorded" ? lida.origin : null;
-};
 
 /**
  * Faz as perguntas do `install` e devolve as respostas (ou o `CANCELLED` do adaptador).
@@ -51,14 +41,14 @@ export async function askInstall(ask, { flags, repo, env, msg }) {
   const contextFor = (chosenEngines, chosenScope) => {
     const core = coreDir(chosenScope, repo);
     const agents = readAgents(core);
-    const resolved = resolveModelFlags(flags, { engines: chosenEngines, supportsModel: engineSupportsModel });
-    const effortsByFlag = resolveEffortFlags(flags, { engines: chosenEngines, supportsEffort: engineSupportsEffort, levels: effortFlagLevels });
+    const resolved = resolveModelFlags(flags, { engines: chosenEngines, supportsModel });
+    const effortsByFlag = resolveEffortFlags(flags, { engines: chosenEngines, supportsEffort, levels: effortFlagLevels });
     return {
       flagModels: resolved.ok ? resolved.models : {},
       flagEfforts: effortsByFlag.ok ? effortsByFlag.efforts : {},
       configured: agents.sources,
       enabledIntents: catalog.INTENTS.filter((intent) => agents.policies[intent].enabled !== false),
-      originRecorded: Boolean(flags.origin) || recordedOriginOf(core) !== null,
+      originRecorded: Boolean(flags.origin) || readOrigin(core).state === "recorded",
       runtimeVersioningRecorded: readRuntimeVersioning(core).state !== "absent",
     };
   };

@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { COMMAND, effectiveInstallChoices, migrateOld, needsConfigMigration, previousForQuestions, readPrior, resolvePrior, runtimeMigration } from "../src/installer.js";
-import { MODEL_CORE_RUNTIME, MODEL_LAYERED, MODEL_RUNTIME, RESOLVED_DECLARATIONS, manifestShapeProblems } from "../src/manifest.js";
+import { COMMAND, coreDir, effectiveInstallChoices, execute, opcoesDoCustom, planInstall, migrateOld, needsConfigMigration, previousForQuestions, readPrior, resolvePrior, runtimeMigration } from "../src/installer.js";
+import { MODEL_CORE_RUNTIME, MODEL_LAYERED, MODEL_RUNTIME, RESOLVED_DECLARATIONS, manifestShapeProblems, writeEnv } from "../src/manifest.js";
 import { UsageError, renderError } from "../src/errors.js";
 import { getMessages } from "../src/messages.js";
 import { text } from "../src/ui-text.js";
@@ -466,8 +466,15 @@ test("should remove the skills in the default engine directory when the legacy m
 
 const previousOf = (read) => previousForQuestions(read, { scope: "project", repo: REPO, localeLanguage: "pt-BR" });
 
-test("should offer no previous declaration to the questions when there is no installation", () => {
-  assert.deepEqual(previousOf({ state: "absent" }), {});
+test("should offer only the project id to the questions when there is no installation", () => {
+  assert.deepEqual(previousOf({ state: "absent" }), { projectId: path.basename(REPO) });
+});
+
+test("should offer the project id recorded in the env file even with no manifest", () => {
+  const repo = tempDir("mgr-id-sem-manifesto-");
+  writeEnv(coreDir("project", repo), "id-do-env");
+  const previous = previousForQuestions({ state: "absent" }, { scope: "project", repo, localeLanguage: "pt-BR" });
+  assert.deepEqual(previous, { projectId: "id-do-env" });
 });
 
 test("should leave architecture and language out of the question defaults when the legacy manifest has neither", () => {
@@ -506,7 +513,7 @@ const ANSWERED = { engines: ["copilot"], architecture: ARCH_B, language: null, u
 test("should take every choice from the answers when the questions were asked", () => {
   const choices = choicesOf({ declarations: declarationsOf(), askQuestions: true, answered: ANSWERED });
   assert.deepEqual(choices, {
-    engines: ["copilot"], skillsDir: null, skillsDirDeclared: null, architecture: ARCH_B, language: null, userLanguage: "pt-BR", optional: ["evidence-capture"], allSkills: false,
+    engines: ["copilot"], custom: { state: "absent" }, architecture: ARCH_B, language: null, userLanguage: "pt-BR", optional: ["evidence-capture"], allSkills: false,
   });
 });
 
@@ -526,7 +533,7 @@ test("should fall back to the default engines and the locale when the answers le
 test("should take every choice from the resolution when no question was asked", () => {
   const choices = choicesOf({ declarations: declarationsOf({ engines: ["claude-code", "copilot"] }), askQuestions: false, answered: ANSWERED });
   assert.deepEqual(choices, {
-    engines: ["claude-code", "copilot"], skillsDir: null, skillsDirDeclared: null, architecture: ARCH_A, language: "java", userLanguage: "en", optional: [], allSkills: false,
+    engines: ["claude-code", "copilot"], custom: { state: "absent" }, architecture: ARCH_A, language: "java", userLanguage: "en", optional: [], allSkills: false,
   });
 });
 
@@ -537,7 +544,38 @@ test("should resolve the custom folder from the declaration when no question was
     skillsDirFlag: null, scope: "project", repo: raiz, localeLanguage: "pt-BR",
   });
   assert.deepEqual(choices.engines, []);
-  assert.equal(choices.skillsDir, path.join(raiz, "minhas-skills"));
+  assert.deepEqual(choices.custom, {
+    state: "resolved", dir: path.join(raiz, "minhas-skills"), declared: path.join(raiz, "minhas-skills"), recorded: "minhas-skills",
+  });
+});
+
+test("should not keep the flag text as the recorded custom folder because the flag path is resolved from where it was typed", () => {
+  const raiz = tempDir("mgr-escolhas-custom-flag-");
+  const choices = effectiveInstallChoices({
+    declarations: declarationsOf({ engines: ["custom"], skillsDirs: [path.join(raiz, "pela-flag")] }), askQuestions: false,
+    answered: ANSWERED, skillsDirFlag: path.join(raiz, "pela-flag"), scope: "project", repo: raiz, localeLanguage: "pt-BR",
+  });
+  assert.equal(choices.custom.state, "resolved");
+  assert.equal("recorded" in choices.custom, false);
+});
+
+test("should write back the custom folder exactly as it was declared in the manifest", () => {
+  const raiz = tempDir("mgr-custom-gravado-");
+  const pasta = path.join(raiz, "minhas-skills");
+  const plano = planInstall([], "project", raiz, {
+    skillsDir: pasta, skillsDirDeclared: pasta, skillsDirRecorded: "./minhas-skills", names: ["spec-init"], userLanguage: "en",
+  });
+  execute(plano);
+  const gravado = JSON.parse(readFileSync(path.join(coreDir("project", raiz), "manifest.json"), "utf8"));
+  assert.deepEqual(gravado.skillsDirs, ["./minhas-skills"]);
+});
+
+test("should translate only a resolved custom target into install options", () => {
+  assert.deepEqual(opcoesDoCustom({ state: "absent" }), {});
+  assert.deepEqual(opcoesDoCustom({ state: "resolved", dir: "/real", declared: "/declarado" }), { skillsDir: "/real", skillsDirDeclared: "/declarado" });
+  assert.deepEqual(opcoesDoCustom({ state: "resolved", dir: "/real", declared: "/declarado", recorded: "minhas/" }), {
+    skillsDir: "/real", skillsDirDeclared: "/declarado", skillsDirRecorded: "minhas/",
+  });
 });
 
 test("should refuse the question defaults before any question when allSkills is out of shape and no flag covers it", () => {

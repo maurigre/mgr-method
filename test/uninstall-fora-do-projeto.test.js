@@ -363,6 +363,7 @@ for (const [rotulo, patch] of [["agents not a list", { agents: 7 }]]) {
       assert.equal(result.code, 0, result.stdout + result.stderr);
       assert.equal(existsSync(path.join(pasta, "mgr-review.md")), false);
       assert.equal(readFileSync(daPessoa, "utf8"), "agente da pessoa\n");
+      assert.ok(!result.stdout.includes(daPessoa), result.stdout);
     });
   });
 }
@@ -418,5 +419,50 @@ test("should uninstall when agents is out of shape and the recalculated agents f
     const result = await mgr(home, ["uninstall", "-y", repo]);
     assert.equal(result.code, 0, result.stdout + result.stderr);
     assert.equal(existsSync(path.join(repo, ".claude", "skills", REGISTRY_SKILL)), false);
+  });
+});
+
+for (const comando of [["update", "-y"], ["install", "-y"]]) {
+  test(`should keep the custom folder text and remove the leaving skill on ${comando[0]} when the declaration has a trailing slash`, async () => {
+    await withWorld(async ({ repo, home }) => {
+      const pasta = path.join(repo, "minhas-skills");
+      const install = await mgr(home, ["install", "--skills-dir", pasta, "--arch", "hexagonal", "--project-id", "x", "-y", repo]);
+      assert.equal(install.code, 0, install.stdout + install.stderr);
+      assert.ok(existsSync(path.join(pasta, "arch-hexagonal", "SKILL.md")));
+      tamper(repo, { skillsDirs: ["minhas-skills/"], architecture: "layered" });
+      const result = await mgr(home, [...comando, repo]);
+      assert.equal(result.code, 0, result.stdout + result.stderr);
+      assert.equal(existsSync(path.join(pasta, "arch-hexagonal")), false, result.stdout);
+      assert.equal(readManifest(repo).skills.includes("arch-hexagonal"), false);
+      assert.deepEqual(readManifest(repo).skillsDirs, ["minhas-skills/"]);
+    });
+  });
+}
+
+test("should keep a relative custom folder text and remove the leaving skill on a global update", async () => {
+  await withWorld(async ({ repo, home }) => {
+    const pasta = path.join(home, "skills-globais");
+    const install = await mgr(home, ["install", "--scope", "global", "--skills-dir", pasta, "--arch", "hexagonal", "--project-id", "x", "-y", repo]);
+    assert.equal(install.code, 0, install.stdout + install.stderr);
+    const arquivo = path.join(home, ".mgr-core", "manifest.json");
+    const manifesto = JSON.parse(readFileSync(arquivo, "utf8"));
+    writeFileSync(arquivo, JSON.stringify({ ...manifesto, skillsDirs: ["skills-globais"], architecture: "layered" }));
+    const update = await mgr(home, ["update", "-y", "--scope", "global", repo]);
+    assert.equal(update.code, 0, update.stdout + update.stderr);
+    assert.equal(existsSync(path.join(pasta, "arch-hexagonal")), false, update.stdout);
+    assert.deepEqual(JSON.parse(readFileSync(arquivo, "utf8")).skillsDirs, ["skills-globais"]);
+  });
+});
+
+test("should offer and remove a method orphan on update when the custom declaration has a trailing slash", async () => {
+  await withWorld(async ({ repo, home }) => {
+    const pasta = path.join(repo, "minhas-skills");
+    const install = await mgr(home, ["install", "--skills-dir", pasta, "--arch", "hexagonal", "--project-id", "x", "-y", repo]);
+    assert.equal(install.code, 0, install.stdout + install.stderr);
+    const skills = readManifest(repo).skills.filter((nome) => nome !== "arch-hexagonal");
+    tamper(repo, { skillsDirs: ["minhas-skills/"], architecture: "layered", skills });
+    const update = await mgr(home, ["update", "-y", repo]);
+    assert.equal(update.code, 0, update.stdout + update.stderr);
+    assert.equal(existsSync(path.join(pasta, "arch-hexagonal")), false, update.stdout);
   });
 });

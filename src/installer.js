@@ -145,7 +145,7 @@ export function explicitOfInstall(engines, { skillsDir, language, architecture, 
 }
 
 export function planInstall(engines, scope, repo, opts = {}) {
-  const { skillsDir = null, skillsDirDeclared = null, language = null, architecture = null, userLanguage = null, optional = [], all = false, names = null, projectId = null, replaced = {}, models = {}, efforts = {}, origin = null, runtimeVersioning = null, lockfile = null } = opts;
+  const { skillsDir = null, skillsDirDeclared = null, skillsDirRecorded, language = null, architecture = null, userLanguage = null, optional = [], all = false, names = null, projectId = null, replaced = {}, models = {}, efforts = {}, origin = null, runtimeVersioning = null, lockfile = null } = opts;
   const skills = names || (all ? bundle.skillNames() : catalog.selectSkills({ language, architecture, optional }));
   // Skill substituída por plugin sai do conjunto DAQUELE motor (ADR-0008): sem isso o
   // instalador escreveria a skill do método para o restore sobrescrever logo em seguida,
@@ -158,7 +158,8 @@ export function planInstall(engines, scope, repo, opts = {}) {
   const targets = skillsDir
     // `dir` e o caminho real (opera e confere posse); `declaredDir` e o que o manifesto grava: a declaracao
     // nunca e reescrita pelo destino de um link simbolico (N-8 do gate isolado).
-    ? [{ engine: "custom", dir: skillsDir, declaredDir: skillsDirDeclared ?? skillsDir, skills: skills.filter((name) => !cedidasEmQualquerMotor[name]) }]
+    // `recordedDir`: o texto declarado no manifesto, gravado de volta sem reescrita (ponto 5 do review do P3).
+    ? [{ engine: "custom", dir: skillsDir, declaredDir: skillsDirDeclared ?? skillsDir, ...(skillsDirRecorded === undefined ? {} : { recordedDir: skillsDirRecorded }), skills: skills.filter((name) => !cedidasEmQualquerMotor[name]) }]
     : engines.map((e) => ({ engine: e, dir: engineSkillsDir(e, scope, repo), skills: forEngine(e) }));
   const { prior } = resolvedPriorOf({
     scope, repo, command: COMMAND.INSTALL, prior: opts.prior, declarations: opts.declarations,
@@ -321,7 +322,7 @@ export function execute(plan, { abandoned = [], remove = rmSync } = {}) {
     userLanguage: plan.userLanguage,
     optional: plan.optional ?? [],
     allSkills: plan.all === true,
-    skillsDirs: plan.targets.map((t) => rel(t.declaredDir ?? t.dir)),
+    skillsDirs: plan.targets.map((t) => t.recordedDir ?? rel(t.declaredDir ?? t.dir)),
     // `skills` continua sendo o conjunto PRETENDIDO do método — é o que faz a skill voltar
     // quando o plugin que a substituiu for removido (DT-6). `replaced` diz o que, hoje,
     // está cedido a um plugin naquele motor.
@@ -360,8 +361,13 @@ export function readPrior(scope, repo) {
 
 // Caminho real do diretório `custom` declarado (DT-19 item 2, P0.5): `realpathSync` do diretório
 // existente ou do pai existente mais próximo, para que um link simbólico não esconda o destino.
+// A forma canonica de uma pasta declarada: a MESMA conta para o alvo e para o anterior que se cruza com ele
+// (achado S-1 do review dos pontos menores: relativo no global, barra final e absoluto nao normalizado nao
+// casavam, e a skill que sai virava orfa sem aviso).
+const lugarDeclarado = (dir, scope, repo) => path.resolve(absDir(dir, scope, repo));
+
 export function resolveCustomDir(dir, scope, repo) {
-  const declared = path.resolve(absDir(dir, scope, repo));
+  const declared = lugarDeclarado(dir, scope, repo);
   let existing = declared;
   while (!existsSync(existing)) existing = path.dirname(existing);
   return { state: "resolved", dir: path.join(realpathSync(existing), path.relative(existing, declared)), declared };
@@ -371,7 +377,13 @@ export function resolveCustomDir(dir, scope, repo) {
 // que o anterior e o plano se cruzam (achado S-1 do gate do bloco P3: com link simbolico, comparar o
 // declarado com o real deixava a skill que sai como orfa em silencio). O `dir` real so opera.
 const lugarDoAlvo = (target) => target.declaredDir ?? target.dir;
-const pastaDoCustom = ({ dir, declared }) => ({ skillsDir: dir, skillsDirDeclared: declared });
+// O alvo `custom` das escolhas e discriminado (DES-1): `{ state: "absent" }` ou o de `resolveCustomDir`, com
+// `recorded` quando o texto veio do manifesto (ponto 3 do review do bloco P3). `opcoesDoCustom` o traduz para
+// as opcoes de `planInstall`, num lugar so.
+const CUSTOM_AUSENTE = Object.freeze({ state: "absent" });
+export const opcoesDoCustom = (custom) => (custom.state === "resolved"
+  ? { skillsDir: custom.dir, skillsDirDeclared: custom.declared, ...(custom.recorded === undefined ? {} : { skillsDirRecorded: custom.recorded }) }
+  : {});
 
 
 function declarationsWithoutInstall(localeLanguage) {
@@ -487,7 +499,9 @@ export function scopeByManifestPresence(repo) {
 // A resolucao aqui tambem RECUSA a declaracao fora de forma que nenhuma pergunta nem flag cobre (`allSkills`),
 // e por isso roda antes da primeira pergunta (CA-20; achado N-3 do gate isolado).
 export function previousForQuestions(read, { scope, repo, localeLanguage, explicit = {} }) {
-  if (read.state === "absent") return {};
+  // Sem manifesto nao ha declaracao anterior; o id do projeto, porem, pode estar gravado no `.env` ou no
+  // config pessoal, e a pergunta o sugere pela mesma resolucao da escrita (ponto 2 do review do bloco P3).
+  if (read.state === "absent") return { projectId: resolveProjectId({ flag: null, coreDir: coreDir(scope, repo), prior: null, repo }) };
   const { declarations } = resolvePrior(read, {
     scope, repo, explicit, asked: QUESTION_FIELDS, command: COMMAND.INSTALL, localeLanguage,
   });
@@ -506,8 +520,7 @@ export function effectiveInstallChoices({ declarations, answered, askQuestions, 
   if (askQuestions) {
     return {
       engines: answered.engines.length ? answered.engines : [...engineDescriptors.DEFAULT_ENGINES],
-      skillsDir: null,
-      skillsDirDeclared: null,
+      custom: CUSTOM_AUSENTE,
       language: allSkills ? declarations.language ?? null : answered.language,
       architecture: allSkills ? declarations.architecture ?? null : answered.architecture,
       userLanguage: answered.userLanguage || localeLanguage,
@@ -519,7 +532,9 @@ export function effectiveInstallChoices({ declarations, answered, askQuestions, 
   const declarado = skillsDirFlag ?? declarations.skillsDirs?.[0];
   return {
     engines: declarations.engines.filter((id) => id !== "custom"),
-    ...(custom ? pastaDoCustom(resolveCustomDir(declarado, scope, repo)) : { skillsDir: null, skillsDirDeclared: null }),
+    custom: custom
+      ? { ...resolveCustomDir(declarado, scope, repo), ...(skillsDirFlag ? {} : { recorded: declarado }) }
+      : CUSTOM_AUSENTE,
     language: declarations.language ?? null,
     architecture: declarations.architecture ?? null,
     userLanguage: declarations.userLanguage ?? localeLanguage,
@@ -548,8 +563,8 @@ export function needsConfigMigration(prior) {
 // só subtrai; não há varredura.
 export function legacyRuntimeDirs({ prior, targets, scope, repo, exists = existsSync }) {
   if (!prior) return { remove: [], keep: [] };
-  const declared = (prior.skillsDirs || (prior.skillsDir ? [prior.skillsDir] : [])).map((d) => absDir(d, scope, repo));
-  const inPlan = (targets || []).map((t) => absDir(lugarDoAlvo(t), scope, repo));
+  const declared = (prior.skillsDirs || (prior.skillsDir ? [prior.skillsDir] : [])).map((d) => lugarDeclarado(d, scope, repo));
+  const inPlan = (targets || []).map((t) => lugarDeclarado(lugarDoAlvo(t), scope, repo));
   const candidate = (base) => path.join(base, ...catalog.LEGACY_RUNTIME_DIR);
   const remove = [...new Set(inPlan)].map(candidate).filter((dir) => exists(dir));
   const keep = [...new Set(declared)].filter((base) => !inPlan.includes(base)).map(candidate).filter((dir) => exists(dir));
@@ -585,7 +600,7 @@ export function abandonedSkills({ prior, plan, exists = existsSync }) {
   if (!saindo.length) return [];
   // O manifesto grava `skillsDirs` RELATIVO no escopo project; o plano carrega o dir ABSOLUTO.
   // Sem absolutizar, a intersecao seria sempre vazia e a lista sairia vazia em silencio.
-  const anteriores = new Set((prior.skillsDirs || []).map((dir) => absDir(dir, plan.scope, plan.repo)));
+  const anteriores = new Set((prior.skillsDirs || []).map((dir) => lugarDeclarado(dir, plan.scope, plan.repo)));
   const fora = [];
   for (const target of plan.targets || []) {
     if (!anteriores.has(lugarDoAlvo(target))) continue;
@@ -655,7 +670,7 @@ export function orphanCandidates({
   exists = existsSync,
 }) {
   if (!prior) return { candidates: [], outOfReach: [] };
-  const anteriores = new Set((prior.skillsDirs || []).map((dir) => absDir(dir, plan.scope, plan.repo)));
+  const anteriores = new Set((prior.skillsDirs || []).map((dir) => lugarDeclarado(dir, plan.scope, plan.repo)));
   const declaradas = new Set([...(prior.skills || []), ...(plan.skills || [])]);
   const lockedDirs = lockedDirsOf(lockfile);
   const out = { candidates: [], outOfReach: [] };
@@ -818,28 +833,16 @@ export function planUninstall(scope, repo) {
   const arquivosRecalculados = () => agentDirs.flatMap((dir) => (existsSync(dir)
     ? readdirSync(dir, { withFileTypes: true }).filter((entrada) => entrada.isFile()).map((entrada) => path.join(dir, entrada.name))
     : []));
-  const agentFiles = [];
-  if (quebrados.has("agents")) {
-    for (const resolved of arquivosRecalculados()) {
-      if (isOurAgent(readFileSync(resolved, "utf8"))) agentFiles.push(resolved);
-      else ignored.push({ path: resolved, reason: IGNORED_REASON.NO_OWNERSHIP_MARK });
-    }
-    // A entrada de texto declarada fora das pastas recalculadas continua anunciada, nunca removida (DT-19 item
-    // 4; achado S-2 do gate do bloco P3: o recalculo tinha calado esse aviso).
-    for (const file of stringEntries(manifest.agents)) {
-      const resolved = path.resolve(absDir(file, scope, repo));
-      if (!recalculatedAgentDirs.has(path.dirname(resolved))) ignored.push({ path: resolved, reason: IGNORED_REASON.OUTSIDE_AGENT_DIRS });
-    }
-  } else {
-    for (const file of stringEntries(manifest.agents)) {
-      const resolved = path.resolve(absDir(file, scope, repo));
-      if (!recalculatedAgentDirs.has(path.dirname(resolved))) {
-        ignored.push({ path: resolved, reason: IGNORED_REASON.OUTSIDE_AGENT_DIRS });
-        continue;
-      }
-      if (existsSync(resolved)) agentFiles.push(resolved);
-    }
+  // A entrada de texto declarada fora das pastas recalculadas e anunciada e nunca removida, com `agents` em
+  // forma ou nao (DT-19 item 4). O que se remove: com `agents` fora de forma, o arquivo com a marca achado nas
+  // pastas recalculadas (o sem marca fica sem ser nomeado, como no `CA-31`); em forma, o declarado que existe.
+  const declaradosEmTexto = stringEntries(manifest.agents).map((file) => path.resolve(absDir(file, scope, repo)));
+  for (const resolved of declaradosEmTexto) {
+    if (!recalculatedAgentDirs.has(path.dirname(resolved))) ignored.push({ path: resolved, reason: IGNORED_REASON.OUTSIDE_AGENT_DIRS });
   }
+  const agentFiles = quebrados.has("agents")
+    ? arquivosRecalculados().filter((resolved) => isOurAgent(readFileSync(resolved, "utf8")))
+    : declaradosEmTexto.filter((resolved) => recalculatedAgentDirs.has(path.dirname(resolved)) && existsSync(resolved));
   const declaredRecalculatedAgentDirs = quebrados.has("agentsDirs")
     ? agentDirs
     : agentDirs.filter((dir) => declaredAgentDirs.includes(path.resolve(dir)));
@@ -894,7 +897,7 @@ export function planUpdate(scope, repo, { replaced = {}, lockfile = null, projec
     names: versionSet(prior), language: declarations.language, architecture: declarations.architecture,
     userLanguage: declarations.userLanguage,
     optional: declarations.optional, all: declarations.allSkills,
-    ...(custom ? pastaDoCustom(resolveCustomDir(declarations.skillsDirs[0], scope, repo)) : { skillsDir: null, skillsDirDeclared: null }),
+    ...(custom ? opcoesDoCustom({ ...resolveCustomDir(declarations.skillsDirs[0], scope, repo), recorded: declarations.skillsDirs[0] }) : {}),
     projectId, replaced, prior, declarations,
   });
   const antes = new Set(prior.skills || []);

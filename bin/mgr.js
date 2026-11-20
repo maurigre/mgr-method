@@ -12,7 +12,7 @@ import { specNext, specStatus, specValidate } from "../src/commands/spec.js";
 import { detectHook, precompactHook, suggestionsFor } from "../src/commands/hooks.js";
 import { escreverSync, lerPayload, modificados } from "./hook-io.js";
 import { projectRoot } from "../src/project-root.js";
-import { LOCAL_CONFIG_NAME, ORIGINS, configPath, misplacedTeamKeys, readAgents, readPersonal, readRuntimeVersioning } from "../src/registry.js";
+import { LOCAL_CONFIG_NAME, ORIGINS, configPath, misplacedTeamKeys, readAgents, readOrigin, readPersonal, readRuntimeVersioning } from "../src/registry.js";
 import { indexedFiles } from "./git-index.js";
 import * as engineRegistry from "../src/engines/index.js";
 import * as tokens from "../src/tokens.js";
@@ -33,7 +33,7 @@ import { GITIGNORE_DECLINE, GITIGNORE_WRITE, askRuntimeVersioning, consentEach, 
 import { getMessages } from "../src/messages.js";
 import { renderError } from "../src/errors.js";
 import { renderText } from "../src/ui-text.js";
-import { askInstall, effortFlagLevels, engineSupportsEffort, engineSupportsModel, recordedOriginOf } from "../src/install-interactive.js";
+import { askInstall } from "../src/install-interactive.js";
 import { MANIFEST_NAME, QUESTION_FIELDS, problemText, readUserLanguage } from "../src/manifest.js";
 import { instructionsToRemove, planInstructions, removeInstructionBlock, writeInstructionBlock } from "../src/instructions.js";
 import {
@@ -47,7 +47,7 @@ import {
 import { diff as lockfileDiff, readLockfile, replacedByEngine, LOCKFILE_NAME } from "../src/lockfile.js";
 import { detect } from "../src/detector.js";
 import { hookFilePath, planOwnedHooks, removeHook, rewriteOwnedHooks, runtimeCommand, syncOwnedHooks, writeHook, writtenEvents } from "../src/hooks.js";
-import { checkBareModelFlag, checkEffortFlags, mergeEfforts, parseArgs, resolveEffortFlags, resolveModelFlags } from "../src/cli-args.js";
+import { checkBareModelFlag, checkEffortFlags, effortFlagLevels, mergeEfforts, parseArgs, resolveEffortFlags, resolveModelFlags } from "../src/cli-args.js";
 
 const SCOPES = ["project", "global"];
 // Comandos de skill plugável: o posicional é o nome da skill/registry, nunca o repositório.
@@ -80,6 +80,11 @@ const hookEngines = (plan, flags) => (flags.noHooks
 
 // Níveis aceitos pelas flags --effort-<intenção>: os do plugin mais `inherit`, que tira o campo do agente.
 const effortFlagLevelsText = effortFlagLevels.join(" | ");
+// Linha de origem do plano: a flag vence; sem ela, o valor gravado; sem os dois, "sem registro".
+const origemDoPlano = (flag, gravada) => {
+  if (flag) return M.planOrigin(flag);
+  return gravada.state === "recorded" ? M.planOrigin(gravada.origin) : M.planOriginNotRecorded;
+};
 // Texto único de cada recusa das flags de esforço: a recusa precoce e a autoritativa usam o mesmo.
 const effortRefusalText = ({ reason, intent, value }, engines) => ({
   "bare-effort": () => M.effortFlagBare(effortFlagLevelsText),
@@ -126,8 +131,7 @@ async function cmdInstall(flags, positional) {
   }
 
   const skillsDirFlag = flags.skillsDir ? path.resolve(flags.skillsDir) : null;
-  let skillsDir;
-  let skillsDirDeclared;
+  let custom;
   const askQuestions = !skillsDirFlag && isTTY && !flags.yes;
   let engines = flags.engines;
   let scope = flags.scope;
@@ -142,6 +146,9 @@ async function cmdInstall(flags, positional) {
   let answeredOrigin = null;
   let answeredRuntimeVersioning = null;
 
+  // `--scope` inválido recusa antes do primeiro uso, com a mesma mensagem nos dois caminhos: com terminal,
+  // ele chegava ao `coreDir` das perguntas e saía como `unknownScope` (ponto 4 do review do bloco P3).
+  if (flags.scope && !SCOPES.includes(flags.scope)) { p.log.error(M.invalidScope(flags.scope)); process.exit(1); }
   if (askQuestions) {
     // A recusa antes da primeira pergunta, os padrões e o contexto moram no núcleo (P3.1); a borda só liga o clack.
     const answers = await askInstall(CLACK, { flags, repo, env: process.env, msg: M });
@@ -158,7 +165,6 @@ async function cmdInstall(flags, positional) {
   // (o backfill pt-BR do update é só para manifestos da era sem o campo).
   // O explícito desta execução é montado ANTES dos padrões abaixo: o que o usuário não deu não é explícito.
   scope = scope || "project";
-  if (!SCOPES.includes(scope)) { p.log.error(M.invalidScope(scope)); process.exit(1); }
   // Uma resolução do manifesto anterior, antes de qualquer escrita (DT-6, DT-7): recusa sai pelo catch usual.
   const explicit = installer.explicitOfInstall(engines, {
     skillsDir: skillsDirFlag, language, architecture, userLanguage, optional, all: allSkills,
@@ -169,15 +175,16 @@ async function cmdInstall(flags, positional) {
     localeLanguage: detectUserLanguage(process.env),
   });
   // A precedência (DT-6) e o que não foi perguntado são decididos no núcleo; a borda só repassa.
-  ({ engines, skillsDir, skillsDirDeclared, language, architecture, userLanguage, optional, allSkills } = installer.effectiveInstallChoices({
+  ({ engines, custom, language, architecture, userLanguage, optional, allSkills } = installer.effectiveInstallChoices({
     declarations, askQuestions, skillsDirFlag, scope, repo, localeLanguage: detectUserLanguage(process.env),
     answered: { engines, language, architecture, userLanguage, optional },
   }));
   // As flags de modelo também são validadas ANTES de qualquer escrita (CA-32). Flag vence a pergunta.
   // Com `--skills-dir` o único motor é `custom` (o `planInstall` o usa), e ele não aceita modelo: resolver
   // contra o motor padrão gravaria política de um motor que nem foi instalado.
-  const motoresDoPlano = skillsDir ? ["custom"] : engines;
-  const resolvedModels = resolveModelFlags(flags, { engines: motoresDoPlano, supportsModel: engineSupportsModel });
+  const alvoCustom = custom.state === "resolved";
+  const motoresDoPlano = alvoCustom ? ["custom"] : engines;
+  const resolvedModels = resolveModelFlags(flags, { engines: motoresDoPlano, supportsModel: engineRegistry.supportsModel });
   if (!resolvedModels.ok) {
     const { reason, intent, engine, value } = resolvedModels;
     const text = {
@@ -194,7 +201,7 @@ async function cmdInstall(flags, positional) {
     models[intent] = { ...models[intent], ...byEngine };
   }
   // As flags de esforço seguem a mesma regra: validadas antes de qualquer escrita; flag vence a pergunta.
-  const resolvedEfforts = resolveEffortFlags(flags, { engines: motoresDoPlano, supportsEffort: engineSupportsEffort, levels: effortFlagLevels });
+  const resolvedEfforts = resolveEffortFlags(flags, { engines: motoresDoPlano, supportsEffort: engineRegistry.supportsEffort, levels: effortFlagLevels });
   if (!resolvedEfforts.ok) {
     console.error(pc.red(M.errorPrefix(effortRefusalText(resolvedEfforts, motoresDoPlano))));
     process.exit(1);
@@ -226,7 +233,7 @@ async function cmdInstall(flags, positional) {
 
   const lockfile = readLockfile(repo);
   const replaced = replacedByEngine(lockfile);
-  const plan = installer.planInstall(engines, scope, repo, { skillsDir, skillsDirDeclared, language, architecture, userLanguage, optional, all: allSkills, projectId, replaced, models, efforts, origin, runtimeVersioning: answeredRuntimeVersioning, prior, declarations, lockfile });
+  const plan = installer.planInstall(engines, scope, repo, { ...installer.opcoesDoCustom(custom), language, architecture, userLanguage, optional, all: allSkills, projectId, replaced, models, efforts, origin, runtimeVersioning: answeredRuntimeVersioning, prior, declarations, lockfile });
   const relOfItem = (item) => (plan.scope === "project" ? path.relative(plan.repo, item.path) : item.path);
   // O caminho do config como o usuário o lê (ADR-0031), um só para o plano e para o anúncio.
   const arquivoConfig = pathsForDisplay([configPath(installer.coreDir(plan.scope, plan.repo))], plan.scope, plan.repo);
@@ -239,7 +246,7 @@ async function cmdInstall(flags, positional) {
   // O .gitignore do usuario so e tocado no escopo project; o plano o anuncia antes de qualquer escrita.
   const gitignorePlan = plan.scope === "project" ? planGitignore(plan.repo) : null;
   const motoresReais = [...new Set(plan.targets.map((t) => t.engine).filter((e) => installer.ENGINES.includes(e)))];
-  const instrPlan = plan.scope === "project" && !skillsDir
+  const instrPlan = plan.scope === "project" && !alvoCustom
     ? planInstructions(plan.repo, { engines: motoresReais })
     : SEM_INSTRUCOES;
   // Q-3: com --no-hooks o MGR não cria hook, mas a entrada que já é dele passa a apontar para o
@@ -263,7 +270,7 @@ async function cmdInstall(flags, positional) {
       M.planEngines(plan.engines.join(", ")),
       M.planStack(plan.language || "—", plan.architecture || "—"),
       `${M.planOutput(plan.userLanguage || "—")}  ${pc.dim(M.planOutputHint)}`,
-      (origin ?? recordedOriginOf(core)) ? M.planOrigin(origin ?? recordedOriginOf(core)) : M.planOriginNotRecorded,
+      origemDoPlano(origin, readOrigin(core)),
       `${M.planConfig(installer.coreDir(plan.scope, plan.repo))}  ${pc.dim(M.planConfigHint)}`,
       ...(gitignorePlan ? [M.planGitignore, ...gitignorePlan.teamIgnoredLines.map((line) => M.gitignoreTeamIgnored(line))] : []),
       ...instrPlan.offer.map(({ file }) => M.planInstructions(file)),
@@ -376,7 +383,7 @@ async function cmdInstall(flags, positional) {
   const ligadas = catalogo.INTENTS.filter((intent) => plan.agents.policies[intent]?.enabled);
   const herdando = motoresDoGate.length ? inheritingModel(ligadas, motoresDoGate, plan.agents.policies) : [];
   if (herdando.length) p.log.warn(M.installModelSkipped(herdando.join(", ")));
-  if (!recordedOriginOf(core)) p.log.warn(M.installOriginAbsent);
+  if (readOrigin(core).state !== "recorded") p.log.warn(M.installOriginAbsent);
 
   for (const engine of motoresComHook) {
     const file = writeHook(engine, plan.repo, { command: runtimeCommand(plan.scope, plan.repo) });

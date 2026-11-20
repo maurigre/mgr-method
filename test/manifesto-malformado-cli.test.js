@@ -941,3 +941,36 @@ test("shouldPointDerivedManifestProblemsToTheVersionedUpdateCommandThroughTheRun
     afirmarSaidaLimpa(saida);
   });
 });
+
+test("shouldRefuseAnInvalidScopeFlagBeforeWritingAnything", () => {
+  const repo = tempDir("mgr-escopo-invalido-");
+  try {
+    const { code, stdout, stderr } = rodar(["install", "-y", "--scope", "bogus", repo], repo);
+    const saida = `${stdout}${stderr}`;
+    assert.equal(code, 1, saida);
+    assert.ok(saida.includes(getMessages("en").invalidScope("bogus")), saida);
+    assert.equal(existsSync(path.join(repo, ".mgr-core")), false);
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+const TEM_SCRIPT = spawnSync("script", ["--version"], { encoding: "utf8" }).status === 0;
+
+test("shouldRefuseAnInvalidScopeFlagWithTheSameMessageInARealTerminal", { skip: TEM_SCRIPT ? false : "sem o utilitario script, nao ha pty para o caminho com terminal" }, () => {
+  comRepo((repo) => {
+    const home = tempDir("mgr-escopo-tty-home-");
+    try {
+      const comando = `stty cols 200 rows 50; node ${BIN_MGR} install --scope bogus ${repo}`;
+      const r = spawnSync("script", ["-qec", comando, "/dev/null"], {
+        encoding: "utf8", cwd: home, input: "", timeout: 60000,
+        env: { ...process.env, HOME: home, LC_ALL: "C", NO_COLOR: "1", TERM: "xterm" },
+      });
+      const saida = `${r.stdout}${r.stderr}`;
+      assert.ok(saida.includes(M.invalidScope("bogus")), saida);
+      assert.ok(!saida.includes(M.qEngines), saida);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+});

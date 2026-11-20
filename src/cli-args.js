@@ -1,3 +1,9 @@
+import { INHERIT } from "./catalog.js";
+import { EFFORT_LEVELS } from "./plugin.js";
+
+// Niveis que uma flag de esforco aceita: os do pacote mais o "herda". Fonte unica da CLI e das perguntas.
+export const effortFlagLevels = Object.freeze([...EFFORT_LEVELS, INHERIT]);
+
 // Leitura pura dos argumentos da CLI. Não toca em process, console nem saída: a borda decide o
 // que fazer com a flag desconhecida devolvida em `unknownFlag`.
 export function parseArgs(argv, { engines }) {

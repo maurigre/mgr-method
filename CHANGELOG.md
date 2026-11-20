@@ -72,6 +72,11 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   A comparação é por ID: um guia que só menciona o ID, sem trazer a regra, passa.
 
 ### Alterado
+- **O `check:clean` reproduz também a variável `CI` do runner.** Antes ele reproduzia só a árvore sem os
+  gitignorados e o locale neutro, e passou verde um defeito que o CI reprovou no PR #54: com `CI`
+  definida, o picocolors liga a cor, e 22 testes que comparavam a linha de erro exata receberam códigos
+  ANSI. Agora ele roda com `CI=true` e sem `NO_COLOR`/`FORCE_COLOR` herdados da máquina; com aquele
+  defeito reintroduzido, o check fica vermelho (medido).
 - **Quebra de contrato do `--json` (ADR-0032, ADR-0033), `schemaVersion` continua 1:** os valores de
   texto passam de pt-BR a **inglês canônico, iguais em qualquer idioma**: `expected` e `found` do
   achado do `doctor`; `message`, `remediation` e `example` do `spec validate`; o `warning` do

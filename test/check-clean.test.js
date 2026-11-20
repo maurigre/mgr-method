@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { pendentes, removidos } from "../scripts/check-clean.mjs";
+import { pendentes, removidos, ambienteDoCi } from "../scripts/check-clean.mjs";
 import { tempDir } from "../scripts/lib/tmp.mjs";
 
 const repoTemporario = () => {
@@ -107,4 +107,12 @@ test("shouldReportNothingRemovedOnACleanRepository", () => {
   execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "a"], { cwd: repo });
   assert.deepEqual(removidos(repo), [],
     "o caso negativo: sem alteracao nao ha remocao a propagar");
+});
+
+test("shouldReproduceTheRunnerEnvironmentWithCiSetAndNoInheritedColorOrLocale", () => {
+  const env = ambienteDoCi({ PATH: "/bin", LANG: "pt_BR.UTF-8", LANGUAGE: "pt_BR", NO_COLOR: "1", FORCE_COLOR: "1", LC_ALL: "pt_BR.UTF-8" });
+  assert.equal(env.CI, "true");
+  assert.equal(env.LC_ALL, "C");
+  assert.equal(env.PATH, "/bin");
+  for (const chave of ["LANG", "LANGUAGE", "NO_COLOR", "FORCE_COLOR"]) assert.equal(chave in env, false, chave);
 });

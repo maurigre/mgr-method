@@ -5,7 +5,9 @@ Deciders: Mauri Reis
 
 ## Status
 
-Proposed
+Accepted
+
+> Aceito pelo autor em 2026-11-20, com a fatia update-manifesto-malformado (PR #54).
 
 ## Context
 

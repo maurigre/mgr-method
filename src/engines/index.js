@@ -22,6 +22,11 @@ export const ids = () => Object.keys(ENGINES).sort();
 // Motor de quem nao declarou nenhum: o padrao da pergunta, do `-y` e da instalacao do zero.
 export const DEFAULT_ENGINES = Object.freeze([claudeCode.id]);
 
+// Capacidade do motor, para decidir se uma flag de modelo ou de esforco tem onde valer. Mora aqui, com os
+// descritores, e nao num modulo de perguntas: o caminho sem terminal tambem a usa.
+export const supportsModel = (id) => ids().includes(id) && ENGINES[id].capabilities.agentModel === true;
+export const supportsEffort = (id) => ids().includes(id) && ENGINES[id].capabilities.agentEffort === true;
+
 export function get(id) {
   const engine = ENGINES[id];
   if (!engine) {

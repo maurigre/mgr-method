@@ -244,6 +244,15 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
     fora do projeto; agora remove só nos diretórios recalculados pelos motores, e o declarado que difere
     deles não é tocado e é anunciado (`uninstallPathIgnored`).
 ### Corrigido
+- **`--scope` inválido no `install` com terminal** saía como "escopo desconhecido", depois de passar pela
+  leitura do manifesto; agora recusa antes de qualquer pergunta com a mesma mensagem do caminho sem
+  terminal.
+- **Pasta `custom` declarada em forma não canônica** (barra final, relativa no escopo global): o `update`
+  e o `install` reescreviam a declaração e, no cruzamento com o plano, a skill que saía do conjunto ficava
+  órfã sem aviso. Agora o texto declarado é gravado de volta como estava, e o cruzamento usa a mesma forma
+  canônica dos dois lados.
+- **`MGR_PROJECT_ID` sem manifesto no escopo:** a pergunta sugeria o nome da pasta mesmo com o id gravado no
+  `.env` ou no config pessoal; agora sugere o id gravado.
 - **`install` com flag de review e `agents set review` religavam o review gate desligado em silêncio
   (N-10, ADR-0031).** Com só `reviewGate` no `.mgr-core/config.json`, a escrita de `--effort-review`,
   `--model-review` e `mgr agents set review` religavam o review gate desligado, e o plano mostrava o

@@ -174,7 +174,7 @@ fora do catálogo, `language` que não é texto): código 1, nada é gravado, e 
 `install` e o `update` apontam a flag que declara o valor (ex.: `--arch`); o `uninstall` recusa só pelo que
 usa (`engines`, a pasta de `--skills-dir`). Campos que o MGR recalcula sozinho (ex.: `skillsDirs`, `scope`,
 `agents`) são reparados e anunciados numa linha antes das demais mudanças, sem perguntar. O `uninstall`
-imprime uma linha `ignorado …` para cada caminho que deixa no disco (fora das pastas que ele calcula, ou
+imprime uma linha `ignorado …` para cada caminho declarado que deixa no disco (fora das pastas que ele calcula, ou
 sem a marca do MGR).
 
 Um `install` que deixa de declarar uma skill que o manifesto anterior declarava **reconcilia**: o

@@ -170,7 +170,7 @@ the catalog, `language` not text): exit 1, nothing written, and the message name
 `update` point to the flag that declares the value (e.g. `--arch`); `uninstall` refuses only for what it
 uses (`engines`, the `--skills-dir` folder). Fields the MGR recalculates by itself (e.g. `skillsDirs`,
 `scope`, `agents`) are repaired and announced on a line before the other changes, with no question asked.
-`uninstall` prints a `skipped …` line for each path it leaves on disk (outside the folders it computes, or
+`uninstall` prints a `skipped …` line for each declared path it leaves on disk (outside the folders it computes, or
 without the MGR mark).
 
 An `install` that stops declaring a skill the previous manifest declared **reconciles**: the plan

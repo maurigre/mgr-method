@@ -5,7 +5,10 @@ Deciders: Mauri Reis
 
 ## Status
 
-Proposed
+Accepted
+
+> Aceito pelo autor em 2026-11-18, com a fatia doctor-manifesto-malformado (PR #52). A decisao 8
+> e os Risks foram reescritos no fechamento, pelo fato medido.
 
 ## Context
 

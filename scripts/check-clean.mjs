@@ -7,11 +7,14 @@
 //   1. dez testes liam a instalacao de dogfooding do repo (`.claude/`, `.mgr-core/`), que e
 //      gitignored e NAO existe no checkout do CI;
 //   2. uma fixture herdava o idioma do ambiente, e o runner nao tem locale pt_BR.
+//   3. (2026-11-19, PR #54) 22 testes comparavam a linha de erro exata, e o runner define `CI`: o
+//      picocolors liga a cor quando ve `CI`, a linha chegou com codigos ANSI, e o check passava aqui
+//      porque nao definia `CI`.
 // E na segunda vez a conferencia manual nao pegou porque eu a rodei COM o locale desta maquina, e
 // depois nao a repeti apos mudar codigo. Virou comando para deixar de depender de eu lembrar.
 //
-// O QUE ELE NAO FAZ: nao substitui o CI. Ele reproduz duas condicoes — arvore sem os arquivos
-// gitignored e locale neutro — e nao reproduz sistema operacional, versao de Node nem rede do
+// O QUE ELE NAO FAZ: nao substitui o CI. Ele reproduz tres condicoes — arvore sem os arquivos
+// gitignored, locale neutro e a variavel `CI` — e nao reproduz sistema operacional, versao de Node nem rede do
 // runner. Verde aqui NAO prova verde la; vermelho aqui prova vermelho la.
 
 import { execFileSync, execSync } from "node:child_process";
@@ -21,13 +24,13 @@ import { tempDir } from "./lib/tmp.mjs";
 
 const RAIZ = process.cwd();
 
-// Locale neutro e sem LANG: e a condicao do runner, e foi o que a conferencia manual nao reproduziu.
-const AMBIENTE_NEUTRO = () => {
-  const env = { ...process.env, LC_ALL: "C" };
-  delete env.LANG;
-  delete env.LANGUAGE;
+// O ambiente do runner: locale neutro, sem LANG, e `CI` definida. Sem `NO_COLOR` nem `FORCE_COLOR`
+// herdados desta maquina: qualquer um deles mudaria a cor da saida e esconderia o que o CI ve.
+export function ambienteDoCi(base = process.env) {
+  const env = { ...base, LC_ALL: "C", CI: "true" };
+  for (const chave of ["LANG", "LANGUAGE", "NO_COLOR", "FORCE_COLOR"]) delete env[chave];
   return env;
-};
+}
 
 /** Arquivos versionaveis ainda nao commitados: eles precisam ir para a arvore limpa. */
 export function pendentes(raiz = RAIZ) {
@@ -119,7 +122,7 @@ function main() {
   try {
     console.log(`arvore limpa em ${arvore}`);
     console.log(`  gitignorados presentes: ${gitignorados.length ? gitignorados.join(", ") : "nenhum (e a condicao do CI)"}`);
-    console.log("  ambiente: LC_ALL=C, sem LANG e sem LANGUAGE");
+    console.log("  ambiente: LC_ALL=C, CI=true, sem LANG, LANGUAGE, NO_COLOR e FORCE_COLOR");
     console.log("");
 
     for (const [rotulo, comando] of PASSOS) {
@@ -128,7 +131,7 @@ function main() {
       let codigo = 0;
       console.log(`  rodando ${rotulo}`);
       try {
-        execFileSync(comando[0], comando.slice(1), { cwd: arvore, env: AMBIENTE_NEUTRO(), stdio: "pipe" });
+        execFileSync(comando[0], comando.slice(1), { cwd: arvore, env: ambienteDoCi(), stdio: "pipe" });
       } catch (erro) {
         codigo = erro.status ?? 1;
         falhas.push([rotulo, `${erro.stdout ?? ""}${erro.stderr ?? ""}`]);
@@ -146,10 +149,10 @@ function main() {
       console.error(saida.split("\n").slice(-30).join("\n"));
     }
     console.error(`check-clean: ${falhas.length} passo(s) falharam em ambiente limpo`);
-    console.error("Isto reproduz o CI em duas condicoes. Vermelho aqui e vermelho la.");
+    console.error("Isto reproduz o CI em tres condicoes. Vermelho aqui e vermelho la.");
     return 1;
   }
-  console.log("check-clean OK — os quatro passos passam sem os gitignorados e com locale neutro");
+  console.log("check-clean OK — os quatro passos passam sem os gitignorados, com locale neutro e com CI=true");
   console.log("Isto NAO prova verde no CI: sistema, versao de Node e rede do runner nao sao reproduzidos.");
   return 0;
 }

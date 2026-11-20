@@ -31,7 +31,7 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   JSON válido cuja raiz não é objeto em `config.json`, `config.local.json`, lockfile e `settings` dos
   hooks também sai como erro de uso que nomeia o arquivo. O `manifest.json` segue o ADR-0032: o
   `doctor` o diagnostica (`invalid-manifest`); o install, o update e o uninstall seguem o ADR-0034, abaixo.
-  Uma regra de lint (`QUAL-8`) e `test/output-language.test.js` reprovam a recaída nos caminhos que
+  Uma regra de lint (`QUAL-8`) e `test/e2e/output-language.test.js` reprovam a recaída nos caminhos que
   cobrem; os caminhos sem guarda estão declarados no ADR-0033.
 - **O esforço de cada intenção se escolhe no `install`, como o modelo (ADR-0030).** Com terminal e um
   motor que aceita esforço por agente (hoje, o claude-code), o `install` pergunta o esforço uma vez por
@@ -60,7 +60,7 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   - o `uninstall` remove o bloco e apaga o arquivo só se ele ficar vazio.
 - Comando novo do runtime, usado pela `spec-init`: `instructions [--json]` (estado de cada arquivo) e
   `instructions write [--engine <id>]`. O runtime passa de 47 para 50 arquivos.
-- A mecânica do bloco foi extraída para `src/managed-block.js`, que o `.gitignore` também usa, sem
+- A mecânica do bloco foi extraída para `src/install/managed-block.js`, que o `.gitignore` também usa, sem
   mudança no contrato dele.
 - **O `sdd-check` avisa quando o guia de review ficou para trás das fontes do método (DT-26).** O
   aviso `guide-behind-source` lista os IDs citáveis das famílias universais (`QUAL`, `SEC`, `PERF`,
@@ -72,6 +72,18 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   A comparação é por ID: um guia que só menciona o ID, sem trazer a regra, passa.
 
 ### Alterado
+- **A `src/` e a `test/` estão organizadas em pastas por papel (ADR-0035):** `core/`, `install/`,
+  `plugins/`, `sdd/`, `session/` e `doctor/`, além de `commands/` e `engines/`, sem ciclo de dependência
+  entre elas; a `test/` segue as mesmas pastas, mais `scripts/`, `e2e/`, `conteudo/` e `arquitetura/`.
+  Os comandos se comportam como antes: os testes que já existiam são os mesmos e passam, e o `uninstall`
+  deixa a mesma sobra. Os arquivos instalados no projeto são os mesmos fora do runtime. O runtime em
+  `.mgr-core/runtime/` passa a ter as mesmas subpastas: uma instalação feita com o layout anterior e a
+  mesma versão aparece no `doctor` com `divergent-body` até o `mgr update`, e quem versiona o runtime vê
+  as renomeações no git.
+  Quem importa módulos de `src/` diretamente precisa dos caminhos novos; `src/plugin.js` não muda de lugar
+  nem de bytes, porque o `mgr-registry` o confere byte a byte.
+- **O `check:clean` entende arquivo renomeado:** a linha `R  antigo -> novo` do `git status` virava um
+  caminho inexistente, e a árvore limpa ficava com o arquivo antigo e sem o novo.
 - **O `check:clean` reproduz também a variável `CI` do runner.** Antes ele reproduzia só a árvore sem os
   gitignorados e o locale neutro, e passou verde um defeito que o CI reprovou no PR #54: com `CI`
   definida, o picocolors liga a cor, e 22 testes que comparavam a linha de erro exata receberam códigos

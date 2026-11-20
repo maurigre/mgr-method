@@ -279,9 +279,13 @@ feature, idêntico.
 ```
 bin/mgr.js          # CLI: install · status · update · uninstall · build · validate · list · version
                     #      add · remove · registry · detect · agents · agents apply · tokens · spec · precompact · sdd-check
-src/                # o núcleo, 40 módulos: instalação e build · descritor por motor · skill
-                    # plugável · artefato de spec (parser/regras/validador) · sessão e contexto
-                    # (hooks, pré-compactação, referência ao contexto) · mensagens
+src/core/           # base transversal: erros, mensagens, camada de texto, recursos do pacote, catálogo
+src/install/        # instalar, atualizar, remover e plugins: grava a instalação no disco do usuário
+src/plugins/        # registro de skills, detecção, auditoria e validação de SKILL.md
+src/sdd/            # artefatos SDD (spec, plano, proveniência, docs), sua validação, raiz do projeto
+src/session/        # contexto da sessão do agente: hand-off e manifesto de contexto
+src/doctor/         # diagnóstico da instalação
+src/plugin.js       # schema do manifesto de plugin, vendorizado byte a byte pelo registry: não muda de lugar
 src/engines/        # o que cada motor suporta, como DADO — nunca `if` por nome de motor
 src/commands/       # a cola dos comandos, comum à CLI e ao runtime do projeto (IO injetado)
 bin/mgr-runtime.js  # a entrada do runtime do projeto, copiada com o fecho de imports para .mgr-core/runtime/
@@ -291,7 +295,7 @@ shared/             # fontes transversais: regras de arquitetura e qualidade, le
 docs/adr/           # as decisões, formato Nygard — versionadas e autocontidas
 docs/plugins.md     # formato de skill plugável: manifest, registry, lockfile, matriz de suporte
 docs/engine-hooks.md # matriz de capacidade de hook dos seis motores estudados, com fonte e data
-test/               # node:test
+test/               # node:test; espelha as pastas da src/, mais scripts/, e2e/, conteudo/ (conteúdo entregue), arquitetura/
 ```
 
 Dependências mínimas (@clack/prompts e picocolors na TUI; esbuild só em dev — a CLI é

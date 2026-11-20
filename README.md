@@ -277,9 +277,13 @@ decision automatically generates an ADR. Out comes the same SDD as brownfield; t
 ```
 bin/mgr.js          # CLI: install · status · update · uninstall · build · validate · list · version
                     #      add · remove · registry · detect · agents · agents apply · tokens · spec · precompact · sdd-check
-src/                # the core, 40 modules: install and build · per-engine descriptor · plugin
-                    # skill · spec artifact (parser/rules/validator) · session and context (hooks,
-                    # pre-compaction, context reference) · messages
+src/core/           # cross-cutting base: errors, messages, text layer, package resources, catalog
+src/install/        # install, update, uninstall and plugins: writes the installation to the user's disk
+src/plugins/        # skill registry, detection, audit and SKILL.md validation
+src/sdd/            # SDD artifacts (spec, plan, provenance, docs), their validation, project root
+src/session/        # agent session context: hand-off and context manifest
+src/doctor/         # installation diagnosis
+src/plugin.js       # plugin manifest schema, vendored byte for byte by the registry: it does not move
 src/engines/        # what each engine supports, as DATA — never an `if` on the engine name
 src/commands/       # the command glue shared by the CLI and the project runtime (IO injected)
 bin/mgr-runtime.js  # the project runtime entry, copied with its import closure into .mgr-core/runtime/
@@ -289,7 +293,7 @@ shared/             # cross-cutting sources: architecture and quality rules, law
 docs/adr/           # the decisions, Nygard format — versioned and self-contained
 docs/plugins.md     # plugin skill format: manifest, registry, lockfile, capability matrix
 docs/engine-hooks.md # hook capability matrix for the six engines studied, with source and date
-test/               # node:test
+test/               # node:test; mirrors the src/ folders, plus scripts/, e2e/, conteudo/ (shipped content), arquitetura/
 ```
 
 Minimal dependencies (@clack/prompts and picocolors in the TUI; esbuild dev-only — the CLI

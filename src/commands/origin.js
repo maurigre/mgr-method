@@ -1,7 +1,7 @@
 // Cola do comando `mgr origin set`. Humble Object: só parse, formatação e exit code; o IO entra por
-// `io` e a raiz por `root`. A decisão vive em src/registry.js.
-import * as installer from "../installer.js";
-import { ORIGINS, readOrigin, writeOrigin } from "../registry.js";
+// `io` e a raiz por `root`. A decisão vive em src/plugins/registry.js.
+import * as installer from "../install/installer.js";
+import { ORIGINS, readOrigin, writeOrigin } from "../plugins/registry.js";
 
 // `mgr origin set` — grava a ORIGEM do projeto e diz o que passou a valer.
 //

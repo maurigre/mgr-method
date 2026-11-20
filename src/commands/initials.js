@@ -1,8 +1,8 @@
 // Cola do comando `mgr spec initials`. Humble Object: só parse, formatação e exit code; o IO entra por
-// `io` e a raiz por `root`. A decisão vive em src/registry.js.
+// `io` e a raiz por `root`. A decisão vive em src/plugins/registry.js.
 import path from "node:path";
-import * as installer from "../installer.js";
-import { INITIALS_PATTERN, LOCAL_CONFIG_NAME, readInitials, writeInitials } from "../registry.js";
+import * as installer from "../install/installer.js";
+import { INITIALS_PATTERN, LOCAL_CONFIG_NAME, readInitials, writeInitials } from "../plugins/registry.js";
 
 const COMANDO = "spec initials";
 

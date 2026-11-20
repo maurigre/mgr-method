@@ -1,4 +1,4 @@
-import { checkSkill, validateSkill } from "../../src/validator.js";
+import { checkSkill, validateSkill } from "../../src/plugins/validator.js";
 
 const DESCRICAO_LONGA = "d".repeat(60);
 const NOME_LONGO = "a".repeat(65);

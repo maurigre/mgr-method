@@ -1,20 +1,20 @@
 // Cola dos comandos de hook (`mgr detect --hook`, `mgr precompact --hook`). Humble Object: o IO de
 // terminal entra por `io`, o de PROCESSO (stdin, fd, git) por `proc`, e a raiz por `root`. A decisão
-// vive em src/detector.js e src/precompact.js.
+// vive em src/plugins/detector.js e src/session/precompact.js.
 //
 // Shape de `proc` (montado pela borda a partir de bin/hook-io.js):
 //   { escreverSync(fd, texto) => boolean, lerPayload() => Promise<object>, modificados(repo) => string[],
 //     stdoutFd, stderrFd, write(texto) }
 // `write` é o `process.stdout.write` assíncrono do detect (mantido para a saída não mudar).
 import path from "node:path";
-import * as installer from "../installer.js";
-import { fetchIndex, lawsFallbackRef, listRegistries, readLawsPreamble, readPersonal } from "../registry.js";
-import { readLockfile } from "../lockfile.js";
-import { collectSuggestions, detect, hookReport, lawsPreamble } from "../detector.js";
+import * as installer from "../install/installer.js";
+import { fetchIndex, lawsFallbackRef, listRegistries, readLawsPreamble, readPersonal } from "../plugins/registry.js";
+import { readLockfile } from "../install/lockfile.js";
+import { collectSuggestions, detect, hookReport, lawsPreamble } from "../plugins/detector.js";
 import { ids as engineIds } from "../engines/index.js";
-import { ASSEMBLED, assemble, decide, notice, persist, readStamp, writeStamp } from "../precompact.js";
-import * as contexto from "../context-manifest.js";
-import { readManifest } from "../manifest.js";
+import { ASSEMBLED, assemble, decide, notice, persist, readStamp, writeStamp } from "../session/precompact.js";
+import * as contexto from "../session/context-manifest.js";
+import { readManifest } from "../install/manifest.js";
 
 // Glue: junta os dados que o nucleo precisa. A decisao de como combinar e do detector.
 export const suggestionsFor = (repo, detected) => collectSuggestions(

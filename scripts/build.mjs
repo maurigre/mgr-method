@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Gera dist/mgr.min.js com a versao do package.json embutida (feature entrega-f1-runtime-no-projeto,
-// DT-10, task P1.14). O define `__MGR_BUILD_VERSION__` faz `src/bundle.js` (buildVersion/readVersion)
+// DT-10, task P1.14). O define `__MGR_BUILD_VERSION__` faz `src/core/bundle.js` (buildVersion/readVersion)
 // devolver a versao do build, e o `mgr` chamado de dist/ passa a poder recusar um bundle defasado (P1.15).
 // Ferramenta de desenvolvimento do repo — fora do tarball npm (o `prepack` a chama via `npm run build`).
 

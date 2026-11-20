@@ -40,10 +40,19 @@ export function pendentes(raiz = RAIZ) {
   console.log(`  lidos: ${saida.split("\n").filter(Boolean).length} caminho(s) em stage ou modificados`);
   return saida
     .split("\n")
-    .map((linha) => linha.slice(3).trim())
     .filter(Boolean)
+    .map((linha) => destinoDaLinha(linha))
     .filter((relativo) => existsSync(path.join(raiz, relativo)));
 }
+
+// Renomeacao (`R`) e copia (`C`) no indice aparecem como `R  antigo -> novo`: o novo e o arquivo a
+// copiar; na renomeacao o antigo e a remover, e na copia ele continua. Sem isto o texto inteiro
+// `antigo -> novo` virava um caminho que nao existe, e a arvore limpa ficava com o arquivo antigo e
+// sem o novo (achado na fatia reorganiza-src: 46 `git mv`).
+const temOrigemEDestino = (linha) => linha[0] === "R" || linha[0] === "C";
+const caminhoDaLinha = (linha) => linha.slice(3).trim();
+const destinoDaLinha = (linha) => (temOrigemEDestino(linha) ? caminhoDaLinha(linha).split(" -> ")[1] : caminhoDaLinha(linha));
+const origemDaRenomeacao = (linha) => caminhoDaLinha(linha).split(" -> ")[0];
 
 /**
  * Arquivos apagados na arvore ou no indice (status `D` em qualquer coluna). Eles NAO existem no
@@ -54,11 +63,11 @@ export function removidos(raiz = RAIZ) {
   // LOG-2: par de logs em volta do subprocesso.
   console.log("  lendo os arquivos removidos (git status)");
   const saida = execSync("git status --porcelain", { cwd: raiz, encoding: "utf8" });
-  const lista = saida
-    .split("\n")
-    .filter((linha) => linha[0] === "D" || linha[1] === "D")
-    .map((linha) => linha.slice(3).trim())
-    .filter(Boolean);
+  const linhas = saida.split("\n").filter(Boolean);
+  const lista = [
+    ...linhas.filter((linha) => linha[0] === "D" || linha[1] === "D").map(destinoDaLinha),
+    ...linhas.filter((linha) => linha[0] === "R").map(origemDaRenomeacao),
+  ];
   console.log(`  lidos: ${lista.length} caminho(s) removido(s) em stage ou na arvore`);
   return lista;
 }

@@ -7,16 +7,19 @@
 // Convenção por motor:
 //   claude-code : <repo>/.claude/skills  |  ~/.claude/skills
 //   copilot     : <repo>/.github/skills  |  ~/.copilot/skills
-import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import * as bundle from "./bundle.js";
 import { installAgents, installEngine, installRuntime, isOurAgent, isOurSkill, lockedDirsOf, orphanClass, runtimeIgnoreFileFor } from "./builder.js";
 import * as engineDescriptors from "./engines/index.js";
 import { previewPlan, readAgents, requestOf, readPersonal, readRuntimeVersioning, writeAgentPolicies, writeOrigin, writePersonal, writeRuntimeVersioning } from "./registry.js";
-import { readManifest, writeManifest, writeEnv, readEnvProjectId, MODEL_RUNTIME, MODEL_LAYERED, MODEL_CORE_RUNTIME } from "./manifest.js";
+import { DECLARATION_FLAGS, FIELD_CATEGORY, KNOWN_MODELS, MANIFEST_NAME, QUESTION_FIELDS, RESOLVED_DECLARATIONS, UNINSTALL_DECLARATIONS, fieldCategory, manifestShapeProblems, problemText, readManifest, writeManifest, writeEnv, readEnvProjectId, MODEL_RUNTIME, MODEL_LAYERED, MODEL_CORE_RUNTIME } from "./manifest.js";
 import * as catalog from "./catalog.js";
 import { UsageError } from "./errors.js";
+import { text } from "./ui-text.js";
+
+const LEGACY_USER_LANGUAGE = "pt-BR";
 
 const KNOWN_PROJECT = [".claude/skills", ".github/skills", ".agents/skills", ".cursor/skills"];
 const KNOWN_GLOBAL = [".claude/skills", ".copilot/skills", ".agents/skills"];
@@ -33,7 +36,7 @@ export function detect(repo) {
   const out = [];
   for (const rel of KNOWN_PROJECT) {
     const p = path.join(repo, rel);
-    if (existsSync(p)) out.push({ scope: "projeto", path: p, count: countSkills(p) });
+    if (existsSync(p)) out.push({ scope: "project", path: p, count: countSkills(p) });
   }
   for (const rel of KNOWN_GLOBAL) {
     const p = path.join(os.homedir(), rel);
@@ -94,7 +97,8 @@ function charterRulesRef(engineDir, scope, repo) {
 // posição fazia o hook do copilot anunciar a árvore do claude-code.
 export function installedLawsRef(engine, scope, repo) {
   const man = readManifest(coreDir(scope, repo));
-  if (!man || !(man.engines || []).includes(engine)) return null;
+  // `engines` fora de forma (numero, texto) nao declara motor: `includes` de texto casaria por substring.
+  if (!man || !Array.isArray(man.engines) || !man.engines.includes(engine)) return null;
   return lawsRulesRef(engineSkillsDir(engine, scope, repo), scope, repo);
 }
 
@@ -118,8 +122,30 @@ export function resolveProjectId({ flag, coreDir: core, prior, repo }) {
   return path.basename(path.resolve(repo));
 }
 
+// DT-5: `prior` e `declarations` entram por `opts`, como os outros dados opcionais injetados
+// (`replaced`, `names`, `projectId`). A presença de `declarations` e o que diz que a resolução já
+// foi feita: `prior` nulo e valor legítimo (sem instalação), então não serve de marca. Sem eles, lê
+// por `readPrior` e resolve por `resolvePrior`, com `explicit` montado do que quem chamou passou.
+function resolvedPriorOf({ scope, repo, command, state, prior, declarations, explicit }) {
+  if (declarations) return { state, prior, declarations };
+  return resolvePrior(readPrior(scope, repo), { scope, repo, explicit, command });
+}
+
+export function explicitOfInstall(engines, { skillsDir, language, architecture, userLanguage, optional, all }) {
+  const given = {
+    engines: skillsDir ? ["custom"] : (engines?.length ? engines : undefined),
+    skillsDirs: skillsDir ? [skillsDir] : undefined,
+    language: language ?? undefined,
+    architecture: architecture ?? undefined,
+    userLanguage: userLanguage ?? undefined,
+    optional: optional?.length ? optional : undefined,
+    allSkills: all === true ? true : undefined,
+  };
+  return Object.fromEntries(Object.entries(given).filter(([, value]) => value !== undefined));
+}
+
 export function planInstall(engines, scope, repo, opts = {}) {
-  const { skillsDir = null, language = null, architecture = null, userLanguage = null, optional = [], all = false, names = null, projectId = null, replaced = {}, models = {}, efforts = {}, origin = null, runtimeVersioning = null } = opts;
+  const { skillsDir = null, skillsDirDeclared = null, language = null, architecture = null, userLanguage = null, optional = [], all = false, names = null, projectId = null, replaced = {}, models = {}, efforts = {}, origin = null, runtimeVersioning = null, lockfile = null } = opts;
   const skills = names || (all ? bundle.skillNames() : catalog.selectSkills({ language, architecture, optional }));
   // Skill substituída por plugin sai do conjunto DAQUELE motor (ADR-0008): sem isso o
   // instalador escreveria a skill do método para o restore sobrescrever logo em seguida,
@@ -130,9 +156,14 @@ export function planInstall(engines, scope, repo, opts = {}) {
   // por ser cedido, e o `buildSkill` apagava a pasta do plugin (review estreito da P2.7, caminho 1).
   const cedidasEmQualquerMotor = Object.assign({}, ...Object.values(replaced));
   const targets = skillsDir
-    ? [{ engine: "custom", dir: skillsDir, skills: skills.filter((name) => !cedidasEmQualquerMotor[name]) }]
+    // `dir` e o caminho real (opera e confere posse); `declaredDir` e o que o manifesto grava: a declaracao
+    // nunca e reescrita pelo destino de um link simbolico (N-8 do gate isolado).
+    ? [{ engine: "custom", dir: skillsDir, declaredDir: skillsDirDeclared ?? skillsDir, skills: skills.filter((name) => !cedidasEmQualquerMotor[name]) }]
     : engines.map((e) => ({ engine: e, dir: engineSkillsDir(e, scope, repo), skills: forEngine(e) }));
-  const prior = readManifest(coreDir(scope, repo));
+  const { prior } = resolvedPriorOf({
+    scope, repo, command: COMMAND.INSTALL, prior: opts.prior, declarations: opts.declarations,
+    explicit: explicitOfInstall(engines, opts),
+  });
   const pid = resolveProjectId({ flag: projectId, coreDir: coreDir(scope, repo), prior, repo });
   // A política de TODAS as intenções, de UMA fonte (ADR-0017, RN-1). O `reviewGate` do plano passa
   // a SAIR daqui, e não mais de `readReviewGate`: lendo o apelido enquanto a instalação gravava a
@@ -150,6 +181,11 @@ export function planInstall(engines, scope, repo, opts = {}) {
     projectId: pid, agents, reviewGateMigration, answers: { models, origin, efforts }, optional, all,
     legacyRuntime: legacyRuntimeDirs({ prior, targets, scope, repo }),
   };
+  const declaredSkills = prior?.skills || [];
+  const declaredSet = new Set(declaredSkills);
+  base.occupied = occupiedFolders({
+    plan: base, entering: skills.filter((name) => !declaredSet.has(name)), lockfile, declared: declaredSkills,
+  });
   return withRuntimeVersioning(base, runtimeVersioning);
 }
 
@@ -175,12 +211,17 @@ export function withRuntimeVersioning(plan, answered) {
 // de dentro de `.mgr-core/`, mantendo o diretório (será reescrito como config).
 export function migrateOld(scope, repo) {
   const core = coreDir(scope, repo);
-  const man = readManifest(core);
-  if (!man || man.model !== "runtime-launcher") return null;
+  const read = readPrior(scope, repo);
+  if (read.state === "absent" || read.manifest.model !== "runtime-launcher") return null;
+  const man = read.manifest;
   const removed = [];
-  const dirs = man.skillsDirs || (man.skillsDir ? [man.skillsDir] : []);
-  for (const d of dirs) {
-    const base = absDir(d, scope, repo);
+  const declaredDirs = man.skillsDirs || (man.skillsDir ? [man.skillsDir] : []);
+  // Os mesmos motores que a resolucao usa (DT-14): legado `engine`, e o padrao quando nada foi declarado.
+  const brokenFields = new Set(read.problems.map((problem) => problem.field));
+  const engineIds = previousEngines(man, {}, brokenFields).filter((id) => ENGINES.includes(id));
+  const recalculatedDirs = engineIds.map((id) => path.resolve(engineSkillsDir(id, scope, repo)));
+  const ignored = declaredDirs.filter((d) => !recalculatedDirs.includes(path.resolve(absDir(d, scope, repo))));
+  for (const base of recalculatedDirs) {
     for (const name of man.skills || []) {
       const p = path.join(base, name);
       // Pasta de plugin (`mgr-manifest.json`) não é lançador do layout antigo: nunca é apagada aqui
@@ -193,7 +234,7 @@ export function migrateOld(scope, repo) {
     const p = path.join(core, sub);
     if (existsSync(p)) { rmSync(p, { recursive: true, force: true }); removed.push(p); }
   }
-  return { removed, version: man.version };
+  return { removed, version: man.version, ignored };
 }
 
 // Remover ANTES de declarar, e na mesma operacao. Se o processo morrer entre os dois passos,
@@ -280,7 +321,7 @@ export function execute(plan, { abandoned = [], remove = rmSync } = {}) {
     userLanguage: plan.userLanguage,
     optional: plan.optional ?? [],
     allSkills: plan.all === true,
-    skillsDirs: plan.targets.map((t) => rel(t.dir)),
+    skillsDirs: plan.targets.map((t) => rel(t.declaredDir ?? t.dir)),
     // `skills` continua sendo o conjunto PRETENDIDO do método — é o que faz a skill voltar
     // quando o plugin que a substituiu for removido (DT-6). `replaced` diz o que, hoje,
     // está cedido a um plugin naquele motor.
@@ -308,15 +349,196 @@ export function detectPrior(scope, repo) {
   return readManifest(coreDir(scope, repo));
 }
 
+// Manifesto anterior para a resolução (DT-5): `readManifest` já lança raiz e registro `skills` fora de
+// forma, então esses problemas não voltam em `problems`.
+export function readPrior(scope, repo) {
+  const manifest = readManifest(coreDir(scope, repo));
+  if (manifest === null) return { state: "absent" };
+  const problems = manifestShapeProblems(manifest).filter((problem) => problem.field !== "skills");
+  return { state: "read", manifest, problems };
+}
+
+// Caminho real do diretório `custom` declarado (DT-19 item 2, P0.5): `realpathSync` do diretório
+// existente ou do pai existente mais próximo, para que um link simbólico não esconda o destino.
+export function resolveCustomDir(dir, scope, repo) {
+  const declared = path.resolve(absDir(dir, scope, repo));
+  let existing = declared;
+  while (!existsSync(existing)) existing = path.dirname(existing);
+  return { state: "resolved", dir: path.join(realpathSync(existing), path.relative(existing, declared)), declared };
+}
+
+// Lugar do alvo na forma DECLARADA: e a forma que o manifesto grava e que o anterior traz, entao e por ela
+// que o anterior e o plano se cruzam (achado S-1 do gate do bloco P3: com link simbolico, comparar o
+// declarado com o real deixava a skill que sai como orfa em silencio). O `dir` real so opera.
+const lugarDoAlvo = (target) => target.declaredDir ?? target.dir;
+const pastaDoCustom = ({ dir, declared }) => ({ skillsDir: dir, skillsDirDeclared: declared });
+
+
+function declarationsWithoutInstall(localeLanguage) {
+  return {
+    engines: engineDescriptors.DEFAULT_ENGINES, architecture: null, language: null, userLanguage: localeLanguage,
+    optional: [], allSkills: false,
+  };
+}
+
+export const COMMAND = Object.freeze({ INSTALL: "install", UPDATE: "update", UNINSTALL: "uninstall" });
+
+const EMPTY_ENGINES_PROBLEM = Object.freeze({ field: "engines", kind: "value", expected: "non-empty-engines", found: "empty" });
+
+// Alvo `custom` sem a pasta que o `--skills-dir` declarou (DT-18, caso medido na P0.3): declaracao
+// ausente, e nao `claude-code` inventado. `skillsDirs` fora de forma ja e problema da regra de forma.
+const EMPTY_CUSTOM_DIR_PROBLEM = Object.freeze({ field: "skillsDirs", kind: "value", expected: "non-empty-custom-dir", found: "empty" });
+
+function hasEmptyEnginesWithoutLegacy(manifest) {
+  return Array.isArray(manifest.engines) && manifest.engines.length === 0 && !manifest.engine;
+}
+
+function hasCustomWithoutDir(manifest) {
+  const isCustom = Array.isArray(manifest.engines) && manifest.engines.includes("custom");
+  const dirs = manifest.skillsDirs;
+  return isCustom && (dirs === undefined || dirs === null || (Array.isArray(dirs) && dirs.length === 0));
+}
+
+// Motores da instalacao anterior, o que esta em disco (DT-7): o anterior valido, o legado `engine`, e
+// so quando nenhum dos dois pode ser conhecido, o explicito desta execucao; por fim o padrao.
+function previousEngines(manifest, explicit, brokenFields) {
+  if (Array.isArray(manifest.engines) && manifest.engines.length > 0 && !brokenFields.has("engines")) return manifest.engines;
+  if (manifest.engine) return [manifest.engine];
+  return explicit?.engines ?? engineDescriptors.DEFAULT_ENGINES;
+}
+
+// Motores declarados para esta execucao (DT-6): o explicito vence; sem ele, os da instalacao anterior.
+function effectiveEngines(manifest, explicit, brokenFields) {
+  return explicit?.engines ?? previousEngines(manifest, {}, brokenFields);
+}
+
+// Recusa (DT-8): declaracao fora de forma que nem `explicit` nem `asked` cobrem. `details` e dado
+// (descritores), nunca frase pronta; o idioma e escolhido na renderizacao.
+function refuseUncoveredDeclarations(manifest, problems, { explicit, asked, command }) {
+  const consumed = (field) => command !== COMMAND.UNINSTALL || UNINSTALL_DECLARATIONS.includes(field);
+  const uncovered = problems.filter((problem) => fieldCategory(manifest, problem.field) === FIELD_CATEGORY.DECLARATION
+    && consumed(problem.field) && explicit[problem.field] === undefined && !asked.includes(problem.field));
+  if (!uncovered.length) return;
+  const flags = [...new Set(uncovered.map((problem) => DECLARATION_FLAGS[problem.field]).filter(Boolean))].join(", ");
+  const details = uncovered.map((problem) => problemText(problem));
+  details.push(text("manifestRefusedFixByHand", MANIFEST_NAME));
+  if (flags && command === COMMAND.INSTALL) details.push(text("manifestRefusedOrFlags", flags));
+  if (flags && command === COMMAND.UPDATE) details.push(text("manifestRefusedOrInstall", flags));
+  throw new UsageError("manifestRefused", [MANIFEST_NAME], { details });
+}
+
+// Resolucao do manifesto anterior (DT-5, DT-7): derivados recalculados e anunciados em `repairs`;
+// `declarations` copia so a declaracao anterior valida (a precedencia completa e do DT-6).
+export function resolvePrior(read, { scope, repo, explicit = {}, asked = [], command, localeLanguage }) {
+  if (read.state === "absent") {
+    // O explicito vence tambem sem instalacao: a coluna "sem instalacao" do DT-6 e o ultimo recurso.
+    // `state` e o discriminante (DES-1); `prior: null` so atravessa para as funcoes anteriores (DT-5).
+    return { state: "absent", prior: null, declarations: { ...declarationsWithoutInstall(localeLanguage), ...explicit }, repairs: [] };
+  }
+  const { manifest } = read;
+  const problems = [
+    ...read.problems,
+    ...(hasEmptyEnginesWithoutLegacy(manifest) ? [EMPTY_ENGINES_PROBLEM] : []),
+    ...(hasCustomWithoutDir(manifest) ? [EMPTY_CUSTOM_DIR_PROBLEM] : []),
+  ];
+  refuseUncoveredDeclarations(manifest, problems, { explicit, asked, command });
+  const repairs = problems.filter((problem) => fieldCategory(manifest, problem.field) === FIELD_CATEGORY.DERIVED);
+  const brokenFields = new Set(problems.map((problem) => problem.field));
+  const engines = effectiveEngines(manifest, explicit, brokenFields);
+  const isCustom = engines.includes("custom");
+  const enginesOnDisk = previousEngines(manifest, explicit, brokenFields);
+  const relative = (target) => (scope === "project" ? path.relative(repo, target) : target);
+  const skillsDirs = enginesOnDisk.includes("custom")
+    ? manifest.skillsDirs
+    : enginesOnDisk.map((engine) => relative(engineSkillsDir(engine, scope, repo)));
+  const { agents, agentsDirs, ...rest } = manifest;
+  const prior = {
+    ...rest,
+    scope,
+    skillsDirs,
+    ...(brokenFields.has("agents") || agents === undefined ? {} : { agents }),
+    ...(brokenFields.has("agentsDirs") || agentsDirs === undefined ? {} : { agentsDirs }),
+  };
+  const previous = { architecture: manifest.architecture ?? null, language: manifest.language ?? null, ...inferredChoices(manifest) };
+  const declarations = {};
+  for (const field of RESOLVED_DECLARATIONS) {
+    if (field === "engines") declarations.engines = engines;
+    else if (explicit[field] !== undefined) declarations[field] = explicit[field];
+    else if (!brokenFields.has(field)) declarations[field] = previous[field];
+  }
+  if (isCustom) {
+    if (explicit.skillsDirs !== undefined) declarations.skillsDirs = explicit.skillsDirs;
+    else if (!brokenFields.has("skillsDirs")) declarations.skillsDirs = [manifest.skillsDirs[0]];
+  }
+  return { state: "read", prior, declarations, repairs };
+}
+
+// DT-10: o escopo sai da presenca do manifesto no disco, nao da leitura dele (que pode estar malformado):
+// projeto, senao global, senao projeto. Regra unica do `install` e do `update`.
+export function scopeByManifestPresence(repo) {
+  const hasManifest = (scope) => existsSync(path.join(coreDir(scope, repo), MANIFEST_NAME));
+  if (hasManifest("project")) return "project";
+  return hasManifest("global") ? "global" : "project";
+}
+
+// Padroes das perguntas do `install` com terminal (DT-15): so declaracao anterior VALIDA. Sem instalacao
+// nao ha anterior, e o padrao fixo vale; arquitetura e linguagem ausentes do manifesto nao viram `null`,
+// que a pergunta leria como "nenhuma"/"outra" (achado E-2 do gate isolado).
+// A resolucao aqui tambem RECUSA a declaracao fora de forma que nenhuma pergunta nem flag cobre (`allSkills`),
+// e por isso roda antes da primeira pergunta (CA-20; achado N-3 do gate isolado).
+export function previousForQuestions(read, { scope, repo, localeLanguage, explicit = {} }) {
+  if (read.state === "absent") return {};
+  const { declarations } = resolvePrior(read, {
+    scope, repo, explicit, asked: QUESTION_FIELDS, command: COMMAND.INSTALL, localeLanguage,
+  });
+  const herdadoDoNada = ([campo, valor]) => valor === null && read.manifest[campo] === undefined;
+  const validas = Object.fromEntries(Object.entries(declarations).filter((par) => !herdadoDoNada(par)));
+  // O id gravado e o padrao da pergunta, pela mesma resolucao que a escrita usa (P3.5): sem ele, um Enter
+  // trocava o id do projeto pelo nome da pasta.
+  return { ...validas, projectId: resolveProjectId({ flag: null, coreDir: coreDir(scope, repo), prior: read.manifest, repo }) };
+}
+
+// Escolhas efetivas do `install` (DT-6, DT-15): sem pergunta, tudo sai da resolucao (flag > anterior valido >
+// padrao); com pergunta, das respostas, e o que nao foi perguntado (arquitetura e linguagem com `allSkills`)
+// segue a resolucao. A borda so repassa: esta decisao tinha caido nela e la gerou dois defeitos (P2.5, E-2).
+export function effectiveInstallChoices({ declarations, answered, askQuestions, skillsDirFlag, scope, repo, localeLanguage }) {
+  const allSkills = declarations.allSkills;
+  if (askQuestions) {
+    return {
+      engines: answered.engines.length ? answered.engines : [...engineDescriptors.DEFAULT_ENGINES],
+      skillsDir: null,
+      skillsDirDeclared: null,
+      language: allSkills ? declarations.language ?? null : answered.language,
+      architecture: allSkills ? declarations.architecture ?? null : answered.architecture,
+      userLanguage: answered.userLanguage || localeLanguage,
+      optional: answered.optional,
+      allSkills,
+    };
+  }
+  const custom = declarations.engines.includes("custom");
+  const declarado = skillsDirFlag ?? declarations.skillsDirs?.[0];
+  return {
+    engines: declarations.engines.filter((id) => id !== "custom"),
+    ...(custom ? pastaDoCustom(resolveCustomDir(declarado, scope, repo)) : { skillsDir: null, skillsDirDeclared: null }),
+    language: declarations.language ?? null,
+    architecture: declarations.architecture ?? null,
+    userLanguage: declarations.userLanguage ?? localeLanguage,
+    optional: declarations.optional ?? [],
+    allSkills,
+  };
+}
+
+const isUnknownModel = (model) => model !== undefined && !KNOWN_MODELS.includes(model);
+
 // Como o runtime chega ao layout novo (DT-4): "none" (sem instalação ou já no layout novo),
 // "relocate" (geração com runtime em cada motor) ou "copy" (geração sem runtime no projeto).
 export function runtimeMigration(prior) {
-  if (!prior || prior.model === MODEL_CORE_RUNTIME) return "none";
+  if (!prior || prior.model === MODEL_CORE_RUNTIME || isUnknownModel(prior.model)) return "none";
   return [MODEL_RUNTIME, MODEL_LAYERED].includes(prior.model) ? "relocate" : "copy";
 }
 
 export function needsConfigMigration(prior) {
-  return Boolean(prior) && ![MODEL_LAYERED, MODEL_CORE_RUNTIME].includes(prior.model);
+  return Boolean(prior) && !isUnknownModel(prior.model) && ![MODEL_LAYERED, MODEL_CORE_RUNTIME].includes(prior.model);
 }
 
 // O `_shared/mgr/` da geração anterior (DT-5, emenda N-3). Sai o de toda pasta que o plano reinstala,
@@ -327,7 +549,7 @@ export function needsConfigMigration(prior) {
 export function legacyRuntimeDirs({ prior, targets, scope, repo, exists = existsSync }) {
   if (!prior) return { remove: [], keep: [] };
   const declared = (prior.skillsDirs || (prior.skillsDir ? [prior.skillsDir] : [])).map((d) => absDir(d, scope, repo));
-  const inPlan = (targets || []).map((t) => absDir(t.dir, scope, repo));
+  const inPlan = (targets || []).map((t) => absDir(lugarDoAlvo(t), scope, repo));
   const candidate = (base) => path.join(base, ...catalog.LEGACY_RUNTIME_DIR);
   const remove = [...new Set(inPlan)].map(candidate).filter((dir) => exists(dir));
   const keep = [...new Set(declared)].filter((base) => !inPlan.includes(base)).map(candidate).filter((dir) => exists(dir));
@@ -366,7 +588,7 @@ export function abandonedSkills({ prior, plan, exists = existsSync }) {
   const anteriores = new Set((prior.skillsDirs || []).map((dir) => absDir(dir, plan.scope, plan.repo)));
   const fora = [];
   for (const target of plan.targets || []) {
-    if (!anteriores.has(target.dir)) continue;
+    if (!anteriores.has(lugarDoAlvo(target))) continue;
     // O alvo do `--skills-dir` tem engine "custom", e `replaced` so e chaveado por motor REAL: sem
     // a uniao, `plan.replaced["custom"]` seria sempre undefined e a skill cedida a plugin entraria
     // na lista — medido em 2026-09-25, e com `-y` o rmSync cairia no diretorio do plugin.
@@ -438,7 +660,7 @@ export function orphanCandidates({
   const lockedDirs = lockedDirsOf(lockfile);
   const out = { candidates: [], outOfReach: [] };
   for (const target of plan.targets || []) {
-    if (!anteriores.has(target.dir) || !exists(target.dir)) continue;
+    if (!anteriores.has(lugarDoAlvo(target)) || !exists(target.dir)) continue;
     const cedidas = cededAt(target, plan);
     for (const name of list(target.dir)) {
       if (name.startsWith("_") || declaradas.has(name) || cedidas[name]) continue;
@@ -500,6 +722,7 @@ export function keepDeclared(plan, kept = []) {
 export function inferredChoices(manifest) {
   const skills = manifest.skills || [];
   return {
+    userLanguage: manifest.userLanguage || LEGACY_USER_LANGUAGE,
     optional: manifest.optional ?? catalog.OPTIONAL.filter((nome) => skills.includes(nome)),
     allSkills: manifest.allSkills ?? Object.values(catalog.ARCHITECTURES).every((nome) => skills.includes(nome)),
   };
@@ -511,39 +734,148 @@ export function versionSet(manifest) {
   return catalog.selectSkills({ architecture: manifest.architecture, language: manifest.language, optional });
 }
 
-export function uninstall(scope, repo) {
-  const core = coreDir(scope, repo);
-  const man = readManifest(core);
-  if (!man) throw new UsageError("noInstallationToUninstall");
-  const removed = [];
-  const dirs = man.skillsDirs || (man.skillsDir ? [man.skillsDir] : []);
-  for (const d of dirs) {
-    const base = absDir(d, scope, repo);
-    for (const name of man.skills || []) {
-      const p = path.join(base, name);
-      if (existsSync(p)) { rmSync(p, { recursive: true, force: true }); removed.push(p); }
+export const IGNORED_REASON = Object.freeze({
+  DIFFERS_FROM_RECALCULATED: "differs-from-recalculated",
+  OUTSIDE_AGENT_DIRS: "outside-agent-dirs",
+  NO_OWNERSHIP_MARK: "no-ownership-mark",
+});
+
+const stringEntries = (value) => (Array.isArray(value) ? value.filter((entry) => typeof entry === "string") : []);
+
+// Diretórios de skills a remover: o de cada motor sai de `engineSkillsDir` e o do `custom` da declaração
+// resolvida, conferido por `resolveCustomDir` (DT-19 itens 1 e 2). O texto cru do manifesto nunca compõe
+// o caminho; id de motor desconhecido não tem diretório calculável e não entra.
+function uninstallSkillDirs(engines, declaredCustomDir, scope, repo) {
+  const dirs = [];
+  for (const engine of engines) {
+    if (engine === "custom") {
+      if (declaredCustomDir) dirs.push(resolveCustomDir(declaredCustomDir, scope, repo).dir);
+    } else if (ENGINES.includes(engine)) dirs.push(engineSkillsDir(engine, scope, repo));
+  }
+  return [...new Set(dirs)];
+}
+
+function uninstallAgentDirs(engines, scope, repo) {
+  return [...new Set(engines.filter((engine) => ENGINES.includes(engine)).map((engine) => engineAgentsDir(engine, scope, repo)))];
+}
+
+// O que o MGR grava dentro de `_shared/` (as fontes compartilhadas e o runtime da geracao anterior). O
+// `_shared/` nao tem marca de posse propria: a prova e o caminho que o proprio MGR calcula, e qualquer
+// outro item ali e da pessoa, fica em disco e e anunciado (DT-19, P-2).
+const MGR_SHARED_ENTRIES = Object.freeze([...new Set([
+  catalog.ARCH_INSTALLED, catalog.LAWS_INSTALLED, catalog.CHARTER_INSTALLED, catalog.QUALITY_INSTALLED, catalog.LEGACY_RUNTIME_DIR,
+].map((parts) => parts[1]))]);
+
+// O PLANO do uninstall (DT-19): nada é apagado aqui. Os diretórios vêm da resolução; o que o manifesto
+// declara e difere do recalculado, e a pasta de skill sem a marca de posse, voltam em `ignored` como dado.
+export function planUninstall(scope, repo) {
+  const read = readPrior(scope, repo);
+  if (read.state === "absent") throw new UsageError("noInstallationToUninstall");
+  const { declarations } = resolvePrior(read, { scope, repo, explicit: {}, command: COMMAND.UNINSTALL });
+  const { manifest } = read;
+  const skillDirs = uninstallSkillDirs(declarations.engines, declarations.skillsDirs?.[0], scope, repo);
+  const agentDirs = uninstallAgentDirs(declarations.engines, scope, repo);
+  const ignored = [];
+
+  const recalculatedSkillDirs = new Set(skillDirs.map((dir) => path.resolve(dir)));
+  if (declarations.skillsDirs?.[0]) recalculatedSkillDirs.add(resolveCustomDir(declarations.skillsDirs[0], scope, repo).declared);
+  const declaredSkillDirs = stringEntries(manifest.skillsDirs ?? (manifest.skillsDir ? [manifest.skillsDir] : []));
+  for (const entry of declaredSkillDirs) {
+    const resolved = path.resolve(absDir(entry, scope, repo));
+    if (!recalculatedSkillDirs.has(resolved)) ignored.push({ path: resolved, reason: IGNORED_REASON.DIFFERS_FROM_RECALCULATED });
+  }
+
+  const recalculatedAgentDirs = new Set(agentDirs.map((dir) => path.resolve(dir)));
+  const declaredAgentDirs = stringEntries(manifest.agentsDirs).map((entry) => path.resolve(absDir(entry, scope, repo)));
+  for (const resolved of declaredAgentDirs) {
+    if (!recalculatedAgentDirs.has(resolved)) ignored.push({ path: resolved, reason: IGNORED_REASON.DIFFERS_FROM_RECALCULATED });
+  }
+
+  const skillFolders = [];
+  const sharedDirs = [];
+  const sharedEntries = [];
+  for (const base of skillDirs) {
+    for (const name of manifest.skills || []) {
+      const folder = path.join(base, name);
+      if (!existsSync(folder)) continue;
+      const skillFile = path.join(folder, "SKILL.md");
+      if (existsSync(skillFile) && isOurSkill(readFileSync(skillFile, "utf8"), name)) skillFolders.push(folder);
+      else ignored.push({ path: folder, reason: IGNORED_REASON.NO_OWNERSHIP_MARK });
     }
-    const sh = path.join(base, catalog.SHARED_DIR);
-    if (existsSync(sh)) { rmSync(sh, { recursive: true, force: true }); removed.push(sh); }
+    const shared = path.join(base, catalog.SHARED_DIR);
+    if (!existsSync(shared)) continue;
+    sharedDirs.push(shared);
+    for (const entry of readdirSync(shared)) {
+      const entryPath = path.join(shared, entry);
+      if (MGR_SHARED_ENTRIES.includes(entry)) sharedEntries.push(entryPath);
+      else ignored.push({ path: entryPath, reason: IGNORED_REASON.NO_OWNERSHIP_MARK });
+    }
+  }
+
+  // `agents` e `agentsDirs` sao derivados (DT-7): fora de forma, o que eles diriam e recalculado das pastas
+  // de agentes que o MGR calcula, com a prova de posse de cada arquivo (N-9 do gate isolado).
+  const quebrados = new Set(read.problems.map(({ field }) => field));
+  const arquivosRecalculados = () => agentDirs.flatMap((dir) => (existsSync(dir)
+    ? readdirSync(dir, { withFileTypes: true }).filter((entrada) => entrada.isFile()).map((entrada) => path.join(dir, entrada.name))
+    : []));
+  const agentFiles = [];
+  if (quebrados.has("agents")) {
+    for (const resolved of arquivosRecalculados()) {
+      if (isOurAgent(readFileSync(resolved, "utf8"))) agentFiles.push(resolved);
+      else ignored.push({ path: resolved, reason: IGNORED_REASON.NO_OWNERSHIP_MARK });
+    }
+    // A entrada de texto declarada fora das pastas recalculadas continua anunciada, nunca removida (DT-19 item
+    // 4; achado S-2 do gate do bloco P3: o recalculo tinha calado esse aviso).
+    for (const file of stringEntries(manifest.agents)) {
+      const resolved = path.resolve(absDir(file, scope, repo));
+      if (!recalculatedAgentDirs.has(path.dirname(resolved))) ignored.push({ path: resolved, reason: IGNORED_REASON.OUTSIDE_AGENT_DIRS });
+    }
+  } else {
+    for (const file of stringEntries(manifest.agents)) {
+      const resolved = path.resolve(absDir(file, scope, repo));
+      if (!recalculatedAgentDirs.has(path.dirname(resolved))) {
+        ignored.push({ path: resolved, reason: IGNORED_REASON.OUTSIDE_AGENT_DIRS });
+        continue;
+      }
+      if (existsSync(resolved)) agentFiles.push(resolved);
+    }
+  }
+  const declaredRecalculatedAgentDirs = quebrados.has("agentsDirs")
+    ? agentDirs
+    : agentDirs.filter((dir) => declaredAgentDirs.includes(path.resolve(dir)));
+  return {
+    skillDirs, skillFolders, sharedDirs, sharedEntries, agentDirs: declaredRecalculatedAgentDirs, agentFiles, ignored,
+    core: coreDir(scope, repo),
+  };
+}
+
+export function uninstall(scope, repo) {
+  const plan = planUninstall(scope, repo);
+  const removed = [];
+  for (const folder of [...plan.skillFolders, ...plan.sharedEntries]) {
+    rmSync(folder, { recursive: true, force: true });
+    removed.push(folder);
+  }
+  for (const shared of plan.sharedDirs) {
+    if (existsSync(shared) && readdirSync(shared).length === 0) { rmSync(shared, { recursive: true, force: true }); removed.push(shared); }
+  }
+  for (const base of plan.skillDirs) {
     if (existsSync(base) && readdirSync(base).length === 0) { rmSync(base, { recursive: true, force: true }); removed.push(base); }
   }
   const kept = [];
-  for (const file of man.agents || []) {
-    const p = absDir(file, scope, repo);
-    if (!existsSync(p)) continue;
+  for (const file of plan.agentFiles) {
     // Prova de posse: se o arquivo perdeu o marcador, alguém o reescreveu — não é nosso.
-    if (!isOurAgent(readFileSync(p, "utf8"))) { kept.push(p); continue; }
-    rmSync(p, { force: true });
-    removed.push(p);
+    if (!isOurAgent(readFileSync(file, "utf8"))) { kept.push(file); continue; }
+    rmSync(file, { force: true });
+    removed.push(file);
   }
-  for (const d of man.agentsDirs || []) {
-    const base = absDir(d, scope, repo);
+  for (const base of plan.agentDirs) {
     if (existsSync(base) && readdirSync(base).length === 0) {
       rmSync(base, { recursive: true, force: true });
       removed.push(base);
     }
   }
-  if (existsSync(core)) { rmSync(core, { recursive: true, force: true }); removed.push(core); }
+  if (existsSync(plan.core)) { rmSync(plan.core, { recursive: true, force: true }); removed.push(plan.core); }
   return { removed, kept };
 }
 
@@ -551,21 +883,19 @@ export function uninstall(scope, repo) {
 // `lockfile` chega já lido. `models` vazio e `origin` nulo: o update não pergunta nenhum dos dois. O
 // `config.json` do time só é escrito quando a pessoa responde, num terminal, à escolha do runtime
 // (DT-6): `applyUpdate` recebe a resposta e o `execute` grava só a fonte `answered`.
-export function planUpdate(scope, repo, { replaced = {}, lockfile = null, projectId = null } = {}) {
-  const prior = readManifest(coreDir(scope, repo));
-  if (!prior) throw new UsageError("noInstallationToUpdate");
-  const engines = (prior.engines || [prior.engine]).filter((x) => x && x !== "custom");
-  // DT-17: alvo custom é preservado pelo dir que o manifesto gravou, e não vira claude-code.
-  const custom = (prior.engines || [prior.engine]).includes("custom") && (prior.skillsDirs || []).length > 0;
-  const escolhas = inferredChoices(prior);
-  const plan = planInstall(engines.length ? engines : ["claude-code"], scope, repo, {
-    names: versionSet(prior), language: prior.language, architecture: prior.architecture,
-    // Manifesto anterior a esta versão não tem userLanguage: toda instalação dessa era é
-    // pt-BR — herdar preserva a experiência sem pergunta nova (decisão do CHECKPOINT 1).
-    userLanguage: prior.userLanguage || "pt-BR",
-    optional: escolhas.optional, all: escolhas.allSkills,
-    skillsDir: custom ? absDir(prior.skillsDirs[0], scope, repo) : null,
-    projectId, replaced,
+export function planUpdate(scope, repo, { replaced = {}, lockfile = null, projectId = null, state: stateGiven, prior: priorGiven = null, declarations: declarationsGiven = null } = {}) {
+  const { state, prior, declarations } = resolvedPriorOf({
+    scope, repo, command: COMMAND.UPDATE, state: stateGiven, prior: priorGiven, declarations: declarationsGiven, explicit: {},
+  });
+  if (state === "absent") throw new UsageError("noInstallationToUpdate");
+  // DT-17: alvo custom é preservado pelo dir que a declaração herdou, e não vira claude-code.
+  const custom = declarations.engines.includes("custom");
+  const plan = planInstall(declarations.engines.filter((id) => id !== "custom"), scope, repo, {
+    names: versionSet(prior), language: declarations.language, architecture: declarations.architecture,
+    userLanguage: declarations.userLanguage,
+    optional: declarations.optional, all: declarations.allSkills,
+    ...(custom ? pastaDoCustom(resolveCustomDir(declarations.skillsDirs[0], scope, repo)) : { skillsDir: null, skillsDirDeclared: null }),
+    projectId, replaced, prior, declarations,
   });
   const antes = new Set(prior.skills || []);
   const entering = plan.skills.filter((nome) => !antes.has(nome));
@@ -602,14 +932,20 @@ export function applyUpdate(planned, { aRemover = [], mantidas = [], remove = rm
   const kept = withRuntimeVersioning(keepDeclared(planned.plan, mantem), runtimeVersioning);
   // Substituicao recusada ou bloqueada: o nome sai do plano ANTES do `execute`, para a pasta do
   // usuario ficar intacta e a skill nao ser declarada.
-  const skip = new Set(skipEntering);
-  const plan = skip.size ? {
-    ...kept,
-    skills: kept.skills.filter((nome) => !skip.has(nome)),
-    targets: kept.targets.map((t) => (t.skills ? { ...t, skills: t.skills.filter((nome) => !skip.has(nome)) } : t)),
-  } : kept;
+  const plan = withoutEntering(kept, skipEntering);
   const result = execute(plan, { abandoned: aRemover, remove });
   return { ...result, semFonte };
+}
+
+// Tira do plano os nomes que ficam fora por consentimento ou posse; sem nomes, devolve o próprio plano.
+export function withoutEntering(plan, names) {
+  const skip = new Set(names);
+  if (!skip.size) return plan;
+  return {
+    ...plan,
+    skills: plan.skills.filter((nome) => !skip.has(nome)),
+    targets: plan.targets.map((t) => (t.skills ? { ...t, skills: t.skills.filter((nome) => !skip.has(nome)) } : t)),
+  };
 }
 
 // Tudo o que o update pergunta, na ordem abandonadas -> orfas candidatas -> substituicoes.

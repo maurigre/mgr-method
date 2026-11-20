@@ -5,6 +5,7 @@ import { cpSync, existsSync, readFileSync, realpathSync, rmSync, symlinkSync, wr
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { tempDir } from "../scripts/lib/tmp.mjs";
+import { CHECKS } from "../src/doctor.js";
 import { getMessages } from "../src/messages.js";
 import {
   caminhoDoRuntime,
@@ -12,6 +13,7 @@ import {
   instalacaoComDefeitos,
   instalacaoLimpa,
 } from "./fixtures/instalacao.js";
+import { CASOS_DE_CLI, CASOS_FORA_DO_LACO, controleValido } from "./fixtures/manifesto-malformado.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BIN = path.join(ROOT, "bin", "mgr.js");
@@ -97,8 +99,11 @@ const trechosDoOutroIdioma = (lang, padrao) => {
 
 const fixo = (lang, chave) => (renderizar(getMessages(lang)[chave]) ?? "").split(SENTINELA)[0];
 
+const IDS_DE_CHECK = CHECKS.map(({ id }) => id).sort((a, b) => b.length - a.length);
+
 const mascarar = (texto, caminhos = []) => {
   let limpo = texto.replace(TITULO, "<titulo>");
+  for (const id of IDS_DE_CHECK) limpo = limpo.split(id).join("<check>");
   for (const caminho of caminhos) {
     for (const forma of new Set([caminho, existsSync(caminho) ? realpathSync(caminho) : caminho])) {
       limpo = limpo.split(forma).join("<repo>");
@@ -320,12 +325,11 @@ test("should print audit --json byte for byte equal between languages", () => {
   assert.equal(pt.out, en.out, "o audit --json e dado e nao muda com o idioma (CA-23)");
 });
 
-const CASOS_SEM_MANIFESTO_LEGIVEL = (base) => [
+const CASOS_SEM_MANIFESTO_LEGIVEL = () => [
   ["ausente", null],
   ["ilegivel", "{ nao e json"],
   ["null", "null"],
   ["string", '"x"'],
-  ["skills objeto", { ...base, userLanguage: "en", skills: { a: 1 } }],
 ];
 
 const exigirFraseNoIdioma = (resultado, lang, rotulo) => {
@@ -341,7 +345,7 @@ for (const [locale, esperado] of [["pt_BR.UTF-8", "pt-BR"], ["C", "en"]]) {
   test(`should follow the locale ${locale} to ${esperado} when the manifest cannot be read`, () => {
     comRepo(() => instalacaoLimpa({ userLanguage: OUTRO[esperado] }), (repo) => {
       const base = lerManifesto(repo);
-      for (const [rotulo, conteudo] of CASOS_SEM_MANIFESTO_LEGIVEL(base)) {
+      for (const [rotulo, conteudo] of CASOS_SEM_MANIFESTO_LEGIVEL()) {
         if (conteudo === null) rmSync(manifestoDe(repo));
         else gravarManifesto(repo, conteudo);
         const resultado = cli(["doctor", repo], { env: { LC_ALL: locale } });
@@ -369,6 +373,156 @@ test("should keep the manifest language en over the pt_BR locale when engines is
     exigirFraseNoIdioma(resultado, "en", "engines 7 com userLanguage en sob pt_BR");
   });
 });
+
+const PADRAO_MANIFESTO = /^(doctor|finding|manifest|errorPrefix|uninstallPathIgnored)/;
+const CORPO_FORA_DE_FORMA = { skills: { a: 1 } };
+
+const CENARIOS_DE_IDIOMA = (lang) => [
+  ["por flag", OUTRO[lang], ["--user-language", lang]],
+  ["por userLanguage", lang, []],
+];
+
+const saidaJunta = (resultado) => `${resultado.out}\n${resultado.err}`;
+
+test("should keep the manifest language en over the pt_BR locale on doctor, runtime doctor and update when skills is out of shape", () => {
+  comRepo(() => instalacaoLimpa({ userLanguage: "en" }), (repo) => {
+    gravarManifesto(repo, { ...lerManifesto(repo), userLanguage: "en", ...CORPO_FORA_DE_FORMA });
+    const env = { LC_ALL: "pt_BR.UTF-8" };
+    const pelaCli = cli(["doctor", repo], { env });
+    const pelaRuntime = pelRuntime(repo, ["doctor"], env);
+    const noUpdate = cli(["update", "-y", repo], { env });
+    assert.ok(pelaCli.out.includes(fixo("en", "doctorManifestoInvalido")), "o doctor da CLI diz o cabecalho em en");
+    assert.ok(pelaRuntime.out.includes(fixo("en", "doctorManifestoInvalido")), "o doctor do runtime diz o cabecalho em en");
+    exigirIdiomaUnico("en", [saidaJunta(pelaCli)], PADRAO_MANIFESTO, [repo], "doctor da CLI com skills objeto (CA-34)");
+    exigirIdiomaUnico("en", [saidaJunta(pelaRuntime)], PADRAO_MANIFESTO, [repo], "doctor do runtime com skills objeto (CA-34)");
+    exigirIdiomaUnico("en", [saidaJunta(noUpdate)], PADRAO_MANIFESTO, [repo], "update com skills objeto (CA-34)");
+  });
+});
+
+test("should print everything in pt-BR when the manifest declares pt-BR with skills out of shape under the C locale", () => {
+  comRepo(() => instalacaoLimpa({ userLanguage: "pt-BR" }), (repo) => {
+    gravarManifesto(repo, { ...lerManifesto(repo), userLanguage: "pt-BR", ...CORPO_FORA_DE_FORMA });
+    const env = { LC_ALL: "C" };
+    const pelaCli = cli(["doctor", repo], { env });
+    const pelaRuntime = pelRuntime(repo, ["doctor"], env);
+    const noUpdate = cli(["update", "-y", repo], { env });
+    assert.ok(pelaCli.out.includes(fixo("pt-BR", "doctorManifestoInvalido")), "o doctor da CLI diz o cabecalho em pt-BR");
+    assert.ok(pelaRuntime.out.includes(fixo("pt-BR", "doctorManifestoInvalido")), "o doctor do runtime diz o cabecalho em pt-BR");
+    exigirIdiomaUnico("pt-BR", [saidaJunta(pelaCli)], PADRAO_MANIFESTO, [repo], "doctor da CLI (CA-21)");
+    exigirIdiomaUnico("pt-BR", [saidaJunta(pelaRuntime)], PADRAO_MANIFESTO, [repo], "doctor do runtime (CA-21)");
+    exigirIdiomaUnico("pt-BR", [saidaJunta(noUpdate)], PADRAO_MANIFESTO, [repo], "update (CA-21)");
+  });
+});
+
+const ROTULO_ESCOPO = { en: "[project]", "pt-BR": "[projeto]" };
+
+test("should label the existing skills line as project under the C locale, as projeto with the pt-BR flag and never mix", () => {
+  comRepo(() => instalacaoLimpa({ userLanguage: "en" }), (repo) => {
+    const argumentos = ["install", "-y", "--dry-run", "--engine", "claude-code"];
+    const emEn = cli([...argumentos, repo], { env: { LC_ALL: "C" } });
+    const emPt = cli([...argumentos, "--user-language", "pt-BR", repo], { env: { LC_ALL: "C" } });
+    assert.ok(emEn.out.includes(ROTULO_ESCOPO.en), `a linha de skills existentes em en traz [project]: ${emEn.out}`);
+    assert.ok(!mascarar(emEn.out, [repo]).includes("projeto"), "a saida en nao pode trazer o rotulo projeto (CA-33)");
+    assert.ok(emPt.out.includes(ROTULO_ESCOPO["pt-BR"]), `a flag pt-BR troca o rotulo para [projeto]: ${emPt.out}`);
+    assert.ok(!emPt.out.includes(ROTULO_ESCOPO.en), "a saida pt-BR nao pode trazer [project] (CA-33)");
+  });
+});
+
+for (const idioma of IDIOMAS) {
+  for (const [via, idiomaDoManifesto, flag] of CENARIOS_DE_IDIOMA(idioma)) {
+    const env = { LC_ALL: LOCALE_CONTRARIO[idioma] };
+
+    for (const comando of ["update", "install"]) {
+      test(`should print the ${comando} refusal block only in ${idioma} ${via}`, () => {
+        comRepo(() => instalacaoLimpa(), (repo) => {
+          gravarManifesto(repo, { ...lerManifesto(repo), userLanguage: idiomaDoManifesto, architecture: 7 });
+          const resultado = cli([comando, "-y", ...flag, repo], { env });
+          const saida = saidaJunta(resultado);
+          assert.notEqual(resultado.status, 0, `a declaracao fora de forma recusa o ${comando}: ${saida}`);
+          assert.ok(saida.includes(getMessages(idioma).manifestRefused("manifest.json")),
+            `o cabecalho da recusa em ${idioma} vem da tabela ${idioma}, e saiu ${JSON.stringify(saida)}`);
+          exigirIdiomaUnico(idioma, [saida], PADRAO_MANIFESTO, [repo], `recusa do ${comando} ${via}`);
+        });
+      });
+    }
+
+    test(`should print the repair announcement only in ${idioma} ${via}`, () => {
+      comRepo(() => instalacaoLimpa(), (repo) => {
+        gravarManifesto(repo, { ...lerManifesto(repo), userLanguage: idiomaDoManifesto, scope: "bogus" });
+        const resultado = cli(["update", "-y", ...flag, repo], { env });
+        const saida = saidaJunta(resultado);
+        assert.ok(saida.includes(getMessages(idioma).manifestRepairTitle("manifest.json")),
+          `o anuncio de reparo em ${idioma} vem da tabela ${idioma}, e saiu ${JSON.stringify(saida)}`);
+        exigirIdiomaUnico(idioma, [saida], PADRAO_MANIFESTO, [repo], `anuncio de reparo ${via}`);
+      });
+    });
+
+    test(`should print the ignored uninstall path line only in ${idioma} ${via}`, () => {
+      comRepo(() => instalacaoLimpa(), (repo) => {
+        gravarManifesto(repo, { ...lerManifesto(repo), userLanguage: idiomaDoManifesto, skillsDirs: ["../fora"] });
+        const resultado = cli(["uninstall", "-y", ...flag, repo], { env });
+        const saida = saidaJunta(resultado);
+        assert.ok(saida.includes(getMessages(idioma).uninstallPathIgnored(path.resolve(repo, "../fora"))),
+          `a linha de caminho ignorado em ${idioma} vem da tabela ${idioma}, e saiu ${JSON.stringify(saida)}`);
+        exigirIdiomaUnico(idioma, [saida], PADRAO_MANIFESTO, [repo], `uninstall com caminho ignorado ${via}`);
+      });
+    });
+  }
+}
+
+const BASE_DOS_PADROES = "manifest|errorPrefix|fileNot";
+const PADRAO_POR_COMANDO = {
+  update: new RegExp(`^(${BASE_DOS_PADROES}|update|plan|removed|keptBy|existingSkills|installing|installedAt|migrationInfo|done|dryRun|runtime(Migrated|Relocated|Written|Ignore)|configMigrated)`),
+  install: new RegExp(`^(${BASE_DOS_PADROES}|install|plan|removed|keptBy|existingSkills|migrationInfo|done|dryRun|runtime(Migrated|Relocated|Written|Ignore)|configMigrated|instructions)`),
+  uninstall: new RegExp(`^(${BASE_DOS_PADROES}|uninstall|removedItem|removedSkills)`),
+  doctor: PADRAO_MANIFESTO,
+  status: new RegExp(`^(${BASE_DOS_PADROES}|status)`),
+  instructions: new RegExp(`^(${BASE_DOS_PADROES}|instructions)`),
+};
+
+const MODOS_DE_IDIOMA = [
+  { rotulo: "with the pt-BR flag", flag: ["--user-language", "pt-BR"], locale: "C", esperado: () => "pt-BR" },
+  { rotulo: "with the en flag", flag: ["--user-language", "en"], locale: "pt_BR.UTF-8", esperado: () => "en" },
+  {
+    rotulo: "from the manifest language alone",
+    flag: [],
+    locale: "C",
+    esperado: (caso) => (caso.idiomaNoManifesto === false ? "en" : "pt-BR"),
+    declaraIdioma: true,
+  },
+];
+
+const plantarCaso = (repo, caso, modo) => {
+  const planejado = caso.plantar(lerManifesto(repo));
+  if (planejado.bruto !== undefined) {
+    writeFileSync(manifestoDe(repo), planejado.bruto);
+    return;
+  }
+  const idioma = modo.declaraIdioma && caso.idiomaNoManifesto !== false ? { userLanguage: "pt-BR" } : {};
+  gravarManifesto(repo, { ...planejado, ...idioma });
+};
+
+const rodarCaso = (repo, caso, modo) => {
+  const env = { LC_ALL: modo.locale };
+  const args = typeof caso.args === "function" ? caso.args(repo) : caso.args;
+  if (caso.comando === "instructions") return pelRuntime(repo, [caso.comando, ...args, ...modo.flag], env);
+  return cli([caso.comando, ...args, ...modo.flag, repo], { env });
+};
+
+for (const caso of CASOS_DE_CLI.filter((candidato) => candidato.jaCoberto === undefined)) {
+  for (const modo of MODOS_DE_IDIOMA) {
+    const esperado = modo.esperado(caso);
+    test(`should print the ${caso.id} output only in ${esperado} ${modo.rotulo}`, () => {
+      comRepo(() => controleValido(), (repo) => {
+        plantarCaso(repo, caso, modo);
+        const resultado = rodarCaso(repo, caso, modo);
+        const saida = saidaJunta(resultado);
+        assert.ok(saida.trim().length > 0, `${caso.id}: o comando tem de dizer alguma coisa, e saiu vazio`);
+        exigirIdiomaUnico(esperado, [saida], PADRAO_POR_COMANDO[caso.comando], [repo], `${caso.id} ${modo.rotulo}`);
+      });
+    });
+  }
+}
 
 let copiaDoDist = null;
 const obterCopiaDoDist = () => {
@@ -778,4 +932,15 @@ test("should keep the lockfile copilot warnings in english after the screen is r
     stub.server.closeAllConnections();
     stub.server.close();
   }
+});
+
+test("should run every CLI acceptance criterion from CA-1 to CA-33 in the language loop or name why it is outside", () => {
+  const noLaco = new Set(CASOS_DE_CLI.map(({ id }) => id.split(":")[0]));
+  const fora = new Map(CASOS_FORA_DO_LACO.map(({ id, razao }) => [id, razao]));
+  for (let numero = 1; numero <= 33; numero += 1) {
+    const criterio = `CA-${numero}`;
+    assert.ok(noLaco.has(criterio) || fora.has(criterio), `${criterio} nao esta no laco de idioma nem fora dele com motivo`);
+    assert.ok(!(noLaco.has(criterio) && fora.has(criterio)), `${criterio} nao pode estar no laco e fora dele ao mesmo tempo`);
+  }
+  for (const razao of fora.values()) assert.ok(razao.trim().length > 0);
 });

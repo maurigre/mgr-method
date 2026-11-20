@@ -61,7 +61,7 @@ test("negativo: --dry-run nomeia o que sairia, sem perguntar, sem remover e sem 
     const antes = manifesto(repo);
     const r = instala(repo, "--arch", "layered", "--dry-run");
     assert.equal(r.code, 0);
-    assert.match(r.out, /leaving the declared set \(2\)/);
+    assert.match(r.out, /leaving the declared set \(1\)/);
     assert.ok(!r.out.includes("Removed"));
     assert.deepEqual(manifesto(repo).skills, antes.skills);
     assert.ok(existsSync(path.join(repo, SKILLS, "arch-hexagonal")));
@@ -82,7 +82,7 @@ test("negativo: a remocao nao alcanca _shared, agentes, .mgr-core, docs nem spec
     mkdirSync(path.join(repo, "specs"), { recursive: true });
     writeFileSync(path.join(repo, "specs", "minha.md"), "minha\n");
     const r = instala(repo, "--arch", "layered", "-y");
-    assert.match(r.out, /Removed 2 skill/);
+    assert.match(r.out, /Removed 1 skill/);
     assert.ok(existsSync(path.join(repo, SKILLS, "_shared")));
     assert.ok(existsSync(path.join(repo, ".mgr-core", "manifest.json")));
     assert.ok(existsSync(path.join(repo, "docs", "meu.md")));
@@ -118,9 +118,10 @@ test("depois da recusa, a execucao seguinte com -y remove mesmo: a mensagem diz 
     instala(repo, "--arch", "hexagonal", "--language", "java", "-y");
     instala(repo, "--arch", "layered");
     const r = instala(repo, "--arch", "layered", "-y");
-    assert.match(r.out, /Removed 2 skill/);
+    assert.match(r.out, /Removed 1 skill/);
     assert.ok(!existsSync(path.join(repo, SKILLS, "arch-hexagonal")));
-    assert.ok(!existsSync(path.join(repo, SKILLS, "junit-clean")));
+    assert.ok(existsSync(path.join(repo, SKILLS, "junit-clean")));
+    assert.ok(manifesto(repo).skills.includes("junit-clean"));
     const diagnostico = roda("doctor", repo);
     assert.match(diagnostico.out, /checks, \d+ finding/);
     assert.ok(!diagnostico.out.includes("orphan-skill"));

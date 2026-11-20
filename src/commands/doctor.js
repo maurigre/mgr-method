@@ -23,6 +23,18 @@ function temFontes() {
 const comCicloDeVida = (fix, lifecycle) =>
   fix.startsWith("mgr ") ? `${lifecycle} ${fix.slice("mgr ".length)}` : fix;
 
+// O descritor de `doctorResolvaCom` carrega o comando canonico (`mgr update`); a cola so troca o
+// prefixo pelo ciclo de vida de quem chama, como faz com o `fix` dos achados.
+const renderizaRemedio = (M, descritor, lifecycle) =>
+  descritor.key === "doctorResolvaCom"
+    ? M.doctorResolvaCom(comCicloDeVida(descritor.params[0], lifecycle))
+    : renderText(M, descritor);
+
+const imprimeProblemasERemedio = (io, M, manifesto) => {
+  for (const problema of manifesto.problems) io.out(renderText(M, diag.problemText(problema)));
+  for (const descritor of diag.manifestRemedyText(manifesto)) io.out(renderizaRemedio(M, descritor, io.lifecycle));
+};
+
 // `mgr doctor` — diz se a instalacao esta INTEGRA, e nao so o que esta instalada (U2).
 //
 // **Nao escreve nada, em nenhum modo.** Nao ha `--fix`: a maioria das correcoes era rodar o
@@ -44,11 +56,10 @@ export function doctor({ root, flags, io, M }) {
       io.out(envelope());
       return 2;
     }
-    const { file, state, problems } = resultado.manifest;
+    const { file, state } = resultado.manifest;
     const cabecalho = state === "unreadable" ? M.doctorManifestoIlegivel(file) : M.doctorManifestoInvalido(file);
     io.out(io.style.red(cabecalho));
-    for (const problema of problems) io.out(renderText(M, diag.problemText(problema)));
-    io.out(M.doctorSemRemediacaoAutomatica);
+    imprimeProblemasERemedio(io, M, resultado.manifest);
     return 2;
   }
 
@@ -65,6 +76,11 @@ export function doctor({ root, flags, io, M }) {
     io.out(M.doctorEsperado(renderText(M, descritores.expected)));
     io.out(M.doctorEncontrado(renderText(M, descritores.found)));
     io.out(fix ? M.doctorResolvaCom(comCicloDeVida(fix, io.lifecycle)) : io.style.dim(M.doctorSemCorrecao));
+  }
+
+  if (resultado.manifest) {
+    io.out(io.style.red(M.doctorManifestoCamposForaDeForma(resultado.manifest.file)));
+    imprimeProblemasERemedio(io, M, resultado.manifest);
   }
 
   io.out("");

@@ -30,7 +30,7 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   das perguntas de escolha, que saíam em inglês fixo da biblioteca de prompts, vêm da camada de idioma.
   JSON válido cuja raiz não é objeto em `config.json`, `config.local.json`, lockfile e `settings` dos
   hooks também sai como erro de uso que nomeia o arquivo. O `manifest.json` segue o ADR-0032: o
-  `doctor` o diagnostica (`invalid-manifest`), e o install e o update ficam para a fatia seguinte.
+  `doctor` o diagnostica (`invalid-manifest`); o install, o update e o uninstall seguem o ADR-0034, abaixo.
   Uma regra de lint (`QUAL-8`) e `test/output-language.test.js` reprovam a recaída nos caminhos que
   cobrem; os caminhos sem guarda estão declarados no ADR-0033.
 - **O esforço de cada intenção se escolhe no `install`, como o modelo (ADR-0030).** Com terminal e um
@@ -62,7 +62,6 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   `instructions write [--engine <id>]`. O runtime passa de 47 para 50 arquivos.
 - A mecânica do bloco foi extraída para `src/managed-block.js`, que o `.gitignore` também usa, sem
   mudança no contrato dele.
-
 - **O `sdd-check` avisa quando o guia de review ficou para trás das fontes do método (DT-26).** O
   aviso `guide-behind-source` lista os IDs citáveis das famílias universais (`QUAL`, `SEC`, `PERF`,
   `DES`, `NAM`, `PAT`, `MNT`, `TST`, `LOG`, `DOC`, `MUT` e o `INV` da arquitetura) que as fontes
@@ -162,7 +161,83 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   o `install` conserta várias intenções de uma vez (o depois medido na versão nova; o antes, lido no
   código). No `install` a recusa por outra parte não muda: o
   plano já recusava esse config (medido para o `reviewGate` inválido).
+- **Manifesto fora de forma: `install`, `update`, `uninstall`, `doctor` e os demais leitores têm uma
+  regra por tipo de campo (ADR-0034).** Declaração fora de forma e raiz não-objeto são recusadas com
+  código de saída 1, sem gravar nada; campo derivado fora de forma é recalculado e anunciado. O antes e o depois,
+  por mudança (C-n é a linha da spec; antes e depois medidos contra `5f449b8`):
+  - **C-1, `install` sem pergunta:** antes recalculava as declarações das flags e perdia
+    `architecture`, `language`, `userLanguage` e `optional` (o controle instalado com `hexagonal` e
+    `java` voltava com 7 skills). Agora herda a declaração anterior válida e mantém as 9 skills; o código de saída
+    (0) não muda. A frase "só o `update` herda" deixa de valer.
+  - **C-2, `install` sem pergunta em manifesto legado sem `userLanguage`:** antes gravava o idioma do
+    locale (`en`); agora grava `pt-BR`.
+  - **C-3, `install` sem pergunta com declaração fora de forma e sem flag:** antes saía 0 e descartava
+    a declaração; agora sai **1**, recusa com o bloco e deixa o manifesto intacto.
+  - **C-4, `update` com declaração fora de forma:** com `language` `[1]`, `optional` `"x"` ou `[1]`,
+    `allSkills: "sim"` ou `userLanguage: 7`, antes saía 0 gravando o inválido (ou lendo `"sim"` como
+    verdadeiro, com 13 skills); agora sai **1**, recusa com o bloco que aponta `install --<flag>` e
+    deixa o manifesto intacto. Com `engines` 7 ou `{}`, antes saía 1 com `TypeError`; agora sai 1 com
+    o bloco de recusa. Com `architecture`, o texto da recusa muda (`unknownArchitecture` vira o bloco).
+  - **C-5, `install` e `update` com raiz `"x"` ou `[]`:** antes saía 0, gravava `architecture: null`
+    com 7 skills, deixava órfãs e anunciava "layout anterior"; agora sai **1** com `fileNotObject`,
+    sem escrever nada.
+  - **C-7, demais leitores com raiz não-objeto** (antes medido contra `5f449b8`): `status` com `"x"` ou
+    `[]` saía 0 mostrando `MGR vundefined`; agora sai **1**. `uninstall -y` com `"x"` ou `[]` saía 0 e
+    **apagava** `.mgr-core`, os hooks e o bloco do `.gitignore` sem saber o que instalou; agora sai
+    **1** e não remove nada. `instructions` (runtime) com `"x"` ou `[]` saía 0 com saída vazia; agora
+    sai **1**. Com raiz `null`, os três saíam 1 com `TypeError`; agora saem 1 com `fileNotObject`.
+    `agents`, `origin`, `runtime-versioning`, `add`, `remove` e os hooks não mudam (hooks seguem
+    saindo 0).
+  - **C-8, `install` e `update` com campo derivado fora de forma:** com `skillsDirs` `"x"` ou `[1]`,
+    antes saía 1 com `TypeError`; agora sai 0 com `skillsDirs` recalculado e o reparo anunciado. Com
+    `agents`, `scope` ou `agentsDirs`, antes saía 0 sem anunciar; agora sai 0 e anuncia o reparo.
+  - **C-9, `doctor --json` com `invalid-manifest`:** antes `fix: null` e `prova: "sem-remediacao"`
+    sempre, e `problems[]` sem `remedy`. Agora `problems[]` traz `remedy`, e `fix: "mgr update"` com
+    `prova: "prova-funciona"` quando todos os problemas são de campo derivado. Aditivo, e
+    `schemaVersion` continua 1; quem lia `fix: null` como invariante desse outcome passa a ver
+    `"mgr update"`.
+  - **C-11, idioma com outro campo do manifesto fora de forma:** antes a saída caía no locale; agora segue
+    o `userLanguage` declarado.
+  - **C-13, `doctor` com declaração, `agentsDirs` ou elemento de `skills` fora de forma** (por
+    exemplo `allSkills: "sim"`, `optional: {}`, `userLanguage: 7`): antes nada era relatado e o código de saída
+    era 0; agora o envelope `audited` ganha a chave opcional `manifest` com `remedy`, `blocks: true` e
+    código de saída **1**. Sobre o controle válido, o envelope não muda.
+  - **C-14, `doctor` com `architecture` fora do catálogo (`architecture-skill`):** antes
+    `fix: "mgr update"`; agora `fix: null`, com a condição nova `arquitetura-fora-de-forma`, porque o
+    `update` recusa esse manifesto.
+  - **C-15, `update` e `install -y` com `engines: []` sem `--engine`:** antes saía 0 e gravava
+    `["claude-code"]`; agora sai **1** e recusa apontando `--engine`.
+  - **C-16, `model` desconhecido no `install`/`update`:** antes anunciava migração de "layout anterior";
+    agora não anuncia, e o `model` é regravado como o layout atual.
+  - **C-17, `install` com terminal:** antes os padrões das perguntas eram os fixos e a pergunta de
+    arquitetura não tinha "nenhuma"; agora o padrão vem das declarações anteriores válidas (sem
+    instalação, seguem os fixos) e a pergunta de arquitetura ganhou "nenhuma". O `MGR_PROJECT_ID` sugere
+    o id gravado; antes sugeria o nome da pasta, e um Enter trocava o id do projeto.
+  - **C-18, `install` com terminal e `allSkills: true` anterior, sem `--all-skills`:** antes virava
+    `false` em silêncio; agora herda `true`. Com `allSkills: "sim"`, recusa antes das perguntas.
+  - **C-19, `uninstall` com `skillsDirs`, `agentsDirs` ou `agents` fora das pastas calculadas:** antes
+    apagava fora do projeto; agora ignora, anuncia e remove só nas pastas recalculadas (ver
+    Segurança).
+  - **C-20, `custom` fora da raiz do projeto:** vale onde foi declarado, em qualquer lugar. A proteção
+    é a posse: só se apaga ou se sobrescreve pasta com a marca do MGR (ver Segurança). Toda pasta sem
+    marca mantida é anunciada (`enteringKeptNotOurs`) e o comando sai **1**, inclusive depois do "não"
+    no terminal; antes o `install` do zero e o `update -y` sobrescreviam a pasta da pessoa, saindo 0.
+  - **C-21, `uninstall` com `engines` fora de forma ou `[]` sem `--engine`:** antes apagava pelo
+    `skillsDirs` do manifesto; agora sai **1**, recusa com o bloco e não remove nada.
 
+  - **C-22, `install` em inglês, nota "Existing skills detected":** antes mostrava `[projeto]`; agora
+    `[project]`, e o pt-BR segue `[projeto]`.
+  - **Achados do `doctor` com problema à mão no manifesto:** antes achados de órfã ou de falta traziam
+    `fix: "mgr update"` enquanto o `update` recusava o manifesto; agora, com qualquer problema à mão,
+    nenhum achado promete `mgr update` (`fix: null`).
+  - **`uninstall` com `agents` ou `agentsDirs` fora de forma:** antes apagava as skills e quebrava com
+    "erro inesperado (TypeError)", deixando os agentes em disco (medido com `agents: 7`); agora sai 0,
+    recalcula os agentes pela marca de posse nas pastas que o MGR calcula, remove os do MGR e anuncia os
+    demais.
+  - **`migrateOld` (`install` e `update` sobre o layout `runtime-launcher`):** antes removia as skills
+    declaradas dentro de **qualquer** diretório que o manifesto declarasse em `skillsDirs`, inclusive
+    fora do projeto; agora remove só nos diretórios recalculados pelos motores, e o declarado que difere
+    deles não é tocado e é anunciado (`uninstallPathIgnored`).
 ### Corrigido
 - **`install` com flag de review e `agents set review` religavam o review gate desligado em silêncio
   (N-10, ADR-0031).** Com só `reviewGate` no `.mgr-core/config.json`, a escrita de `--effort-review`,
@@ -176,6 +251,23 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   Agora o aviso só sai com `agents.review` escrito, e o `--json` dá `aliasOverridden: false` nesse caso.
 - A leitura passa a nomear `reviewGate`, e não `agents.review`, quando o valor inválido vem do apelido
   `reviewGate`. A mensagem da recusa é a mesma na leitura e na escrita.
+
+### Segurança
+- **O `uninstall` não apaga mais fora do projeto a partir de um manifesto adulterado (SEC-2, C-19).**
+  Com `skillsDirs`, `agentsDirs` ou `agents` apontando para fora das pastas que o MGR calcula
+  (exemplo medido: `skillsDirs: ["../isca"]`), o `uninstall` apagava a pasta de fora do projeto. Agora
+  ele ignora o caminho, anuncia cada um (`ignorado <caminho>`) e remove só nas pastas recalculadas. O
+  manifesto é versionado no repositório, então um clone com manifesto adulterado atingia arquivos da
+  pessoa.
+- **A migração do layout `runtime-launcher` não apaga mais fora do projeto.** O `migrateOld` removia as
+  skills declaradas dentro do diretório que o manifesto declarasse em `skillsDirs`, qualquer que fosse.
+  Agora remove só nos diretórios recalculados pelos motores e anuncia o declarado que ignorou.
+- **Pasta de skill sem a marca do MGR nunca é sobrescrita nem apagada (C-20).** Vale para `install`,
+  `update` e `uninstall`, em qualquer lugar e escopo, inclusive no diretório `custom` declarado fora da
+  raiz do projeto. Em `_shared/` não há marca: `arch`, `laws`, `charter`, `quality` e o legado `mgr` são
+  reconhecidos pelo nome e escritos e removidos pelo MGR; qualquer outra coisa ali é da pessoa e fica
+  (anunciada no `uninstall`). O `-y` não autoriza a substituição; só a resposta explícita "sim" no terminal. Sem terminal
+  ou com `-y`, a pasta fica, a skill não entra, o caso é anunciado e o código de saída é 1.
 
 ## [0.7.0-beta.11] - 2026-10-15
 > Estrutura fixa do SDD e política de versionamento na constituição. Pré-release no dist-tag `next`.

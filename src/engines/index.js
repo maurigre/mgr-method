@@ -19,6 +19,9 @@ const ENGINES = { "claude-code": claudeCode, copilot };
 
 export const ids = () => Object.keys(ENGINES).sort();
 
+// Motor de quem nao declarou nenhum: o padrao da pergunta, do `-y` e da instalacao do zero.
+export const DEFAULT_ENGINES = Object.freeze([claudeCode.id]);
+
 export function get(id) {
   const engine = ENGINES[id];
   if (!engine) {

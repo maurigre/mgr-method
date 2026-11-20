@@ -483,6 +483,20 @@ export const casosDeTeste = [
     identifica: (achado) => achado.check === "architecture-skill",
   },
   {
+    id: "architecture-skill",
+    condicao: "arquitetura-fora-de-forma",
+    planta: (repo) => {
+      const manifesto = lerManifesto(repo);
+      manifesto.architecture = "mvc";
+      writeFileSync(
+        path.join(repo, ".mgr-core", "manifest.json"),
+        JSON.stringify(manifesto, null, 2),
+        "utf8"
+      );
+    },
+    identifica: (achado) => achado.check === "architecture-skill",
+  },
+  {
     id: "divergent-body",
     condicao: "skill-declarada",
     planta: (repo) => {

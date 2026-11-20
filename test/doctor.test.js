@@ -11,7 +11,7 @@ import {
   orphanSkills, runtimeBodies, runtimeLocations, sharedCheckAvailability, staleInstall, unresolvedTokens,
   AUDITED, NO_INSTALL, diagnose, hasDefect, CHECKS,
 } from "../src/doctor.js";
-import { INVALID_MANIFEST, blocks } from "../src/doctor.js";
+import { INVALID_MANIFEST, blocks, manifestRemedyText } from "../src/doctor.js";
 import path from "node:path";
 import { Buffer } from "node:buffer";
 import { diff } from "../src/lockfile.js";
@@ -29,6 +29,9 @@ import { renderText } from "../src/ui-text.js";
 import { InvariantError } from "../src/errors.js";
 import { findingText } from "../src/doctor.js";
 import { runtimeVersioningCheck } from "../src/doctor.js";
+import { FIELD_CATEGORY, fieldCategory, problemRemedy, DECLARATION_FLAGS, KNOWN_MODELS } from "../src/manifest.js";
+import { readUserLanguage } from "../src/manifest.js";
+import { renderError } from "../src/errors.js";
 
 const DIR = ".claude/skills";
 
@@ -516,7 +519,8 @@ test("as 10 verificacoes antigas mantem remediacao e severidade de antes", () =>
       ["distribuida-sem-marca", FIX_UPDATE, PROVA_FUNCIONA]],
     "missing-skill": [["declarada-ausente", FIX_UPDATE, PROVA_FUNCIONA]],
     "missing-agent": [["declarado-ausente", FIX_UPDATE, PROVA_FUNCIONA]],
-    "architecture-skill": [["skill-ausente", FIX_UPDATE, PROVA_FUNCIONA]],
+    "architecture-skill": [["skill-ausente", FIX_UPDATE, PROVA_FUNCIONA],
+      ["arquitetura-fora-de-forma", null, SEM_REMEDIACAO]],
     "divergent-body": [["skill-declarada", FIX_UPDATE, PROVA_FUNCIONA], ["skill-orfa", FIX_UPDATE, PROVA_FUNCIONA],
       ["skill-orfa-sem-prova", null, SEM_REMEDIACAO],
       ["fonte-compartilhada", FIX_UPDATE, PROVA_FUNCIONA], ["manifesto-atrasado", FIX_UPDATE, PROVA_FUNCIONA]],
@@ -1099,11 +1103,12 @@ test("toda entrada de CHECKS tem remediacoes com pelo menos um item", () => {
   }
 });
 
-test("soma de todas as condicoes em remediacoes e exatamente vinte e seis", () => {
+test("soma de todas as condicoes em remediacoes e exatamente vinte e sete", () => {
   const totalCondicoes = CHECKS.reduce((soma, entrada) => soma + entrada.remediacoes.length, 0);
-  assert.equal(totalCondicoes, 26,
+  assert.equal(totalCondicoes, 27,
     "dezessete da tabela D-2, duas de runtime-version, as quatro da DT-14 da F2 (marcada, "
-    + "distribuida-sem-marca e as duas skill-orfa-sem-prova) e as tres de runtime-versioning");
+    + "distribuida-sem-marca e as duas skill-orfa-sem-prova), as tres de runtime-versioning e "
+    + "a arquitetura-fora-de-forma do architecture-skill");
 });
 
 test("todo item de remediacao tem condicao, fix e prova obrigatorios", () => {
@@ -1343,10 +1348,14 @@ test("should report only the engines problem when engines is not an array", () =
   assert.deepEqual(problems.map((p) => p.field), ["engines"], "sem array de motores nao ha como julgar scope, e o defeito raiz e engines");
 });
 
-test("should not report a problem for agentsDirs in any form", () => {
-  for (const valor of [{ a: 1 }, "x", 7, true, null, [1]]) {
-    assert.deepEqual(manifestShapeProblems({ agentsDirs: valor }), [], `agentsDirs ${JSON.stringify(valor)} nao e lido por ninguem`);
+test("should report agentsDirs out of shape as a non-lethal derived problem", () => {
+  for (const valor of [{ a: 1 }, "x", 7, true, [1]]) {
+    const problems = manifestShapeProblems({ agentsDirs: valor });
+    assert.equal(problems.length, 1, `agentsDirs ${JSON.stringify(valor)} deve gerar um unico problema`);
+    assert.equal(problems[0].field, "agentsDirs");
+    assert.equal(problems[0].kind, Array.isArray(valor) ? "element" : "container");
   }
+  assert.deepEqual(manifestShapeProblems({ agentsDirs: null }), [], "agentsDirs null e tolerado");
 });
 
 test("should never leak variable names or array method names in found", () => {
@@ -1431,20 +1440,20 @@ test("should return invalid-manifest as read with a single root problem when the
   }
 });
 
-test("should return invalid-manifest naming the field with no findings and no remediation for each lethal shape", () => {
+test("should return invalid-manifest naming the field with no findings and a remedy that follows the field category for each lethal shape", () => {
   const repo = instalacaoLimpa();
   try {
     const instalado = JSON.parse(readFileSync(caminhoManifesto(repo), "utf8"));
     const casos = [
-      ["skills", { skills: {} }],
-      ["skillsDirs", { skillsDirs: "x" }],
-      ["engines", { engines: 7 }],
-      ["agents", { agents: true }],
-      ["scope", { scope: "bogus" }],
-      ["skillsDirs", { skillsDirs: [1] }],
-      ["agents", { agents: [1] }],
+      ["skills", { skills: {} }, false],
+      ["skillsDirs", { skillsDirs: "x" }, true],
+      ["engines", { engines: 7 }, false],
+      ["agents", { agents: true }, true],
+      ["scope", { scope: "bogus" }, true],
+      ["skillsDirs", { skillsDirs: [1] }, true],
+      ["agents", { agents: [1] }, true],
     ];
-    for (const [campo, alteracao] of casos) {
+    for (const [campo, alteracao, derivado] of casos) {
       gravarManifestoJson(repo, { ...instalado, ...alteracao });
       const rotulo = JSON.stringify(alteracao);
       const comFontes = diagnose(repo);
@@ -1453,8 +1462,10 @@ test("should return invalid-manifest naming the field with no findings and no re
       assert.equal(comFontes.checks, 0, "nenhuma verificacao roda sobre manifesto invalido");
       assert.deepEqual(comFontes.findings, [], "achado sobre manifesto invalido seria ruido");
       assert.ok(comFontes.manifest.problems.some((problema) => problema.field === campo), `o problema precisa nomear ${campo} para o time achar o que consertar`);
-      assert.equal(comFontes.manifest.fix, null, "nenhum comando conserta um manifesto malformado");
-      assert.equal(comFontes.manifest.prova, SEM_REMEDIACAO, "sem comando de correcao nao ha o que provar");
+      assert.equal(comFontes.manifest.fix, derivado ? FIX_UPDATE : null,
+        `${campo}: so o campo derivado e recalculado pelo update; registro e declaracao ficam a mao`);
+      assert.equal(comFontes.manifest.prova, derivado ? PROVA_FUNCIONA : SEM_REMEDIACAO,
+        `${campo}: a prova acompanha o fix`);
       assert.deepEqual(semFontes, comFontes, `${rotulo}: a porta vale com e sem sources null`);
     }
   } finally {
@@ -1480,6 +1491,153 @@ test("should keep auditing with findings when only skills elements, engines elem
       assert.equal(resultado.outcome, AUDITED, `${rotulo} nao e letal: bloquear aqui degradaria o que o doctor ja relata`);
       assert.ok(resultado.findings.length > 0, `${rotulo} tem de continuar produzindo achados`);
     }
+  } finally {
+    descartar(repo);
+  }
+});
+
+const diagnosticaComAlteracao = (repo, alteracao) => {
+  const instalado = JSON.parse(readFileSync(caminhoManifesto(repo), "utf8"));
+  gravarManifestoJson(repo, { ...instalado, ...alteracao });
+  return diagnose(repo);
+};
+
+test("should attach the remedy of each problem to the manifest block", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const { manifest } = diagnosticaComAlteracao(repo, { agentsDirs: "x", allSkills: "sim", userLanguage: 7 });
+    const remedios = Object.fromEntries(manifest.problems.map(({ field, remedy }) => [field, remedy]));
+    assert.deepEqual(remedios, { agentsDirs: "update", userLanguage: "by-hand", allSkills: "by-hand" },
+      "o derivado e recalculado pelo update e a declaracao fica a mao: o remedio sai de problemRemedy e nao de uma lista do doctor");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("should promise update in the aggregated fix when every problem is recalculated by it", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const { manifest } = diagnosticaComAlteracao(repo, { skillsDirs: "x", agents: true });
+    assert.ok(manifest.problems.length > 0 && manifest.problems.every(({ remedy }) => remedy === "update"));
+    assert.equal(manifest.fix, FIX_UPDATE, "so derivados: o update conserta tudo");
+    assert.equal(manifest.prova, PROVA_FUNCIONA, "a prova acompanha o fix prometido");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("should not promise update in the aggregated fix when one problem is by hand", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const { manifest } = diagnosticaComAlteracao(repo, { skillsDirs: "x", engines: 7 });
+    assert.deepEqual(manifest.problems.map(({ field, remedy }) => [field, remedy]),
+      [["skillsDirs", "update"], ["engines", "by-hand"]],
+      "o caso e misto de verdade: um derivado e um a mao");
+    assert.equal(manifest.fix, null, "o update recusa enquanto houver declaracao fora de forma");
+    assert.equal(manifest.prova, SEM_REMEDIACAO);
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("should not promise update in the aggregated fix when the manifest is unreadable", () => {
+  const repo = instalacaoLimpa();
+  try {
+    gravarManifesto(repo, "{ nao e json");
+    const { manifest } = diagnose(repo);
+    assert.deepEqual(manifest.problems, []);
+    assert.equal(manifest.fix, null, "sem problema lido nao ha o que o update recalcule");
+    assert.equal(manifest.prova, SEM_REMEDIACAO);
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("should describe the closing lines as update recalculates when every problem is derived", () => {
+  const bloco = { problems: [{ field: "agents", remedy: "update" }], fix: FIX_UPDATE };
+  assert.deepEqual(manifestRemedyText(bloco), [
+    { key: "doctorManifestoUpdateRecalcula", params: [] },
+    { key: "doctorResolvaCom", params: [FIX_UPDATE] },
+  ]);
+});
+
+test("should describe the closing lines naming only the by-hand fields when the problems are mixed", () => {
+  const bloco = {
+    problems: [
+      { field: "agents", remedy: "update" },
+      { field: "engines", remedy: "by-hand" },
+      { field: "engines", remedy: "by-hand" },
+    ],
+    fix: null,
+  };
+  assert.deepEqual(manifestRemedyText(bloco), [
+    { key: "doctorManifestoMaoDepoisUpdate", params: ["`engines`"] },
+  ], "os campos a mao vem primeiro, sem repeticao, e o derivado nao e nomeado");
+});
+
+test("should describe the closing lines as no automatic remedy when nothing is derived or unreadable", () => {
+  const todosAMao = { problems: [{ field: "engines", remedy: "by-hand" }], fix: null };
+  const ilegivel = { problems: [], fix: null };
+  const esperado = [{ key: "doctorSemRemediacaoAutomatica", params: [] }];
+  assert.deepEqual(manifestRemedyText(todosAMao), esperado);
+  assert.deepEqual(manifestRemedyText(ilegivel), esperado);
+});
+
+test("should audit and block with the manifest block for each non-lethal out-of-shape field", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const casos = [
+      ["optional", { optional: {} }],
+      ["allSkills", { allSkills: "sim" }],
+      ["userLanguage", { userLanguage: 7 }],
+      ["agentsDirs", { agentsDirs: "x" }],
+    ];
+    for (const [campo, alteracao] of casos) {
+      const resultado = diagnosticaComAlteracao(repo, alteracao);
+      assert.equal(resultado.outcome, AUDITED, `${campo} fora de forma nao impede a auditoria`);
+      assert.equal(resultado.checks, CHECKS.length, `${campo}: as verificacoes rodam todas`);
+      assert.ok(resultado.manifest, `${campo}: o bloco manifest relata o defeito`);
+      assert.ok(resultado.manifest.problems.some((problema) => problema.field === campo), `${campo}: o bloco nomeia o campo`);
+      assert.equal(blocks(resultado), true, `${campo}: o problema de forma bloqueia mesmo sem achado de defeito`);
+    }
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("should not return a manifest block when the manifest is in shape", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const resultado = diagnose(repo);
+    assert.equal(resultado.outcome, AUDITED);
+    assert.equal("manifest" in resultado, false, "manifesto valido nao ganha bloco de reparo");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("should leave architecture-skill without fix when the declared architecture is out of the catalog", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const { findings } = diagnosticaComAlteracao(repo, { architecture: "mvc" });
+    const achados = findings.filter((f) => f.check === "architecture-skill");
+    assert.equal(achados.length, 1);
+    assert.equal(achados[0].fix, null, "o update recusa arquitetura fora do catalogo: prometer o comando seria falso");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("should name update for architecture-skill when the architecture is valid and its skill is missing", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const instalado = JSON.parse(readFileSync(caminhoManifesto(repo), "utf8"));
+    assert.ok(instalado.architecture, "a instalacao limpa declara arquitetura");
+    const skill = path.join(repo, instalado.skillsDirs[0], `arch-${instalado.architecture}`);
+    rmSync(skill, { recursive: true, force: true });
+    const achados = diagnose(repo).findings.filter((f) => f.check === "architecture-skill");
+    assert.equal(achados.length, 1);
+    assert.equal(achados[0].fix, FIX_UPDATE, "arquitetura do catalogo com skill ausente e o caso que o update repara");
   } finally {
     descartar(repo);
   }
@@ -1679,4 +1837,303 @@ test("should refuse a corrupt manifest with a UsageError that names the file and
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+const CATEGORIA_POR_CAMPO = {
+  scope: FIELD_CATEGORY.DERIVED,
+  agents: FIELD_CATEGORY.DERIVED,
+  agentsDirs: FIELD_CATEGORY.DERIVED,
+  skillsDirs: FIELD_CATEGORY.DERIVED,
+  skills: FIELD_CATEGORY.RECORD,
+  engines: FIELD_CATEGORY.DECLARATION,
+  architecture: FIELD_CATEGORY.DECLARATION,
+  language: FIELD_CATEGORY.DECLARATION,
+  userLanguage: FIELD_CATEGORY.DECLARATION,
+  optional: FIELD_CATEGORY.DECLARATION,
+  allSkills: FIELD_CATEGORY.DECLARATION,
+};
+
+test("should classify each of the eleven manifest fields in its category", () => {
+  assert.equal(Object.keys(CATEGORIA_POR_CAMPO).length, 11);
+  for (const [campo, categoria] of Object.entries(CATEGORIA_POR_CAMPO)) {
+    assert.equal(fieldCategory({ engines: ["claude-code"] }, campo), categoria, campo);
+  }
+});
+
+test("should classify skillsDirs as a declaration when engines includes custom", () => {
+  assert.equal(fieldCategory({ engines: ["custom"] }, "skillsDirs"), FIELD_CATEGORY.DECLARATION);
+  assert.equal(fieldCategory({ engines: ["claude-code", "custom"] }, "skillsDirs"), FIELD_CATEGORY.DECLARATION);
+});
+
+test("should classify skillsDirs as derived when engines does not include custom", () => {
+  assert.equal(fieldCategory({ engines: ["claude-code"] }, "skillsDirs"), FIELD_CATEGORY.DERIVED);
+});
+
+test("should classify skillsDirs as derived when engines is absent or not an array", () => {
+  assert.equal(fieldCategory({}, "skillsDirs"), FIELD_CATEGORY.DERIVED);
+  assert.equal(fieldCategory({ engines: "custom" }, "skillsDirs"), FIELD_CATEGORY.DERIVED);
+  assert.equal(fieldCategory(null, "skillsDirs"), FIELD_CATEGORY.DERIVED);
+});
+
+test("should classify a field outside the three lists as a declaration", () => {
+  assert.equal(fieldCategory({}, "campoQueNaoExiste"), FIELD_CATEGORY.DECLARATION);
+});
+
+test("should prescribe by-hand for a root problem", () => {
+  const problem = { field: MANIFEST_NAME, kind: "root", expected: "object", found: "string" };
+  assert.equal(problemRemedy({}, problem), "by-hand");
+});
+
+test("should prescribe update for a problem in a derived field", () => {
+  const problem = { field: "agents", kind: "container", expected: "array-of-strings", found: "boolean" };
+  assert.equal(problemRemedy({ engines: ["claude-code"] }, problem), "update");
+});
+
+test("should prescribe by-hand for a problem in a declaration field", () => {
+  const problem = { field: "engines", kind: "container", expected: "array-of-strings", found: "number" };
+  assert.equal(problemRemedy({ engines: 7 }, problem), "by-hand");
+});
+
+test("should prescribe by-hand for a problem in the skills record", () => {
+  const problem = { field: "skills", kind: "container", expected: "array-of-skill-names", found: "object" };
+  assert.equal(problemRemedy({ skills: {} }, problem), "by-hand");
+});
+
+test("should prescribe by-hand for skillsDirs of a custom target and update otherwise", () => {
+  const problem = { field: "skillsDirs", kind: "container", expected: "array-of-strings", found: "string" };
+  assert.equal(problemRemedy({ engines: ["custom"] }, problem), "by-hand");
+  assert.equal(problemRemedy({ engines: ["claude-code"] }, problem), "update");
+});
+
+test("should map the declaration flags without optional and allSkills", () => {
+  assert.deepEqual({ ...DECLARATION_FLAGS }, {
+    engines: "--engine",
+    architecture: "--arch",
+    language: "--language",
+    userLanguage: "--user-language",
+    skillsDirs: "--skills-dir",
+  });
+  assert.ok(!("optional" in DECLARATION_FLAGS));
+  assert.ok(!("allSkills" in DECLARATION_FLAGS));
+});
+
+test("should list the five known manifest models", () => {
+  assert.deepEqual([...KNOWN_MODELS], [
+    "self-contained-core-runtime",
+    "self-contained-layered-config",
+    "self-contained-runtime",
+    "self-contained",
+    "runtime-launcher",
+  ]);
+});
+
+const CAMPOS_TEXTO = ["architecture", "language", "userLanguage"];
+const FORMAS_NAO_TEXTO = [["objeto", { a: 1 }, "object"], ["numero", 7, "number"], ["booleano", true, "boolean"], ["array", [1], "array"]];
+
+test("should not report a problem when architecture, language, userLanguage or allSkills is absent or null", () => {
+  for (const campo of [...CAMPOS_TEXTO, "allSkills", "optional", "agentsDirs"]) {
+    assert.deepEqual(manifestShapeProblems({ [campo]: null }), [], `${campo} null e estado legado tolerado`);
+    assert.deepEqual(manifestShapeProblems({ [campo]: undefined }), [], `${campo} ausente e estado legado tolerado`);
+  }
+});
+
+test("should report a type problem when architecture, language or userLanguage is not text", () => {
+  for (const campo of CAMPOS_TEXTO) {
+    for (const [nome, valor, tipo] of FORMAS_NAO_TEXTO) {
+      assert.deepEqual(
+        manifestShapeProblems({ [campo]: valor }),
+        [{ field: campo, kind: "type", expected: "text-or-null", found: tipo }],
+        `${campo} como ${nome}`,
+      );
+    }
+  }
+});
+
+test("should report a type problem when allSkills is not a boolean", () => {
+  for (const [nome, valor, tipo] of [["texto", "x", "string"], ["numero", 7, "number"], ["objeto", { a: 1 }, "object"], ["array", [], "array"]]) {
+    assert.deepEqual(
+      manifestShapeProblems({ allSkills: valor }),
+      [{ field: "allSkills", kind: "type", expected: "boolean-or-null", found: tipo }],
+      `allSkills como ${nome}`,
+    );
+  }
+  assert.deepEqual(manifestShapeProblems({ allSkills: true }), []);
+  assert.deepEqual(manifestShapeProblems({ allSkills: false }), []);
+});
+
+test("should report a container problem when optional is not an array and an element problem for a non-string item", () => {
+  for (const [, valor, tipo] of FORMAS_NAO_ARRAY) {
+    assert.deepEqual(
+      manifestShapeProblems({ optional: valor }),
+      [{ field: "optional", kind: "container", expected: "array-of-strings", found: tipo }],
+    );
+  }
+  assert.deepEqual(
+    manifestShapeProblems({ optional: ["a", 1] }),
+    [{ field: "optional", kind: "element", expected: "array-of-strings", found: "non-string-element", position: 1 }],
+  );
+  assert.deepEqual(manifestShapeProblems({ optional: ["a"] }), []);
+});
+
+test("should report a value problem listing the catalog architectures when architecture is outside the catalog", () => {
+  const [problem, ...resto] = manifestShapeProblems({ architecture: "mvc" });
+  assert.equal(resto.length, 0);
+  assert.equal(problem.field, "architecture");
+  assert.equal(problem.kind, "value");
+  assert.equal(problem.expected, "architecture-name");
+  assert.equal(problem.found, "unknown-value");
+  assert.deepEqual(problem.allowed, catalog.architectures());
+});
+
+test("should accept every architecture of the catalog", () => {
+  for (const nome of catalog.architectures()) {
+    assert.deepEqual(manifestShapeProblems({ architecture: nome }), [], nome);
+  }
+});
+
+test("should accept a language outside the catalog and report a language that is not text", () => {
+  assert.deepEqual(manifestShapeProblems({ language: "cobol" }), [], "language confere so o tipo");
+  const problems = manifestShapeProblems({ language: [1] });
+  assert.equal(problems.length, 1);
+  assert.equal(problems[0].field, "language");
+  assert.equal(problems[0].kind, "type");
+  assert.equal(problems[0].found, "array");
+});
+
+const TEXTOS_DOS_RAMOS_NOVOS = [
+  ["manifestProblemNotText", { field: "language", kind: "type", expected: "text-or-null", found: "array" }, ["language", "array"]],
+  ["manifestProblemNotBoolean", { field: "allSkills", kind: "type", expected: "boolean-or-null", found: "string" }, ["allSkills", "string"]],
+  ["manifestProblemUnknownValue", { field: "architecture", kind: "value", expected: "architecture-name", found: "unknown-value", allowed: ["hexagonal", "clean"] }, ["architecture", "hexagonal | clean"]],
+  ["manifestProblemEmptyEngines", { field: "engines", kind: "value", expected: "non-empty-engines", found: "empty-list" }, []],
+];
+
+test("should pick the message key and params of each new problemText branch", () => {
+  for (const [chave, problem, params] of TEXTOS_DOS_RAMOS_NOVOS) {
+    const descritor = problemText(problem);
+    assert.equal(descritor.key, chave);
+    assert.deepEqual(descritor.params, params);
+  }
+});
+
+test("should have the key of each new problemText branch in both tables and render a non-empty sentence", () => {
+  for (const [chave, problem] of TEXTOS_DOS_RAMOS_NOVOS) {
+    for (const lang of ["en", "pt-BR"]) {
+      const tabela = getMessages(lang);
+      assert.ok(chave in tabela, `${chave} ausente em ${lang}`);
+      assert.ok(renderText(tabela, problemText(problem)).length > 0);
+    }
+  }
+});
+
+test("should render the new problemText branches without english words in pt-BR", () => {
+  for (const [, problem] of TEXTOS_DOS_RAMOS_NOVOS) {
+    assert.doesNotMatch(renderText(getMessages("pt-BR"), problemText(problem)), /\b(expected|found)\b/);
+    assert.doesNotMatch(renderText(getMessages("en"), problemText(problem)), /\b(esperado|encontrado|encontrada)\b/);
+  }
+});
+
+test("should keep auditing when agentsDirs or optional is an empty object", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const instalado = JSON.parse(readFileSync(caminhoManifesto(repo), "utf8"));
+    for (const alteracao of [{ agentsDirs: {} }, { optional: {} }]) {
+      gravarManifestoJson(repo, { ...instalado, ...alteracao });
+      assert.equal(diagnose(repo).outcome, AUDITED, `${JSON.stringify(alteracao)} nao e letal`);
+    }
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("should keep refusing an empty object in skillsDirs as an invalid manifest", () => {
+  const repo = instalacaoLimpa();
+  try {
+    const instalado = JSON.parse(readFileSync(caminhoManifesto(repo), "utf8"));
+    gravarManifestoJson(repo, { ...instalado, skillsDirs: {} });
+    const resultado = diagnose(repo);
+    assert.equal(resultado.outcome, INVALID_MANIFEST);
+    assert.ok(resultado.manifest.problems.some((problema) => problema.field === "skillsDirs"));
+  } finally {
+    descartar(repo);
+  }
+});
+
+const comConteudoCruDoManifesto = (conteudo, acao) => {
+  const dir = tempDir("mgr-manifest-raw-");
+  try {
+    if (conteudo !== undefined) writeFileSync(path.join(dir, MANIFEST_NAME), conteudo);
+    return acao(dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+test("should throw fileNotObject from readManifest for a root that is not an object", () => {
+  for (const conteudo of ["null", "[]", '"x"', "7"]) {
+    comConteudoCruDoManifesto(conteudo, (dir) => {
+      assert.throws(() => readManifest(dir), (error) => {
+        assert.ok(error instanceof UsageError, conteudo);
+        assert.equal(error.key, "fileNotObject", conteudo);
+        assert.deepEqual(error.params, [MANIFEST_NAME], conteudo);
+        return true;
+      });
+    });
+  }
+});
+
+test("should render fileNotObject from readManifest in both languages", () => {
+  for (const idioma of ["en", "pt-BR"]) {
+    const tabela = getMessages(idioma);
+    comConteudoCruDoManifesto("[]", (dir) => {
+      let capturado;
+      try {
+        readManifest(dir);
+      } catch (error) {
+        capturado = error;
+      }
+      assert.equal(renderError(tabela, capturado), tabela.fileNotObject(MANIFEST_NAME), idioma);
+    });
+  }
+});
+
+test("should return undeclared from readUserLanguage when the manifest file is absent", () => {
+  comConteudoCruDoManifesto(undefined, (dir) => {
+    assert.deepEqual(readUserLanguage(dir), { state: "undeclared" });
+  });
+});
+
+test("should return undeclared from readUserLanguage for an empty or corrupt manifest", () => {
+  for (const conteudo of ["", "{ nao e json"]) {
+    comConteudoCruDoManifesto(conteudo, (dir) => {
+      assert.deepEqual(readUserLanguage(dir), { state: "undeclared" }, JSON.stringify(conteudo));
+    });
+  }
+});
+
+test("should return undeclared from readUserLanguage for a root that is not an object", () => {
+  for (const conteudo of ["null", "[]", '"x"', "7"]) {
+    comConteudoCruDoManifesto(conteudo, (dir) => {
+      assert.deepEqual(readUserLanguage(dir), { state: "undeclared" }, conteudo);
+    });
+  }
+});
+
+test("should return undeclared from readUserLanguage when userLanguage is absent, empty or not text", () => {
+  for (const conteudo of [{}, { userLanguage: "" }, { userLanguage: 7 }]) {
+    comConteudoCruDoManifesto(JSON.stringify(conteudo), (dir) => {
+      assert.deepEqual(readUserLanguage(dir), { state: "undeclared" }, JSON.stringify(conteudo));
+    });
+  }
+});
+
+test("should return declared from readUserLanguage for a non-empty userLanguage", () => {
+  comConteudoCruDoManifesto(JSON.stringify({ userLanguage: "pt-BR" }), (dir) => {
+    assert.deepEqual(readUserLanguage(dir), { state: "declared", value: "pt-BR" });
+  });
+});
+
+test("should return declared from readUserLanguage even when another field is malformed", () => {
+  comConteudoCruDoManifesto(JSON.stringify({ userLanguage: "pt-BR", skills: { a: 1 } }), (dir) => {
+    assert.deepEqual(readUserLanguage(dir), { state: "declared", value: "pt-BR" });
+  });
 });

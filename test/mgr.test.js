@@ -27,6 +27,7 @@ import { readLockfile } from "../src/lockfile.js";
 import { captureCli, normalize } from "../scripts/capture-cli-baseline.mjs";
 import { descartar, instalacaoComDefeitos, instalacaoLimpa } from "./fixtures/instalacao.js";
 import { tempDir } from "../scripts/lib/tmp.mjs";
+import { VAZAMENTOS_DE_EXCECAO, formasLetaisDoManifesto } from "./fixtures/manifesto-malformado.js";
 
 const diretorioTemporario = () => tempDir("mgr-");
 
@@ -3299,22 +3300,8 @@ const executarDoctor = (repo, args = []) => {
   return { status: resultado.status, out: `${resultado.stdout}`, err: `${resultado.stderr}` };
 };
 
-const FORMAS_COMUNS = [["objeto", {}], ["string", "x"], ["numero", 7], ["booleano", true]];
-const formasLetaisDoManifesto = () => [
-  ...["skills", "skillsDirs", "engines", "agents"]
-    .flatMap((campo) => FORMAS_COMUNS.map(([forma, valor]) => ({ rotulo: `${campo} ${forma}`, campo, valor }))),
-  { rotulo: "skillsDirs com elemento numerico", campo: "skillsDirs", valor: [1] },
-  { rotulo: "agents com elemento numerico", campo: "agents", valor: [1] },
-  { rotulo: "scope null", campo: "scope", valor: null },
-  { rotulo: "scope ausente", campo: "scope", valor: undefined },
-  { rotulo: "scope bogus", campo: "scope", valor: "bogus" },
-  { rotulo: "scope numero", campo: "scope", valor: 7 },
-  { rotulo: "scope booleano", campo: "scope", valor: true },
-  { rotulo: "scope objeto", campo: "scope", valor: {} },
-];
+const CAMPOS_DERIVADOS_DO_MANIFESTO = ["skillsDirs", "agents", "scope"];
 const RAIZES_NAO_OBJETO = [["string", "\"x\""], ["numero", "7"], ["array", "[1,2]"], ["null", "null"]];
-const VAZAMENTOS_DE_EXCECAO = [/is not a function/, /The "path" argument/, /TypeError/, /\.(map|filter|some|flatMap|forEach)\b/,
-  /at .*\.js:\d+/, /manifest\.(skills|skillsDirs|engines|agents)\b/];
 
 test("shouldExitTwoWithoutLeakingExceptionsForEveryLethalManifestShape", () => {
   const repo = instalacaoLimpa();
@@ -3351,8 +3338,12 @@ test("shouldPrintParseableInvalidManifestJsonForEveryLethalManifestShape", () =>
       assert.ok(payload.manifest.problems.length >= 1, `${rotulo}: ao menos um problema nomeia o que esta fora de forma`);
       assert.equal(payload.manifest.file, MANIFESTO_RELATIVO);
       assert.equal(payload.manifest.state, "read", `${rotulo}: o arquivo e JSON valido, so a forma esta errada`);
-      assert.equal(payload.manifest.fix, null, `${rotulo}: nenhum comando conserta, e o json diz isso`);
-      assert.equal(payload.manifest.prova, "sem-remediacao", `${rotulo}: a ausencia de remediacao e declarada, nao omitida`);
+      const derivado = CAMPOS_DERIVADOS_DO_MANIFESTO.includes(campo);
+      for (const problema of payload.manifest.problems) {
+        assert.equal(problema.remedy, derivado ? "update" : "by-hand", `${rotulo}: o remedio por problema vem da classificacao do campo`);
+      }
+      assert.equal(payload.manifest.fix, derivado ? "mgr update" : null, `${rotulo}: so o derivado promete o update`);
+      assert.equal(payload.manifest.prova, derivado ? "prova-funciona" : "sem-remediacao", `${rotulo}: a prova acompanha o fix`);
     }
   } finally {
     descartar(repo);
@@ -3415,7 +3406,7 @@ test("shouldDeclareNoAutomaticRemediationAndNameNoCommandForInvalidManifest", ()
   const pt = getMessages("pt-BR");
   try {
     const base = manifestoPlantado(repo);
-    for (const conteudo of [{ ...base, skillsDirs: 7 }, "{ nao e json"]) {
+    for (const conteudo of [{ ...base, engines: 7 }, "{ nao e json"]) {
       gravarManifestoPlantado(repo, conteudo);
       const { status, out } = executarDoctor(repo);
       assert.equal(status, 2);
@@ -3423,9 +3414,70 @@ test("shouldDeclareNoAutomaticRemediationAndNameNoCommandForInvalidManifest", ()
       assert.doesNotMatch(out, /mgr (update|install|init|doctor)|resolva com:|doctor --fix/,
         "nomear um comando de conserto seria prometer o que o MGR nao faz");
     }
-    gravarManifestoPlantado(repo, { ...base, skillsDirs: 7 });
-    const { out } = executarDoctor(repo);
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("shouldNameUpdateCommandAndKeepProblemLineWhenOnlyDerivedFieldIsOutOfShape", () => {
+  const repo = instalacaoLimpa();
+  const pt = getMessages("pt-BR");
+  try {
+    gravarManifestoPlantado(repo, { ...manifestoPlantado(repo), skillsDirs: 7 });
+    const { status, out } = executarDoctor(repo);
+    assert.equal(status, 2);
+    assert.ok(out.includes(pt.doctorResolvaCom("mgr update")), "o derivado e recalculado pelo update, e o comando e nomeado");
     assert.ok(out.includes(pt.manifestProblemStringList("skillsDirs", "number")), "a linha de problema vem da tabela do idioma");
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("shouldCloseWithUpdateRecalculatesAndCommandWhenOnlyDerivedFieldsAreOutOfShape", () => {
+  const repo = instalacaoLimpa();
+  const pt = getMessages("pt-BR");
+  try {
+    gravarManifestoPlantado(repo, { ...manifestoPlantado(repo), skillsDirs: 7, scope: "bogus" });
+    const { status, out } = executarDoctor(repo);
+    assert.equal(status, 2);
+    assert.ok(out.includes(pt.doctorManifestoUpdateRecalcula));
+    assert.ok(out.includes(pt.doctorResolvaCom("mgr update")));
+    assert.ok(!out.includes(pt.doctorSemRemediacaoAutomatica));
+    assert.ok(!out.includes(pt.doctorManifestoMaoDepoisUpdate("`engines`")));
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("shouldCloseWithNoAutomaticRemediationWhenOnlyByHandOrUnreadable", () => {
+  const repo = instalacaoLimpa();
+  const pt = getMessages("pt-BR");
+  try {
+    const base = manifestoPlantado(repo);
+    for (const conteudo of [{ ...base, engines: 7 }, { ...base, skills: "x" }, "{ nao e json"]) {
+      gravarManifestoPlantado(repo, conteudo);
+      const { status, out } = executarDoctor(repo);
+      assert.equal(status, 2);
+      assert.ok(out.includes(pt.doctorSemRemediacaoAutomatica));
+      assert.ok(!out.includes(pt.doctorManifestoUpdateRecalcula));
+      assert.ok(!out.includes(pt.doctorResolvaCom("mgr update")));
+    }
+  } finally {
+    descartar(repo);
+  }
+});
+
+test("shouldNameByHandFieldBeforeUpdateWhenByHandAndDerivedProblemsAreMixed", () => {
+  const repo = instalacaoLimpa();
+  const pt = getMessages("pt-BR");
+  try {
+    gravarManifestoPlantado(repo, { ...manifestoPlantado(repo), engines: 7, agents: [1] });
+    const { status, out } = executarDoctor(repo);
+    assert.equal(status, 2);
+    assert.ok(out.includes(pt.doctorManifestoMaoDepoisUpdate("`engines`")), "o campo a mao e nomeado entre crases");
+    assert.ok(!out.includes("`agents`, "), "o derivado nao entra na lista de campos a mao");
+    assert.ok(!out.includes(pt.doctorResolvaCom("mgr update")), "com campo a mao o update recusaria: nao se promete");
+    assert.ok(!out.includes(pt.doctorSemRemediacaoAutomatica));
   } finally {
     descartar(repo);
   }
@@ -3444,10 +3496,13 @@ test("shouldPrintInvalidManifestBlockInEnglishWithFoundTypeBetweenBackticks", ()
     assert.ok(out.includes(en.doctorManifestoInvalido(MANIFESTO_RELATIVO)), "o cabecalho sai em ingles com a flag");
     assert.ok(out.includes(en.manifestProblemStringList("skillsDirs", "string")), "a linha de problema sai em ingles");
     assert.ok(out.includes(en.manifestProblemScope(permitidos, "string")), "o escopo invalido nomeia os valores permitidos em ingles");
-    assert.ok(out.includes(en.doctorSemRemediacaoAutomatica), "a ausencia de remediacao sai em ingles");
+    assert.ok(out.includes(en.doctorManifestoUpdateRecalcula), "o fechamento do derivado sai em ingles");
+    assert.ok(out.trimEnd().endsWith(en.doctorResolvaCom("mgr update")), "o bloco termina no comando que conserta");
     assert.ok(out.includes("found `string`"), "o tipo encontrado vai entre crases, para nao se confundir com a prosa");
     assert.ok(!out.includes(pt.doctorManifestoInvalido(MANIFESTO_RELATIVO)), "nenhum pedaco pt-BR no bloco em ingles");
-    assert.ok(!out.includes(pt.doctorSemRemediacaoAutomatica));
+    assert.ok(!out.includes(pt.doctorManifestoUpdateRecalcula));
+    assert.ok(!out.includes(pt.doctorResolvaCom("mgr update")));
+    assert.ok(!out.includes(en.doctorSemRemediacaoAutomatica));
   } finally {
     descartar(repo);
   }
@@ -3571,6 +3626,25 @@ test("shouldKeepDoctorGlueFreeOfManifestRulesCodesAndMessageKeys", () => {
   }
   assert.ok(!cola.includes("manifestProblem"), "chave de problema de manifesto na cola seria texto decidido fora do nucleo");
   assert.doesNotMatch(cola, /["'`]finding[A-Z]\w*["'`]/, "chave de mensagem de achado na cola seria texto decidido fora do nucleo");
+});
+
+const FONTES_SEM_CLASSIFICACAO_PROPRIA = ["src/installer.js", "src/doctor.js", "src/commands/doctor.js", "src/prompts.js", "bin/mgr.js", "src/install-interactive.js"];
+const lerFonteDoProjeto = (relativo) => readFileSync(fileURLToPath(new URL(`../${relativo}`, import.meta.url)), "utf8");
+const CAMPO_DO_MANIFESTO = "[\"'`](?:skills|skillsDirs|agents|agentsDirs|engines|engine|architecture|language|userLanguage|optional|allSkills|scope|model|version|installedAt|projectId)[\"'`]";
+
+test("shouldKeepManifestClassificationOnlyInManifestModule", () => {
+  const literalDeCategoria = /["'`](?:derived|declaration|record)["'`]/;
+  const literalDeRemedioPorMao = /["'`]by-hand["'`]/;
+  const comparaRemedioComLiteral = /\bremedy\s*(?:[!=]==?|:)\s*["'`]/;
+  const listaPropriaDeCampos = new RegExp(`\\[[^\\]\\n]*${CAMPO_DO_MANIFESTO}[^\\]\\n]*,[^\\]\\n]*${CAMPO_DO_MANIFESTO}[^\\]\\n]*\\]`);
+  for (const relativo of FONTES_SEM_CLASSIFICACAO_PROPRIA) {
+    const fonte = lerFonteDoProjeto(relativo);
+    assert.doesNotMatch(fonte, literalDeCategoria, `${relativo}: a categoria vem de FIELD_CATEGORY, nao de literal`);
+    assert.doesNotMatch(fonte, literalDeRemedioPorMao, `${relativo}: o remedio vem de REMEDY, nao de literal`);
+    assert.doesNotMatch(fonte, comparaRemedioComLiteral, `${relativo}: o remedio se compara com REMEDY.*, nao com literal`);
+    assert.doesNotMatch(fonte, listaPropriaDeCampos, `${relativo}: a lista de campos do manifesto vive em src/manifest.js`);
+  }
+  assert.doesNotMatch(lerFonteDoProjeto("src/commands/doctor.js"), /manifest\.js/, "a cola nao importa a classificacao");
 });
 
 const BLOCO_ABERTO = "<!-- >>> mgr-method (managed block: mgr uninstall removes it) >>> -->\nlinha solta\n";

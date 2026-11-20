@@ -54,6 +54,10 @@ export function promptsNoIdioma(clack, tabelaAtual) {
 // gravado sem resposta explícita.
 const OTHER_CHOICE = "other";
 const SKIP_CHOICE = "skip";
+const NONE_CHOICE = "none";
+const LANGUAGE_OTHER_CHOICE = "outra";
+const DEFAULT_ARCHITECTURE = "hexagonal";
+const EVIDENCE_SKILL = "evidence-capture";
 
 function defaultEngineDescriptors() {
   return Object.fromEntries(engines.ids().map((id) => [id, engines.get(id)]));
@@ -96,9 +100,12 @@ export async function collectInstallAnswers(ask, current = {}, {
   flagModels: flagModelsOption = {},
   flagEfforts: flagEffortsOption = {},
   contextFor = null,
+  previous = () => ({}),
 } = {}) {
   let flagModels = flagModelsOption;
   let flagEfforts = flagEffortsOption;
+  let chosenScope = current.scope || null;
+  const previousDeclarations = () => previous(chosenScope) || {};
   const out = {
     engines: current.engines?.length ? current.engines : [],
     scope: current.scope || null,
@@ -114,13 +121,15 @@ export async function collectInstallAnswers(ask, current = {}, {
   };
 
   if (!out.engines.length) {
+    const offeredEngines = ["claude-code", "copilot"];
+    const previousEngines = (previousDeclarations().engines || []).filter((id) => offeredEngines.includes(id));
     const sel = await ask.multiselect({
       message: msg.qEngines,
       options: [
         { value: "claude-code", label: "Claude Code", hint: ".claude/skills" },
         { value: "copilot", label: "GitHub Copilot", hint: ".github/skills" },
       ],
-      initialValues: ["claude-code"],
+      initialValues: previousEngines.length ? previousEngines : engines.DEFAULT_ENGINES,
       required: true,
     });
     if (ask.isCancel(sel)) return CANCELLED;
@@ -138,28 +147,41 @@ export async function collectInstallAnswers(ask, current = {}, {
     if (ask.isCancel(s)) return CANCELLED;
     out.scope = s;
   }
+  chosenScope = out.scope;
+  const previousAnswers = previousDeclarations();
+  const skipSkillQuestions = allSkills || previousAnswers.allSkills === true;
 
-  if (!allSkills && !out.architecture) {
+  if (!skipSkillQuestions && !out.architecture) {
+    const previousArchitecture = previousAnswers.architecture;
     const a = await ask.select({
       message: msg.qArchitecture,
-      options: catalog.architectures().map((k) => ({ value: k, label: k })),
-      initialValue: "hexagonal",
+      options: [
+        ...catalog.architectures().map((k) => ({ value: k, label: k })),
+        { value: NONE_CHOICE, label: msg.archNoneLabel, hint: msg.archNoneHint },
+      ],
+      initialValue: previousArchitecture === null
+        ? NONE_CHOICE
+        : catalog.architectures().includes(previousArchitecture) ? previousArchitecture : DEFAULT_ARCHITECTURE,
     });
     if (ask.isCancel(a)) return CANCELLED;
-    out.architecture = a;
+    out.architecture = a === NONE_CHOICE ? null : a;
   }
 
-  if (!allSkills && !out.language) {
+  if (!skipSkillQuestions && !out.language) {
+    const previousLanguage = previousAnswers.language;
+    const knownLanguages = catalog.languages();
+    const hasPreviousLanguage = previousLanguage !== undefined;
     const l = await ask.select({
       message: msg.qLanguage,
       options: [
-        ...catalog.languages().map((k) => ({ value: k, label: k })),
-        { value: "outra", label: msg.langOtherLabel, hint: msg.langOtherHint },
+        ...knownLanguages.map((k) => ({ value: k, label: k })),
+        { value: LANGUAGE_OTHER_CHOICE, label: msg.langOtherLabel, hint: msg.langOtherHint },
       ],
-      initialValue: catalog.languages()[0],
+      initialValue: !hasPreviousLanguage ? knownLanguages[0]
+        : knownLanguages.includes(previousLanguage) ? previousLanguage : LANGUAGE_OTHER_CHOICE,
     });
     if (ask.isCancel(l)) return CANCELLED;
-    out.language = l === "outra" ? null : l;
+    out.language = l === LANGUAGE_OTHER_CHOICE ? null : l;
   }
 
   // Idioma da EXPERIÊNCIA (conversa e artefatos das skills) — não é a linguagem de
@@ -167,7 +189,12 @@ export async function collectInstallAnswers(ask, current = {}, {
   // o conjunto de skills.
   if (!out.userLanguage) {
     const detected = detectUserLanguage(env);
-    const initial = detected.startsWith("en") ? "en" : detected.startsWith("pt") ? "pt-BR" : "outro";
+    const previousLanguageOfUser = previousAnswers.userLanguage;
+    const hasPreviousUserLanguage = typeof previousLanguageOfUser === "string" && previousLanguageOfUser.trim() !== "";
+    const initial = hasPreviousUserLanguage
+      ? (["en", "pt-BR"].includes(previousLanguageOfUser) ? previousLanguageOfUser : "outro")
+      : detected.startsWith("en") ? "en" : detected.startsWith("pt") ? "pt-BR" : "outro";
+    const typedInitial = hasPreviousUserLanguage ? previousLanguageOfUser : detected;
     const ul = await ask.select({
       message: msg.qOutputLanguage,
       options: [
@@ -181,11 +208,11 @@ export async function collectInstallAnswers(ask, current = {}, {
     if (ul === "outro") {
       const t = await ask.text({
         message: msg.qWhichLanguage,
-        initialValue: detected,
-        placeholder: detected,
+        initialValue: typedInitial,
+        placeholder: typedInitial,
       });
       if (ask.isCancel(t)) return CANCELLED;
-      out.userLanguage = (t || detected).trim();
+      out.userLanguage = (t || typedInitial).trim();
     } else {
       out.userLanguage = ul;
     }
@@ -194,17 +221,18 @@ export async function collectInstallAnswers(ask, current = {}, {
   if (!allSkills) {
     const ev = await ask.confirm({
       message: msg.qOptionalEvidence,
-      initialValue: false,
+      initialValue: Array.isArray(previousAnswers.optional) && previousAnswers.optional.includes(EVIDENCE_SKILL),
     });
     if (ask.isCancel(ev)) return CANCELLED;
-    if (ev) out.optional.push("evidence-capture");
+    if (ev) out.optional.push(EVIDENCE_SKILL);
   }
 
   if (!out.projectId) {
     const base = path.basename(path.resolve(repo));
+    const recorded = typeof previousAnswers.projectId === "string" && previousAnswers.projectId !== "" ? previousAnswers.projectId : base;
     const pid = await ask.text({
       message: msg.qProjectId,
-      initialValue: base,
+      initialValue: recorded,
       placeholder: base,
     });
     if (ask.isCancel(pid)) return CANCELLED;
@@ -310,6 +338,11 @@ export const KEEP = "keep";
 
 export function removalMode({ isTTY = false, yes = false } = {}) {
   if (yes) return REMOVAL_ASSUMED;
+  return isTTY ? REMOVAL_ASK : REMOVAL_NO_CONSENT;
+}
+
+// Substituir pasta sem a marca do metodo: o `-y` nunca autoriza (decisao de 2026-11-19, DT-19).
+export function replacementMode({ isTTY = false } = {}) {
   return isTTY ? REMOVAL_ASK : REMOVAL_NO_CONSENT;
 }
 

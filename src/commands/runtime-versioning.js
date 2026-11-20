@@ -1,13 +1,13 @@
 // Cola do comando `mgr runtime-versioning`. Humble Object: só parse, formatação e exit code; o IO entra
 // por `io`, a raiz por `root`, a leitura do git por `gitIndex` e as linhas da raiz por `rootIgnoredLines` (função, chamada só no `set versioned`).
-// A decisão vive em src/registry.js e src/builder.js (DT-4, DT-7).
+// A decisão vive em src/plugins/registry.js e src/install/builder.js (DT-4, DT-7).
 import path from "node:path";
-import { RUNTIME_IGNORE_FILE, RUNTIME_VERSIONING } from "../catalog.js";
-import { runtimeIgnoreEffect, runtimeIgnoreFileFor, runtimeIgnoreState, removeRuntimeIgnore, writeRuntimeIgnore } from "../builder.js";
-import { UsageError } from "../errors.js";
-import { RUNTIME_DIR_NAME } from "../bundle.js";
-import * as installer from "../installer.js";
-import { configPath, readRuntimeVersioning, writeRuntimeVersioning } from "../registry.js";
+import { RUNTIME_IGNORE_FILE, RUNTIME_VERSIONING } from "../core/catalog.js";
+import { runtimeIgnoreEffect, runtimeIgnoreFileFor, runtimeIgnoreState, removeRuntimeIgnore, writeRuntimeIgnore } from "../install/builder.js";
+import { UsageError } from "../core/errors.js";
+import { RUNTIME_DIR_NAME } from "../core/bundle.js";
+import * as installer from "../install/installer.js";
+import { configPath, readRuntimeVersioning, writeRuntimeVersioning } from "../plugins/registry.js";
 
 export function runtimeVersioning({ root, positional, flags = {}, io, M, gitIndex, rootIgnoredLines = () => [] }) {
   if (positional.length === 0) return rvRead({ root, flags, io, M });

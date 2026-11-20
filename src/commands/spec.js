@@ -2,20 +2,20 @@
 // formatação e exit code; o IO (stdout/stderr, cor) entra por `io` e a raiz por `root`, para o
 // teste exercitar sem processo filho. A decisão vive em src/ (plan-validator, plan-next, spec-status).
 import path from "node:path";
-import * as planValidator from "../plan-validator.js";
-import * as specValidator from "../spec-validator.js";
-import * as provValidator from "../prov-validator.js";
-import * as docValidator from "../doc-validator.js";
-import * as planNext from "../plan-next.js";
-import * as specStatusModel from "../spec-status.js";
-import { SPECS_DIR, slugs } from "../artifacts.js";
-import { blocking, findingTexts, summarize } from "../findings.js";
-import { getMessages } from "../messages.js";
-import { renderText } from "../ui-text.js";
+import * as planValidator from "../sdd/plan-validator.js";
+import * as specValidator from "../sdd/spec-validator.js";
+import * as provValidator from "../sdd/prov-validator.js";
+import * as docValidator from "../sdd/doc-validator.js";
+import * as planNext from "../sdd/plan-next.js";
+import * as specStatusModel from "../sdd/spec-status.js";
+import { SPECS_DIR, slugs } from "../sdd/artifacts.js";
+import { blocking, findingTexts, summarize } from "../sdd/findings.js";
+import { getMessages } from "../core/messages.js";
+import { renderText } from "../core/ui-text.js";
 
 // `mgr spec validate` — valida artefato do PROJETO do usuário. Não confundir com `mgr validate`,
 // que valida autoria de SKILL.md: são contratos diferentes (ADR-0012). Aqui só há parse de flag,
-// formatação e exit code; descoberta, leitura e política vivem em src/plan-validator.js (INV-5).
+// formatação e exit code; descoberta, leitura e política vivem em src/sdd/plan-validator.js (INV-5).
 export function specValidate({ root, cwd, flags, positional, io, M }) {
   const repo = root;
   const slug = flags.all ? null : (positional[0] || planValidator.slugFromCwd(repo, cwd));
@@ -71,7 +71,7 @@ export function specValidate({ root, cwd, flags, positional, io, M }) {
 }
 
 // `mgr spec next` — a próxima AÇÃO, não o estado (ADR-0014). Sem `--all`: a pergunta "o que faço
-// agora" é sobre UMA feature. Aqui só há formatação e exit code; a decisão vive em src/plan-next.js.
+// agora" é sobre UMA feature. Aqui só há formatação e exit code; a decisão vive em src/sdd/plan-next.js.
 export function specNext({ root, cwd, flags, positional, io, M }) {
   const repo = root;
 
@@ -160,7 +160,7 @@ const resumoDeStatus = (feature) =>
   + (feature.handoff.exists ? "  handoff" : "");
 
 // `mgr spec status` — o que EXISTE em disco, e o aviso de que existência não é progresso
-// (ADR-0015). Aqui só há formatação e exit code; o modelo e o IO vivem em src/spec-status.js.
+// (ADR-0015). Aqui só há formatação e exit code; o modelo e o IO vivem em src/sdd/spec-status.js.
 export function specStatus({ root, cwd, flags, positional, io, M }) {
   const repo = root;
 

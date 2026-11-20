@@ -1,4 +1,4 @@
-import { inspectSdd } from "../sdd-check.js";
+import { inspectSdd } from "../sdd/sdd-check.js";
 
 const CHAVE_DA_FALHA = {
   "no-dir": "sddCheckNoDir",

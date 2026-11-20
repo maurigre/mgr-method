@@ -48,7 +48,7 @@ function abaixoDe(raiz) {
 
 // Prosa devolvida como dado (`message:`, `problems.push`): o literal direto, ou atravessando so
 // `+`, ternario e `||`/`&&`. O que esta dentro de `text`/`say`/`descriptor` (os apelidos de
-// `src/ui-text.js`) e chave e parametro de frase localizada, e o objeto empurrado carrega codigos.
+// `src/core/ui-text.js`) e chave e parametro de frase localizada, e o objeto empurrado carrega codigos.
 const MONTAGEM = ":matches(BinaryExpression[operator='+'], ConditionalExpression, LogicalExpression)";
 const LOCALIZADO = ":not(CallExpression[callee.name=/^(text|say|descriptor)$/] *)";
 function prosaEm(raiz, { foraDeObjeto }) {
@@ -66,14 +66,14 @@ function prosaEm(raiz, { foraDeObjeto }) {
 function qual8Seletores({ comClasse, comNewError }) {
   const seletores = [
     ...(comNewError
-      ? [["NewExpression[callee.name='Error']", "QUAL-8: new Error(...) proibido em src/ e bin/; use UsageError ou InvariantError (src/errors.js)"]]
+      ? [["NewExpression[callee.name='Error']", "QUAL-8: new Error(...) proibido em src/ e bin/; use UsageError ou InvariantError (src/core/errors.js)"]]
       : []),
     ...(comClasse
       ? [["ClassDeclaration[superClass.name='Error']", "QUAL-8: classe que estende Error carrega texto proprio; estenda UsageError ou InvariantError"]]
       : []),
-    [PONTOS_DE_SAIDA.flatMap(abaixoDe).join(", "), "QUAL-8: texto literal em ponto de saida; o texto vem de src/messages.js"],
-    [PROSA_COMO_DADO.slice(0, 1).flatMap((r) => prosaEm(r, { foraDeObjeto: false })).join(", "), "QUAL-8: prosa em message/remediation/example; use text(...) de src/ui-text.js com chave de src/messages.js"],
-    [PROSA_COMO_DADO.slice(1).flatMap((r) => prosaEm(r, { foraDeObjeto: true })).join(", "), "QUAL-8: prosa em problems/warnings.push; use descritor de src/messages.js"],
+    [PONTOS_DE_SAIDA.flatMap(abaixoDe).join(", "), "QUAL-8: texto literal em ponto de saida; o texto vem de src/core/messages.js"],
+    [PROSA_COMO_DADO.slice(0, 1).flatMap((r) => prosaEm(r, { foraDeObjeto: false })).join(", "), "QUAL-8: prosa em message/remediation/example; use text(...) de src/core/ui-text.js com chave de src/core/messages.js"],
+    [PROSA_COMO_DADO.slice(1).flatMap((r) => prosaEm(r, { foraDeObjeto: true })).join(", "), "QUAL-8: prosa em problems/warnings.push; use descritor de src/core/messages.js"],
   ];
   return seletores.map(([selector, message]) => ({ selector, message }));
 }
@@ -168,13 +168,13 @@ export default [
     rules: { "no-unused-vars": ["error", { caughtErrors: "none" }] },
   },
 
-  // QUAL-8 (DT-16 b): texto de interface so na camada de idioma (src/messages.js). `noInlineConfig`
+  // QUAL-8 (DT-16 b): texto de interface so na camada de idioma (src/core/messages.js). `noInlineConfig`
   // fecha o desvio por comentario `eslint-disable`. `bin/mgr.cjs` nao casa `bin/**/*.js`: a guarda
-  // dele e o teste de paridade do DT-22. `src/errors.js` so fica fora do seletor da classe que
+  // dele e o teste de paridade do DT-22. `src/core/errors.js` so fica fora do seletor da classe que
   // estende `Error` (e onde a base `LocalizedError` nasce), pelo bloco proprio dele, mais abaixo.
   {
     files: ["src/**/*.js", "bin/**/*.js"],
-    ignores: ["src/messages.js", "src/errors.js", "src/plugin.js"],
+    ignores: ["src/core/messages.js", "src/core/errors.js", "src/plugin.js"],
     linterOptions: { noInlineConfig: true },
     rules: { "no-restricted-syntax": ["error", ...qual8Seletores({ comClasse: true, comNewError: true })] },
   },
@@ -190,7 +190,7 @@ export default [
     rules: { "no-restricted-syntax": ["error", ...qual8Seletores({ comClasse: true, comNewError: false })] },
   },
   {
-    files: ["src/errors.js"],
+    files: ["src/core/errors.js"],
     linterOptions: { noInlineConfig: true },
     rules: { "no-restricted-syntax": ["error", ...qual8Seletores({ comClasse: false, comNewError: true })] },
   },

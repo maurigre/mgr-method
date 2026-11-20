@@ -1,7 +1,7 @@
 /**
  * Camada pura do guarda de remediacao.
  *
- * Verifica a COERENCIA entre o registro de remediacoes (CHECKS em src/doctor.js) e a tabela
+ * Verifica a COERENCIA entre o registro de remediacoes (CHECKS em src/doctor/doctor.js) e a tabela
  * de casos de teste (casos passada como argumento). Nao confere se a remediacao funciona —
  * isso e o runner, que roda comando de verdade.
  *
@@ -21,7 +21,7 @@ import {
   PROVA_NAO_FUNCIONA,
   PROVA_NAO_MEDIDA,
   SEM_REMEDIACAO,
-} from "../../src/doctor.js";
+} from "../../src/doctor/doctor.js";
 import {
   instalacaoLimpa,
   descartar,
@@ -36,8 +36,8 @@ import {
   caminhoDoRuntime,
   removerArquivoDoRuntime,
 } from "./instalacao.js";
-import { diagnose } from "../../src/doctor.js";
-import * as catalog from "../../src/catalog.js";
+import { diagnose } from "../../src/doctor/doctor.js";
+import * as catalog from "../../src/core/catalog.js";
 
 const BIN = fileURLToPath(new URL("../../bin/mgr.js", import.meta.url));
 
@@ -47,7 +47,7 @@ const BIN = fileURLToPath(new URL("../../bin/mgr.js", import.meta.url));
  * Devolve array de strings de problema, cada uma com formato REM-N <id>(/<condicao>): descrição.
  * Array vazio significa registro e casos coerentes.
  *
- * @param {Array} checks - Registro CHECKS de src/doctor.js
+ * @param {Array} checks - Registro CHECKS de src/doctor/doctor.js
  * @param {Array} casos - Tabela de casos com entradas {id, condicao}
  * @returns {Array} Array de strings de problema
  */

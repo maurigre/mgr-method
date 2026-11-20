@@ -18,7 +18,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 // Registro de ids do codigo. Fonte unica.
-import { CHECKS } from "../src/doctor.js";
+import { CHECKS } from "../src/doctor/doctor.js";
 
 // Documentos que declaram a enumeracao de verificacoes. Lista fechada, e EXPORTADA: o teste
 // consome esta mesma lista em vez de declarar a sua, porque duas copias divergiriam na primeira

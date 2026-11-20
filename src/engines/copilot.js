@@ -9,7 +9,7 @@
 //     configuração lista name, description, target, tools, model,
 //     disable-model-invocation, user-invocable, mcp-servers e metadata.
 // Atenção: isto vale para AGENTES. Para SKILLS o copilot continua sem destino para
-// `model`/`effort` (matriz de 2026-07-20, ver src/adapters.js) — são capacidades distintas.
+// `model`/`effort` (matriz de 2026-07-20, ver src/install/adapters.js) — são capacidades distintas.
 // Escopo global verificado na documentação oficial em 2026-08-30:
 // "store personal custom agent definitions as `.agent.md` files in `~/.copilot/agents/`" e
 // "project-level agents in `.github/agents/` take precedence over personal agents".

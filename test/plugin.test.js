@@ -4,9 +4,9 @@ import {
   aggregateChecksum, parseSkillName, sha256, validateManifest,
   CATEGORIES, EFFORT_LEVELS, PERMISSIONS,
 } from "../src/plugin.js";
-import { assertValidManifest } from "../src/plugin-installer.js";
+import { assertValidManifest } from "../src/install/plugin-installer.js";
 import { PLUGIN_MANIFEST_TEXT_EN } from "../src/plugin.js";
-import { getMessages } from "../src/messages.js";
+import { getMessages } from "../src/core/messages.js";
 
 const manifest = (overrides = {}) => ({
   name: "@mgr/junit-clean",

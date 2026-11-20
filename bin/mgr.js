@@ -4,19 +4,19 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import * as bundle from "../src/bundle.js";
-import * as installer from "../src/installer.js";
-import * as catalogo from "../src/catalog.js";
+import * as bundle from "../src/core/bundle.js";
+import * as installer from "../src/install/installer.js";
+import * as catalogo from "../src/core/catalog.js";
 import { agents } from "../src/commands/agents.js";
 import { specNext, specStatus, specValidate } from "../src/commands/spec.js";
 import { detectHook, precompactHook, suggestionsFor } from "../src/commands/hooks.js";
 import { escreverSync, lerPayload, modificados } from "./hook-io.js";
-import { projectRoot } from "../src/project-root.js";
-import { LOCAL_CONFIG_NAME, ORIGINS, configPath, misplacedTeamKeys, readAgents, readOrigin, readPersonal, readRuntimeVersioning } from "../src/registry.js";
+import { projectRoot } from "../src/sdd/project-root.js";
+import { LOCAL_CONFIG_NAME, ORIGINS, configPath, misplacedTeamKeys, readAgents, readOrigin, readPersonal, readRuntimeVersioning } from "../src/plugins/registry.js";
 import { indexedFiles } from "./git-index.js";
 import * as engineRegistry from "../src/engines/index.js";
-import * as tokens from "../src/tokens.js";
-import * as audit from "../src/audit.js";
+import * as tokens from "../src/core/tokens.js";
+import * as audit from "../src/plugins/audit.js";
 import { doctor } from "../src/commands/doctor.js";
 import { sddCheck } from "../src/commands/sdd-check.js";
 import { initials } from "../src/commands/initials.js";
@@ -25,29 +25,29 @@ import {
   refuseInvalidRuntimeVersioning, planRuntimeLine, reportGitIndex, reportRuntimeChoice, reportRuntimeIgnoreAfter, reportRuntimeIgnoreBefore,
   posixRelative, runtimeVersioning,
 } from "../src/commands/runtime-versioning.js";
-import { buildRuntime, gateSummary, inheritingModel, runtimeIgnoreEffect, runtimeIgnoreState } from "../src/builder.js";
-import { validateAll } from "../src/validator.js";
-import { printBanner } from "../src/banner.js";
-import { PERSONAL_LINES, planGitignore, removeGitignoreBlock, writeGitignoreBlock } from "../src/gitignore.js";
-import { GITIGNORE_DECLINE, GITIGNORE_WRITE, askRuntimeVersioning, consentEach, consentToGitignore, consentToBlock, BLOCK_WRITE, BLOCK_DECLINE, updateOutcome, consentToRemove, detectUserLanguage, removalMode, replacementMode, removalOutcome, CANCELLED, OUTCOME_KEPT_BY_CHOICE, OUTCOME_KEPT_NO_CONSENT, OUTCOME_REMOVED, REMOVE, promptsNoIdioma } from "../src/prompts.js";
-import { getMessages } from "../src/messages.js";
-import { renderError } from "../src/errors.js";
-import { renderText } from "../src/ui-text.js";
-import { askInstall } from "../src/install-interactive.js";
-import { MANIFEST_NAME, QUESTION_FIELDS, problemText, readUserLanguage } from "../src/manifest.js";
-import { instructionsToRemove, planInstructions, removeInstructionBlock, writeInstructionBlock } from "../src/instructions.js";
+import { buildRuntime, gateSummary, inheritingModel, runtimeIgnoreEffect, runtimeIgnoreState } from "../src/install/builder.js";
+import { validateAll } from "../src/plugins/validator.js";
+import { printBanner } from "../src/core/banner.js";
+import { PERSONAL_LINES, planGitignore, removeGitignoreBlock, writeGitignoreBlock } from "../src/install/gitignore.js";
+import { GITIGNORE_DECLINE, GITIGNORE_WRITE, askRuntimeVersioning, consentEach, consentToGitignore, consentToBlock, BLOCK_WRITE, BLOCK_DECLINE, updateOutcome, consentToRemove, detectUserLanguage, removalMode, replacementMode, removalOutcome, CANCELLED, OUTCOME_KEPT_BY_CHOICE, OUTCOME_KEPT_NO_CONSENT, OUTCOME_REMOVED, REMOVE, promptsNoIdioma } from "../src/install/prompts.js";
+import { getMessages } from "../src/core/messages.js";
+import { renderError } from "../src/core/errors.js";
+import { renderText } from "../src/core/ui-text.js";
+import { askInstall } from "../src/install/install-interactive.js";
+import { MANIFEST_NAME, QUESTION_FIELDS, problemText, readUserLanguage } from "../src/install/manifest.js";
+import { instructionsToRemove, planInstructions, removeInstructionBlock, writeInstructionBlock } from "../src/install/instructions.js";
 import {
   add as addPlugin, remove as removePlugin, restore as restorePlugins,
   installedPluginNames, CANCELLED_EXIT_CODE,
-} from "../src/plugin-installer.js";
+} from "../src/install/plugin-installer.js";
 import {
   addRegistry, fetchIndex, listRegistries, readDetectionMode,
   readLawsPreamble, removeRegistry,
-} from "../src/registry.js";
-import { diff as lockfileDiff, readLockfile, replacedByEngine, LOCKFILE_NAME } from "../src/lockfile.js";
-import { detect } from "../src/detector.js";
-import { hookFilePath, planOwnedHooks, removeHook, rewriteOwnedHooks, runtimeCommand, syncOwnedHooks, writeHook, writtenEvents } from "../src/hooks.js";
-import { checkBareModelFlag, checkEffortFlags, effortFlagLevels, mergeEfforts, parseArgs, resolveEffortFlags, resolveModelFlags } from "../src/cli-args.js";
+} from "../src/plugins/registry.js";
+import { diff as lockfileDiff, readLockfile, replacedByEngine, LOCKFILE_NAME } from "../src/install/lockfile.js";
+import { detect } from "../src/plugins/detector.js";
+import { hookFilePath, planOwnedHooks, removeHook, rewriteOwnedHooks, runtimeCommand, syncOwnedHooks, writeHook, writtenEvents } from "../src/install/hooks.js";
+import { checkBareModelFlag, checkEffortFlags, effortFlagLevels, mergeEfforts, parseArgs, resolveEffortFlags, resolveModelFlags } from "../src/core/cli-args.js";
 
 const SCOPES = ["project", "global"];
 // Comandos de skill plugável: o posicional é o nome da skill/registry, nunca o repositório.
@@ -63,7 +63,7 @@ const isTTY = process.stdin.isTTY && process.stdout.isTTY;
 // flag --user-language > manifesto (project > global) > locale.
 let M = getMessages(detectUserLanguage(process.env));
 
-// Adaptador real de prompts, no idioma escolhido; o src/prompts.js o recebe injetado (nos testes,
+// Adaptador real de prompts, no idioma escolhido; o src/install/prompts.js o recebe injetado (nos testes,
 // um stub). A tabela e lida na hora da chamada, porque o main refina o `M` depois daqui.
 const CLACK = promptsNoIdioma(p, () => M);
 
@@ -681,7 +681,7 @@ const commandIo = (flags, positional) => ({
 });
 // `mgr spec validate` — valida artefato do PROJETO do usuário. Não confundir com `mgr validate`,
 // que valida autoria de SKILL.md: são contratos diferentes (ADR-0012). Descoberta, leitura e
-// política vivem em src/plan-validator.js (INV-5); a cola vive em src/commands/spec.js.
+// política vivem em src/sdd/plan-validator.js (INV-5); a cola vive em src/commands/spec.js.
 const cmdSpecValidate = (flags, positional) => specValidate(commandIo(flags, positional));
 
 // Linhas das leis no plano de instalação: onde elas são gravadas e se o preâmbulo está ligado.
@@ -733,7 +733,7 @@ function linhasDoGate(plan) {
 }
 
 // `mgr spec next` — a próxima AÇÃO, não o estado (ADR-0014). Sem `--all`: a pergunta "o que faço
-// agora" é sobre UMA feature. Aqui só há formatação e exit code; a decisão vive em src/plan-next.js.
+// agora" é sobre UMA feature. Aqui só há formatação e exit code; a decisão vive em src/sdd/plan-next.js.
 const cmdSpecNext = (flags, positional) => specNext(commandIo(flags, positional));
 
 // `mgr spec status` — delegação à cola testável em src/commands/spec.js.
@@ -777,7 +777,7 @@ function runtimeEffectOf(plan) {
 // demais são os dos agentes que ela subiu. Medir só a conversa contaria a economia e esconderia o
 // custo, porque agente não compartilha contexto.
 //
-// A decisão vive em `src/tokens.js`; aqui só se escolhe a palavra e o exit code.
+// A decisão vive em `src/core/tokens.js`; aqui só se escolhe a palavra e o exit code.
 function cmdTokens(flags, positional) {
   if (!positional.length) {
     console.error(M.errorPrefix(M.tokensNoInput));
@@ -1137,7 +1137,7 @@ function cmdBuild(flags) {
 // `mgr audit` — a Camada 1 da defesa do ADR-0007, e o comparador que aquele ADR situou na Fase 2.
 //
 // A borda faz o que a §2.2 manda: despacha, formata e devolve exit code. A inferência, a comparação
-// e a leitura das skills vivem em `src/audit.js` — e o `done_when` desta task proíbe o contrário.
+// e a leitura das skills vivem em `src/plugins/audit.js` — e o `done_when` desta task proíbe o contrário.
 //
 // **Só `EXCEEDS` sai com 1.** O ADR-0007 manda "bloqueio ou warning forte" para "declarou X e
 // detectou X+Y", e para "não declarou" manda CONFIRMAÇÃO OBRIGATÓRIA, que é exigência do fluxo de

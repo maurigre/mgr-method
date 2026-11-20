@@ -16,7 +16,7 @@ Isto ainda não tem origem [TO DEFINE]
 
 ## Ponteiro que resolve
 
-O separador de bloco cercado vive aqui [code:src/markdown.js:1]
+O separador de bloco cercado vive aqui [code:src/core/markdown.js:1]
 
 ## Segundo ponteiro que resolve
 
@@ -26,12 +26,12 @@ comentário do `.gitignore` já registra sobre `test/fixtures/specs/`. A prova d
 arquivo gitignored resolve vive num repositório temporário, dentro do teste, com `.gitignore`
 próprio.
 
-O construtor de achado vive aqui [code:src/findings.js:1]
+O construtor de achado vive aqui [code:src/sdd/findings.js:1]
 
 ## PROV-2 — o arquivo ou a linha não existe
 
 O arquivo sumiu [code:src/nao-existe.js:1]
-A linha está além do fim do arquivo [code:src/markdown.js:9999]
+A linha está além do fim do arquivo [code:src/core/markdown.js:9999]
 
 ## PROV-4 — o caminho escapa da raiz
 
@@ -39,9 +39,9 @@ O caminho sobe para fora do projeto [code:../fora-da-raiz.md:1]
 
 ## PROV-1 — parece etiqueta e não é nenhuma das oito
 
-Linha zero não é linha [code:src/markdown.js:0]
-Linha negativa não é linha [code:src/markdown.js:-3]
-Ponteiro sem linha [code:src/markdown.js]
+Linha zero não é linha [code:src/core/markdown.js:0]
+Linha negativa não é linha [code:src/core/markdown.js:-3]
+Ponteiro sem linha [code:src/core/markdown.js]
 O número do ADR não é número [adr:dezesseis]
 A seção do PRD não foi dita [prd]
 O brief não recebe argumento [brief:secao]

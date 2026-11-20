@@ -1,7 +1,7 @@
 // Cola do comando `instructions` do runtime. Humble Object: só parse, formatação e exit code; o IO entra
-// por `io` e a raiz por `root`. A decisão, o arquivo e o estado do bloco vivem em src/instructions.js.
-import { renderError } from "../errors.js";
-import { installedEngines, instructionStates, planInstructions, writeInstructionBlock } from "../instructions.js";
+// por `io` e a raiz por `root`. A decisão, o arquivo e o estado do bloco vivem em src/install/instructions.js.
+import { renderError } from "../core/errors.js";
+import { installedEngines, instructionStates, planInstructions, writeInstructionBlock } from "../install/instructions.js";
 
 const COMANDO = "instructions";
 

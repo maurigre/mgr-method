@@ -186,8 +186,8 @@ export function measureArtifacts(lista) {
 // Devolve { paths, method, problem } onde paths e lista de caminhos dos artefatos
 // declarados. Se method == "literal layout" e nao tem arquivo no disco, problem sera
 // nomeado. Se spec status falhar, cai automaticamente para layout literal.
-// `specsDir` e injetado (Humble Object, o mesmo padrao do `fetchImpl` em src/registry.js e
-// do `exists = existsSync` em src/installer.js). Sem ele, testar a contagem de artefato
+// `specsDir` e injetado (Humble Object, o mesmo padrao do `fetchImpl` em src/plugins/registry.js e
+// do `exists = existsSync` em src/install/installer.js). Sem ele, testar a contagem de artefato
 // extra exigia ESCREVER dentro de `specs/` — a pasta real de especificacoes do projeto —
 // durante o `npm test`. Medido na P1.2: o teste criava `specs/test-measure-cost-<ts>/`
 // porque nao havia outra via, e lixo ficaria lá se a limpeza nao chegasse ao `finally`.
@@ -300,9 +300,9 @@ function readExecutionRecord(sliceDir) {
 // Le o arquivo 04-plan.md e extrai tasks que estao com status: done.
 // Devolve lista de IDs de task (ex: ["P0.1", "P0.2"]).
 //
-// A FORMA do cabecalho e a mesma que `src/plan-parser.js:18` aceita: `#{2,4}` seguido do id,
+// A FORMA do cabecalho e a mesma que `src/sdd/plan-parser.js:18` aceita: `#{2,4}` seguido do id,
 // SEM exigir travessao. Isto e uma SEGUNDA COPIA dessa forma, e e defeito conhecido desta casa
-// — fonte unica exigiria exportar `TASK_HEADER` de `src/plan-parser.js`, e o `CA-8` desta fatia
+// — fonte unica exigiria exportar `TASK_HEADER` de `src/sdd/plan-parser.js`, e o `CA-8` desta fatia
 // proibe tocar `src/`. Fica nomeado como fatia propria, nao como desenho aceitavel.
 //
 // Medido em 2026-10-01: a versao anterior exigia `###` E travessao. O plano desta fatia usa

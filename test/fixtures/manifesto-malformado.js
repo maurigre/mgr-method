@@ -165,7 +165,7 @@ export const CASOS_FORA_DO_LACO = [
 export function rodar(cmd, dir, env = {}) {
   const home = tempDir("mgr-home-");
   try {
-    const ambiente = { ...process.env, HOME: home, LC_ALL: "C", ...env };
+    const ambiente = { ...process.env, HOME: home, LC_ALL: "C", NO_COLOR: "1", ...env };
     for (const chave of ["LANG", "LANGUAGE", "LC_MESSAGES"]) delete ambiente[chave];
     const resultado = spawnSync("node", [BIN, ...cmd], { encoding: "utf8", cwd: dir, env: ambiente });
     return { code: resultado.status, stdout: `${resultado.stdout}`, stderr: `${resultado.stderr}` };

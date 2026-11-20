@@ -26,7 +26,7 @@ async function mgr(home, args) {
       encoding: "utf8",
       timeout: CLI_TIMEOUT_MS,
       cwd: home,
-      env: { ...process.env, LC_ALL: "C", LANG: "C", LANGUAGE: "", HOME: home },
+      env: { ...process.env, LC_ALL: "C", LANG: "C", LANGUAGE: "", NO_COLOR: "1", HOME: home },
     });
     return { code: 0, stdout, stderr };
   } catch (error) {

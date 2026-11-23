@@ -62,7 +62,7 @@ export const CORE_ROLES = {
 
 const LAW_HEADER = /^### (L\d+\.\d+) — (.+?) +`\[([A-Za-z, ]+)\]`$/;
 
-// Parsing puro, sem IO — o padrão de checkSkill em src/validator.js.
+// Parsing puro, sem IO — o padrão de checkSkill em src/plugins/validator.js.
 export function parseLaws(text) {
   const laws = [];
   for (const [index, line] of text.split("\n").entries()) {
@@ -184,7 +184,7 @@ export function checkResolved(installedSkillsDir) {
 }
 
 export const CHARTER_TOKEN = "{{MGR_CHARTER}}";
-// This is a deliberate copy of what src/catalog.js declares as SHARED_DIR. It exists so that the
+// This is a deliberate copy of what src/core/catalog.js declares as SHARED_DIR. It exists so that the
 // verifier does not depend on the source it verifies; a divergence must turn red, never silent.
 // A test locks both copies against divergence.
 export const SHARED_TREE_NAME = "_shared";

@@ -39,7 +39,7 @@ const ESTES_DOIS = (id, plantar, extra = {}) => {
     { id: `${NO_INSTALL[criterio] ?? criterio}:${rotulo}:install`, comando: "install", args: INSTALAR_COM_MOTOR, plantar, ...extra },
   ];
 };
-const EXISTENTE_NO_TESTE_DE_IDIOMA = "test/output-language.test.js";
+const EXISTENTE_NO_TESTE_DE_IDIOMA = "test/e2e/output-language.test.js";
 
 export const CASOS_DE_CLI = [
   ...ESTES_DOIS("CA-1:skillsDirs string", campo("skillsDirs", "x")),

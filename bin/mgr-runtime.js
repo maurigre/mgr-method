@@ -4,7 +4,7 @@ import console from "node:console";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { RUNTIME_DIR_NAME, readVersion } from "../src/bundle.js";
+import { RUNTIME_DIR_NAME, readVersion } from "../src/core/bundle.js";
 import { agents } from "../src/commands/agents.js";
 import { doctor } from "../src/commands/doctor.js";
 import { detectHook, precompactHook } from "../src/commands/hooks.js";
@@ -13,13 +13,13 @@ import { instructions } from "../src/commands/instructions.js";
 import { origin } from "../src/commands/origin.js";
 import { sddCheck } from "../src/commands/sdd-check.js";
 import { specNext, specStatus, specValidate } from "../src/commands/spec.js";
-import { parseArgs } from "../src/cli-args.js";
+import { parseArgs } from "../src/core/cli-args.js";
 import { ids as engineIds } from "../src/engines/index.js";
-import { readManifest, readUserLanguage } from "../src/manifest.js";
-import { renderError } from "../src/errors.js";
-import { getMessages } from "../src/messages.js";
-import { projectRoot } from "../src/project-root.js";
-import { detectUserLanguage } from "../src/prompts.js";
+import { readManifest, readUserLanguage } from "../src/install/manifest.js";
+import { renderError } from "../src/core/errors.js";
+import { getMessages } from "../src/core/messages.js";
+import { projectRoot } from "../src/sdd/project-root.js";
+import { detectUserLanguage } from "../src/install/prompts.js";
 import { escreverSync, lerPayload, modificados } from "./hook-io.js";
 
 const hookProc = {

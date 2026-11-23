@@ -10,10 +10,10 @@
 // instalador. O QUE AINDA FALTA: `adapters.js` (tradução de manifest) e a saída do hook de sessão
 // em `detector.js`. É o resto da dívida que o ADR-0010 nomeou, e continua declarada.
 //
-// Dado puro, sem IO: mesmo padrão de `checkSkill` em src/validator.js.
+// Dado puro, sem IO: mesmo padrão de `checkSkill` em src/plugins/validator.js.
 import claudeCode from "./claude-code.js";
 import copilot from "./copilot.js";
-import { UsageError } from "../errors.js";
+import { UsageError } from "../core/errors.js";
 
 const ENGINES = { "claude-code": claudeCode, copilot };
 

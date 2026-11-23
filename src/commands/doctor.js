@@ -1,8 +1,8 @@
 // Cola do comando `mgr doctor`. Humble Object: só formatação e exit code; o IO entra por `io` e a
-// raiz por `root`. O diagnóstico vive em src/doctor.js.
-import * as bundle from "../bundle.js";
-import * as diag from "../doctor.js";
-import { renderText } from "../ui-text.js";
+// raiz por `root`. O diagnóstico vive em src/doctor/doctor.js.
+import * as bundle from "../core/bundle.js";
+import * as diag from "../doctor/doctor.js";
+import { renderText } from "../core/ui-text.js";
 
 // O runtime copiado para o projeto (`bin/mgr-runtime.js`) chama `doctor(base)` sem dizer se o pacote
 // esta junto, e a copia nao leva `skills/` nem `shared/`. Em vez de editar o runtime, o comando

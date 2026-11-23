@@ -3,14 +3,14 @@
 // `root`, para o teste exercitar sem processo filho. A decisão de `agents` e `set` vive em src/
 // (registry, builder); o `apply` também lê o disco e grava o arquivo do agente, e só delega a troca
 // do frontmatter ao builder.
-import * as installer from "../installer.js";
-import { renderError } from "../errors.js";
-import * as catalogo from "../catalog.js";
-import { CONFIGURED, LOCAL_CONFIG_NAME, configPath, misplacedTeamKeys, readAgents, readPersonal, writeAgentPolicy } from "../registry.js";
+import * as installer from "../install/installer.js";
+import { renderError } from "../core/errors.js";
+import * as catalogo from "../core/catalog.js";
+import { CONFIGURED, LOCAL_CONFIG_NAME, configPath, misplacedTeamKeys, readAgents, readPersonal, writeAgentPolicy } from "../plugins/registry.js";
 import * as engineDescriptors from "../engines/index.js";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { agentFrontmatter, gateSummary, inheritingModel, isOurAgent, replaceAgentFrontmatter } from "../builder.js";
+import { agentFrontmatter, gateSummary, inheritingModel, isOurAgent, replaceAgentFrontmatter } from "../install/builder.js";
 
 const CAMPO_MODELO = "model";
 const CAMPO_ESFORCO = "effort";

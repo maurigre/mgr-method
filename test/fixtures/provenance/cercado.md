@@ -1,7 +1,7 @@
 # Fixture — etiqueta e marca dentro de bloco cercado
 
 O que está dentro de um exemplo é documentação, não conteúdo. O `stripFencedBlocks` de
-`src/markdown.js` é a fonte única disso, criada na fatia 2 — esta fixture a exercita, não a copia.
+`src/core/markdown.js` é a fonte única disso, criada na fatia 2 — esta fixture a exercita, não a copia.
 
 ## Bloco cercado com crase — nada aqui pode produzir achado
 
@@ -9,7 +9,7 @@ O que está dentro de um exemplo é documentação, não conteúdo. O `stripFenc
 A decisão veio do documento de origem [brief]
 O arquivo sumiu [code:src/nao-existe.js:1]
 O prazo ainda não foi escolhido [TO DEFINE]
-Linha zero não é linha [code:src/markdown.js:0]
+Linha zero não é linha [code:src/core/markdown.js:0]
 ```
 
 ## Bloco cercado com til — nada aqui pode produzir achado

@@ -170,7 +170,11 @@ test("readDetectionMode: ausente é suggest, manual é aceito, auto é recusado 
   assert.equal(readDetectionMode(core), "suggest");
 
   writeConfig(core, { registries: [], detectionMode: "auto" });
-  assert.throws(() => readDetectionMode(core), /"auto" is not available yet.*mgr audit/s);
+  assert.throws(() => readDetectionMode(core), (erro) => erro instanceof UsageError
+    && erro.key === "detectionModeAutoUnavailable"
+    && /requires a human confirmation/.test(erro.message)
+    && /does not attest security/.test(erro.message)
+    && !/not implemented|not available yet/.test(erro.message));
 
   writeConfig(core, { registries: [], detectionMode: "sugerir" });
   assert.throws(() => readDetectionMode(core), /invalid detectionMode: "sugerir"/);

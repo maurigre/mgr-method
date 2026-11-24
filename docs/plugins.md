@@ -163,11 +163,13 @@ Set `detectionMode` in `.mgr-core/config.json`:
 |---|---|
 | `suggest` (default) | detects and asks |
 | `manual` | never suggests; detection only when you run `mgr detect` |
-| `auto` | **not available yet** — refused with an explicit error |
+| `auto` | **not offered** — refused with an explicit error |
 
-`auto` would install without asking. It stays out until `mgr audit` exists, because today
-`trusted` is only a flag someone typed, and that is not a basis for skipping human review.
-Configuring it and silently getting `suggest` would be worse than the error.
+`auto` would install without asking. It is retired, not postponed: every install needs a human
+confirmation, and `mgr audit` reports findings but does not attest security, so it cannot stand in
+for that confirmation. It is reconsidered only when skills carry verifiable provenance and an audit
+gives a verdict, and third-party skills are in real use. Configuring it and silently getting
+`suggest` would be worse than the error.
 
 Without a TTY — CI, for instance — `suggest` prints what it found and installs nothing.
 
@@ -229,8 +231,8 @@ and `dir` records which one this entry owns.
 3. `mgr install` / `mgr update` restore from the locked registry — not from whatever the
    local machine has configured — and refuse to proceed if the registry now serves a
    different version or checksum. A plugin is never updated silently.
-4. `--trusted` records that you trust a registry; in this version it does **not** enable
-   silent installs.
+4. `--trusted` records that you trust a registry; it does **not** enable silent installs —
+   every install still asks for a human confirmation.
 
 ## Publishing to a registry
 

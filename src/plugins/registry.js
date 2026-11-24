@@ -151,9 +151,9 @@ export const DEFAULT_DETECTION_MODE = "suggest";
 export function readDetectionMode(coreDir) {
   const mode = readConfig(coreDir).detectionMode;
   if (mode === undefined) return DEFAULT_DETECTION_MODE;
-  // `auto` está no vocabulário de D03 mas depende do `mgr audit` para existir: instalar sem
-  // confirmação humana precisa de uma base de auditoria que ainda não temos. Tratar como
-  // `suggest` em silêncio seria mentir sobre a política de segurança que o usuário configurou.
+  // `auto` foi retirado (ADR-0037): instalar skill exige confirmação humana (Camada 4 do ADR-0007), e
+  // o `mgr audit` aponta achados, mas não atesta segurança. Tratar como `suggest` em silêncio seria
+  // mentir sobre a política de segurança que o usuário configurou (ADR-0009, decisão 4).
   if (mode === "auto") {
     throw new UsageError("detectionModeAutoUnavailable");
   }

@@ -277,6 +277,12 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   Agora o aviso só sai com `agents.review` escrito, e o `--json` dá `aliasOverridden: false` nesse caso.
 - A leitura passa a nomear `reviewGate`, e não `agents.review`, quando o valor inválido vem do apelido
   `reviewGate`. A mensagem da recusa é a mesma na leitura e na escrita.
+- **A recusa do `detectionMode: "auto"` dizia que o `mgr audit` não está implementado**, o que é falso
+  desde que o comando existe (ADR-0021). Agora ela dá o motivo real: instalar uma skill sempre exige
+  confirmação humana, e o `mgr audit` aponta achados, mas não atesta segurança, então não substitui
+  essa confirmação. Ela também indica `suggest` (o padrão) ou `manual`. O modo `auto` passa de adiado
+  a retirado (ADR-0037), com gatilho de revisão. A recusa continua antes de qualquer escrita, com o
+  mesmo código de saída (1).
 
 ### Segurança
 - **O `uninstall` não apaga mais fora do projeto a partir de um manifesto adulterado (SEC-2, C-19).**

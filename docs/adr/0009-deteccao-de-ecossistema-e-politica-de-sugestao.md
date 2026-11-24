@@ -5,7 +5,7 @@ Deciders: Mauri Reis
 
 ## Status
 
-Accepted
+Accepted — decisão 4 (modo `auto` adiado até existir `mgr audit`) e a citação da "CONSTITUTION §6" (Context e decisão 4): emenda proposta no ADR-0037.
 
 ## Context
 

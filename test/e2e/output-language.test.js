@@ -944,3 +944,35 @@ test("should run every CLI acceptance criterion from CA-1 to CA-33 in the langua
   }
   for (const razao of fora.values()) assert.ok(razao.trim().length > 0);
 });
+
+const PADRAO_AUTO = /^(errorPrefix|detectionMode)/;
+const MOTIVO_DA_RECUSA = {
+  en: ["requires a human confirmation", "does not attest security"],
+  "pt-BR": ["exige confirmação humana", "não atesta segurança"],
+};
+
+for (const idioma of IDIOMAS) {
+  test(`should refuse detectionMode auto with the real reason only in ${idioma} and write nothing`, () => {
+    const repo = tempDir("mgr-auto-");
+    mkdirSync(path.join(repo, ".mgr-core"), { recursive: true });
+    const config = path.join(repo, ".mgr-core", "config.json");
+    writeFileSync(config, '{ "registries": [], "detectionMode": "auto" }\n');
+    const antes = readFileSync(config);
+    const resultado = cli(
+      ["install", "--engine", "claude-code", "--arch", "hexagonal", "--project-id", "au", "-y", "--user-language", idioma, repo],
+      { env: { LC_ALL: LOCALE_CONTRARIO[idioma] } },
+    );
+    assert.equal(resultado.status, 1, `auto e recusado antes de qualquer escrita: ${resultado.err}`);
+    assert.ok(resultado.err.includes(getMessages(idioma).detectionModeAutoUnavailable),
+      `a recusa em ${idioma} sai inteira da tabela do idioma configurado`);
+    exigirIdiomaUnico(idioma, [resultado.out, resultado.err], PADRAO_AUTO, [repo], "recusa do detectionMode auto");
+    for (const motivo of MOTIVO_DA_RECUSA[idioma]) {
+      assert.ok(resultado.err.includes(motivo), `a recusa em ${idioma} da o motivo real: ${motivo}`);
+    }
+    assert.doesNotMatch(`${resultado.out}\n${resultado.err}`, /not implemented|não está implementado/,
+      "a recusa nao pode afirmar que um comando existente nao esta implementado");
+    assert.equal(existsSync(path.join(repo, ".claude")), false, "nada do motor e gravado quando o auto e recusado");
+    assert.equal(existsSync(manifestoDe(repo)), false, "o manifesto nao e criado quando o auto e recusado");
+    assert.deepEqual(readFileSync(config), antes, "o config do usuario fica byte a byte");
+  });
+}

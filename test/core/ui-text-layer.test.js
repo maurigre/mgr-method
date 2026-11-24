@@ -404,8 +404,9 @@ const ERROS_DE_USO_EN = [
     "detectionModeAutoUnavailable",
     EN,
     [],
-    'detectionMode "auto" is not available yet: installing without human confirmation depends on '
-      + "`mgr audit`, which is not implemented",
+    'detectionMode "auto" is not supported: installing a skill always requires a human confirmation, and '
+      + "`mgr audit` reports findings but does not attest security, so it cannot replace that confirmation. "
+      + 'Use detectionMode "suggest" (the default) or "manual".',
   ],
   ["detectionModeInvalid", EN, ['"x"', ["ask", "never"]], 'invalid detectionMode: "x" (expected ask | never)'],
   [
@@ -1223,7 +1224,7 @@ for (const [nome, casos, quantidade] of FAMILIAS) {
     assert.equal(casos.length, quantidade);
   });
 
-  test(`should render ${nome} byte for byte equal to the literal transcribed from HEAD feee3b4 or to its correction ratified on 2026-11-18`, () => {
+  test(`should render ${nome} byte for byte equal to the literal transcribed from HEAD feee3b4 or to its correction ratified on 2026-11-18 or on 2026-11-24`, () => {
     for (const { caso, obtido, literal } of conferem(casos)) {
       assert.equal(obtido, literal, caso);
     }

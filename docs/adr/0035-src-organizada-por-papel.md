@@ -5,7 +5,9 @@ Deciders: Mauri Reis
 
 ## Status
 
-Proposed
+Accepted
+
+> Aceito pelo autor em 2026-11-23, com a fatia reorganiza-src (PR #58).
 
 ## Context
 

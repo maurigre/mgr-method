@@ -1,4 +1,4 @@
-// Oraculo da F1, parte 2 (RN-19, specs/entrega-f1-runtime-no-projeto/03-spec.md secoes 7 e 9). Prova que o
+// Oraculo da F1, parte 2 (RN-19, specs/archive/2026-10-09-entrega-f1-runtime-no-projeto/03-spec.md secoes 7 e 9). Prova que o
 // runtime instalado no projeto funciona SEM `mgr` no PATH, de um subdiretorio e sem rede. Regra inegociavel:
 // este arquivo NAO importa nada de `src/`; so executa processos filhos e le o disco. Os literais esperados
 // vem dos criterios CA-2, CA-3, CA-15 e CA-19 e da regra "Sem PATH" da secao 7.

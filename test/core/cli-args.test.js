@@ -199,3 +199,30 @@ test("should let the flag-declared effort win over the answered one for the same
 test("should keep the answered efforts when no effort was declared by flag", () => {
   assert.deepEqual(mergeEfforts({ execution: "medium" }, {}), { execution: "medium" });
 });
+
+test("should set archived to true when --archived is given", () => {
+  const { flags } = parseArgs(["--archived"], { engines: ENGINES });
+  assert.equal(flags.archived, true);
+});
+
+test("should read --date value from the next argument", () => {
+  const { flags } = parseArgs(["--date", "2026-01-15"], { engines: ENGINES });
+  assert.equal(flags.date, "2026-01-15");
+});
+
+test("should create the date key with undefined when --date is the last argument", () => {
+  const { flags } = parseArgs(["--date"], { engines: ENGINES });
+  assert.equal(Object.hasOwn(flags, "date"), true);
+  assert.equal(flags.date, undefined);
+});
+
+test("should keep positional arguments when --archived and --date are combined with them", () => {
+  const { flags, positional, unknownFlag } = parseArgs(
+    ["repo", "--archived", "--date", "2026-01-15", "slug"],
+    { engines: ENGINES },
+  );
+  assert.equal(flags.archived, true);
+  assert.equal(flags.date, "2026-01-15");
+  assert.deepEqual(positional, ["repo", "slug"]);
+  assert.equal(unknownFlag, null);
+});

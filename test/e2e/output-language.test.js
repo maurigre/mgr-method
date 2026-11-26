@@ -976,3 +976,41 @@ for (const idioma of IDIOMAS) {
     assert.deepEqual(readFileSync(config), antes, "o config do usuario fica byte a byte");
   });
 }
+
+const PADRAO_ARCHIVE = /^(errorPrefix|specArchive|specArchived|specStatusNotFound)/;
+
+const repoComFatiaAbertaEArquivada = () => {
+  const repo = tempDir("mgr-archive-");
+  mkdirSync(path.join(repo, "docs", "sdd"), { recursive: true });
+  writeFileSync(path.join(repo, "docs", "sdd", "CONSTITUTION.md"), "# Constituicao\n");
+  writeFileSync(path.join(repo, "docs", "sdd", "00-overview.md"), "# Visao geral\n");
+  mkdirSync(path.join(repo, "specs", "aberta"), { recursive: true });
+  writeFileSync(path.join(repo, "specs", "aberta", "04-plan.md"), "### P0.1 — aberta\n- **status:** todo\n");
+  mkdirSync(path.join(repo, "specs", "archive", "2026-01-01-velha"), { recursive: true });
+  writeFileSync(path.join(repo, "specs", "archive", "2026-01-01-velha", "01-brief.md"), "# Brief\n");
+  return repo;
+};
+
+for (const idioma of IDIOMAS) {
+  test(`should refuse spec archive with every reason only in ${idioma} and move nothing`, () => {
+    const repo = repoComFatiaAbertaEArquivada();
+    const resultado = cli(["spec", "archive", "aberta", "--user-language", idioma], { cwd: repo, env: { LC_ALL: LOCALE_CONTRARIO[idioma] } });
+    assert.equal(resultado.status, 1, `fatia com task aberta e recusada: ${resultado.err}`);
+    const tabela = getMessages(idioma);
+    assert.ok(resultado.err.includes(tabela.specArchiveRefused("aberta")), `a recusa em ${idioma} abre com a frase do idioma`);
+    assert.ok(resultado.err.includes(tabela.specArchiveTasksNotDone("P0.1")), `o motivo da task aberta sai em ${idioma}`);
+    assert.ok(resultado.err.includes(tabela.specArchiveNoCompletion), `o motivo do fechamento ausente sai em ${idioma}`);
+    exigirIdiomaUnico(idioma, [resultado.out, resultado.err], PADRAO_ARCHIVE, [repo], "recusa do spec archive");
+    assert.equal(existsSync(path.join(repo, "specs", "aberta", "04-plan.md")), true, "a recusa nao move nada");
+  });
+
+  test(`should refuse spec status of an archived feature only in ${idioma} naming where it is`, () => {
+    const repo = repoComFatiaAbertaEArquivada();
+    const resultado = cli(["spec", "status", "velha", "--user-language", idioma], { cwd: repo, env: { LC_ALL: LOCALE_CONTRARIO[idioma] } });
+    assert.equal(resultado.status, 1, `fatia arquivada nao e retomada: ${resultado.err}`);
+    assert.equal(resultado.out, "", "a recusa nao escreve nada em stdout");
+    assert.ok(resultado.err.includes(getMessages(idioma).specArchived("velha", path.join("specs", "archive", "2026-01-01-velha"))),
+      `a recusa em ${idioma} diz onde a fatia esta`);
+    exigirIdiomaUnico(idioma, [resultado.out, resultado.err], PADRAO_ARCHIVE, [repo], "spec status de fatia arquivada");
+  });
+}

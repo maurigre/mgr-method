@@ -8,6 +8,7 @@ import { check, checkConsistency, checkPresence } from "../../src/sdd/plan-rules
 import { findingTexts } from "../../src/sdd/findings.js";
 import { getMessages } from "../../src/core/messages.js";
 import { renderText } from "../../src/core/ui-text.js";
+import { pastasDasFatias } from "../helpers/fonte-presente.js";
 
 const plano = (corpo, comMarcador = true) =>
   parse(`${comMarcador ? "<!-- mgr-plan-format: 1 -->\n" : ""}${corpo}`);
@@ -143,13 +144,11 @@ test("os planos sem marcador recebem o aviso PLAN-0, nunca erro", () => {
 });
 
 test("os planos vivos, quando existem, também produzem zero erros", () => {
-  const raizSpecs = path.join(RAIZ, "specs");
-  if (!existsSync(raizSpecs)) return;
   const erros = [];
-  for (const entrada of readdirSync(raizSpecs, { withFileTypes: true }).filter((e) => e.isDirectory())) {
-    const arquivo = path.join(raizSpecs, entrada.name, "04-plan.md");
+  for (const pasta of pastasDasFatias()) {
+    const arquivo = path.join(pasta, "04-plan.md");
     if (!existsSync(arquivo)) continue;
-    erros.push(...check(parse(readFileSync(arquivo, "utf8")), entrada.name).filter((f) => f.severity === "error"));
+    erros.push(...check(parse(readFileSync(arquivo, "utf8")), path.basename(pasta)).filter((f) => f.severity === "error"));
   }
   assert.deepEqual(erros.map((f) => `${f.file}:${f.code}`), []);
 });

@@ -12,7 +12,7 @@ import { initials } from "../src/commands/initials.js";
 import { instructions } from "../src/commands/instructions.js";
 import { origin } from "../src/commands/origin.js";
 import { sddCheck } from "../src/commands/sdd-check.js";
-import { specNext, specStatus, specValidate } from "../src/commands/spec.js";
+import { specArchive, specNext, specStatus, specValidate } from "../src/commands/spec.js";
 import { parseArgs } from "../src/core/cli-args.js";
 import { ids as engineIds } from "../src/engines/index.js";
 import { readManifest, readUserLanguage } from "../src/install/manifest.js";
@@ -39,7 +39,7 @@ function readManifestSafe(root) {
 
 function specCommand(base, positional) {
   const sub = positional[0];
-  const table = { status: specStatus, validate: specValidate, next: specNext, initials };
+  const table = { status: specStatus, validate: specValidate, next: specNext, initials, archive: specArchive };
   if (!table[sub]) {
     console.error(base.M.runtimeUnknownSpecSub(sub || ""));
     return 1;

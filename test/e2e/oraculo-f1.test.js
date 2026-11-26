@@ -1,4 +1,4 @@
-// Oraculo da F1 (RN-19, specs/entrega-f1-runtime-no-projeto/03-spec.md secao 7). Prova que a instalacao
+// Oraculo da F1 (RN-19, specs/archive/2026-10-09-entrega-f1-runtime-no-projeto/03-spec.md secao 7). Prova que a instalacao
 // entrega o que foi DECIDIDO. Regra inegociavel: este arquivo NAO importa nada de `src/` (nem catalog,
 // nem RUNTIME_FILES, nem descritores). So executa `bin/mgr.js` como processo filho e le o disco; todo
 // valor esperado e literal escrito a partir das decisoes (secoes 3 e 5, DT-7/D-9, DT-8/DT-9, DT-13,

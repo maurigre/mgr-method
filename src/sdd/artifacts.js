@@ -3,10 +3,13 @@
 // Existe porque `planFiles` e `specFiles` eram o mesmo corpo com um nome de arquivo diferente, e
 // `SPECS_DIR` estava declarado duas vezes. Espelhar o papel do outro validador é o desenho; copiar
 // o código não era necessário para isso.
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
 export const SPECS_DIR = "specs";
+export const ARCHIVE_DIR = "archive";
+
+const NOME_ARQUIVADO = /^(\d{4}-\d{2}-\d{2})-(.+)$/;
 
 // A raiz do repositório, subindo a partir de um diretório qualquer.
 //
@@ -41,6 +44,8 @@ export function slugs(repo) {
   return readdirSync(raiz, { withFileTypes: true })
     .filter((entrada) => entrada.isDirectory())
     .map((entrada) => entrada.name)
+    // specs/archive/ guarda as fatias arquivadas e nunca é feature.
+    .filter((nome) => nome !== ARCHIVE_DIR)
     .sort();
 }
 
@@ -48,4 +53,47 @@ export function slugs(repo) {
 export function artifactFiles(repo, slug, nomeDoArquivo) {
   const nomes = slug ? [slug] : slugs(repo);
   return nomes.map((nome) => path.join(repo, SPECS_DIR, nome, nomeDoArquivo)).filter(existsSync);
+}
+
+// As fatias em specs/archive/, uma entrada por subpasta. A entrada é discriminada por `recognized`
+// (DES-1, sem `null` como sentinela): reconhecida carrega `date` e `slug`; fora do padrão
+// AAAA-MM-DD-<slug> carrega só `name` e `path`, e NÃO some, porque a listagem mostra exatamente o que
+// está no archive. Sem a pasta, ou com `specs/archive` que não é diretório, devolve vazio sem lançar.
+export function archivedEntries(repo) {
+  const raiz = path.join(repo, SPECS_DIR, ARCHIVE_DIR);
+  if (!existsSync(raiz) || !statSync(raiz).isDirectory()) return [];
+  return readdirSync(raiz, { withFileTypes: true })
+    .filter((entrada) => entrada.isDirectory())
+    .map((entrada) => {
+      const base = { name: entrada.name, path: path.join(SPECS_DIR, ARCHIVE_DIR, entrada.name) };
+      const casou = NOME_ARQUIVADO.exec(entrada.name);
+      return casou ? { ...base, recognized: true, date: casou[1], slug: casou[2] } : { ...base, recognized: false };
+    })
+    .sort(ordemDeArquivada);
+}
+
+// Reconhecidos por data decrescente e slug crescente; os fora do padrão no fim, por nome.
+function ordemDeArquivada(primeira, segunda) {
+  if (!primeira.recognized || !segunda.recognized) {
+    if (primeira.recognized) return -1;
+    if (segunda.recognized) return 1;
+    return comparaTexto(primeira.name, segunda.name);
+  }
+  return comparaTexto(segunda.date, primeira.date) || comparaTexto(primeira.slug, segunda.slug);
+}
+
+function comparaTexto(esquerda, direita) {
+  if (esquerda === direita) return 0;
+  return esquerda < direita ? -1 : 1;
+}
+
+// Onde um slug vive. `reserved` é o nome do próprio archive; ativa vence arquivada.
+export function locate(repo, slug) {
+  if (slug === ARCHIVE_DIR) return { state: "reserved" };
+  if (slugs(repo).includes(slug)) return { state: "active" };
+  const paths = archivedEntries(repo)
+    .filter((entrada) => entrada.recognized && entrada.slug === slug)
+    .map((entrada) => entrada.path);
+  if (paths.length > 0) return { state: "archived", paths };
+  return { state: "absent" };
 }

@@ -3706,3 +3706,22 @@ test("shouldShowLocalizedUsageErrorInEnFromInstructionsCatch", () => {
     assert.doesNotMatch(resultado.stderr, SEM_FECHO_PT);
   });
 });
+
+test("should answer the same for active features with or without a specs/archive folder", () => {
+  const repo = repoComArtefatos({ um: ["01-brief.md", "02-prd.md"], dois: ["01-brief.md"] });
+  writeFileSync(path.join(repo, "specs", "um", "04-plan.md"), "<!-- mgr-plan-format: 1 -->\n### P0.1 — um\n- **priority:** P0\n- **depends_on:** []\n- **status:** todo\n");
+  const bin = fileURLToPath(new URL("../../bin/mgr.js", import.meta.url));
+  const responder = () => ["status --all --json", "validate --all --json", "next um --json"].map((linha) => {
+    try {
+      return { saida: execFileSync("node", [bin, "spec", ...linha.split(" ")], ptBR(repo)), status: 0 };
+    } catch (erro) {
+      return { saida: erro.stdout, status: erro.status };
+    }
+  });
+  const antes = responder();
+  const velha = path.join(repo, "specs", "archive", "2026-01-01-velha");
+  mkdirSync(velha, { recursive: true });
+  writeFileSync(path.join(velha, "01-brief.md"), "x");
+  writeFileSync(path.join(velha, "04-plan.md"), "<!-- mgr-plan-format: 1 -->\n### P0.1 — velha\n- **status:** done\n");
+  assert.deepEqual(responder(), antes, "uma fatia arquivada nao muda nenhuma resposta sobre as ativas");
+});

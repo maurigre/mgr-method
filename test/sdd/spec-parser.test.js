@@ -1,11 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "../../src/sdd/spec-parser.js";
 import { parse as parsePlan } from "../../src/sdd/plan-parser.js";
 import { stripFencedBlocks } from "../../src/core/markdown.js";
+import { pastasDasFatias } from "../helpers/fonte-presente.js";
 
 const RAIZ = fileURLToPath(new URL("../..", import.meta.url));
 const FIXTURES = path.join(RAIZ, "test", "fixtures", "specs");
@@ -67,12 +68,10 @@ test("stripFencedBlocks preserva a numeração das linhas", () => {
 });
 
 test("as specs vivas, quando existem, são lidas sem quebra e nenhuma declara por acidente", () => {
-  const raizSpecs = path.join(RAIZ, "specs");
-  if (!existsSync(raizSpecs)) return;
-  for (const entrada of readdirSync(raizSpecs, { withFileTypes: true }).filter((e) => e.isDirectory())) {
-    const arquivo = path.join(raizSpecs, entrada.name, "03-spec.md");
+  for (const pasta of pastasDasFatias()) {
+    const arquivo = path.join(pasta, "03-spec.md");
     if (!existsSync(arquivo)) continue;
-    assert.doesNotThrow(() => parse(readFileSync(arquivo, "utf8")), entrada.name);
+    assert.doesNotThrow(() => parse(readFileSync(arquivo, "utf8")), path.basename(pasta));
   }
 });
 

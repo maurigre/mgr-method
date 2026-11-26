@@ -11,6 +11,7 @@ import { renderText } from "../../src/core/ui-text.js";
 import { validateSpecs } from "../../src/sdd/spec-validator.js";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { tempDir } from "../../scripts/lib/tmp.mjs";
+import { pastasDasFatias } from "../helpers/fonte-presente.js";
 
 const RAIZ = fileURLToPath(new URL("../..", import.meta.url));
 const FIXTURES = path.join(RAIZ, "test", "fixtures", "specs");
@@ -92,13 +93,11 @@ test("todo achado emitido tem remediação e exemplo", () => {
 });
 
 test("as specs vivas, quando existem, produzem zero erros", () => {
-  const raizSpecs = path.join(RAIZ, "specs");
-  if (!existsSync(raizSpecs)) return;
   const erros = [];
-  for (const entrada of readdirSync(raizSpecs, { withFileTypes: true }).filter((e) => e.isDirectory())) {
-    const arquivo = path.join(raizSpecs, entrada.name, "03-spec.md");
+  for (const pasta of pastasDasFatias()) {
+    const arquivo = path.join(pasta, "03-spec.md");
     if (!existsSync(arquivo)) continue;
-    erros.push(...check(parse(readFileSync(arquivo, "utf8")), entrada.name).filter((f) => f.severity === "error"));
+    erros.push(...check(parse(readFileSync(arquivo, "utf8")), path.basename(pasta)).filter((f) => f.severity === "error"));
   }
   assert.deepEqual(erros.map((f) => `${f.file}:${f.code}`), []);
 });

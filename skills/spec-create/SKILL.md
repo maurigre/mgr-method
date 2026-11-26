@@ -220,6 +220,7 @@ human commit.
 policy is not a per-case choice); it records `specs/<slug>/ai/`, updates `ai/index.md`,
 and `06-completion.md` references the feature's `ai/`. `disabled` or absent → skip,
 without asking again (changing the policy = editing the CONSTITUTION).
+**Archive (only after the PR is merged, never before):** suggest `node {{MGR_RUNTIME}} spec archive <slug>` to archive the feature; the command refuses if the plan has an open task, if the completion does not declare the SDD, or if `sdd-check` fails.
 
 ## Active context control (Law of the flow — NEVER compact)
 

@@ -1,4 +1,9 @@
 import { existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { SPECS_DIR, archivedEntries, locate, slugs } from "../../src/sdd/artifacts.js";
+
+const RAIZ_DO_REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 // `specs/` e gitignored neste projeto: em CI e em clone novo a pasta nao existe. Um teste que a
 // leia tem de tolerar a ausencia DECLARANDO-A, nunca em silencio — e quem chama ainda deve usar
@@ -14,3 +19,19 @@ export const fontePresente = (caminho) => {
   }
   return existe;
 };
+
+// Uma fatia ativa vence; senão, a única arquivada com o mesmo slug. Duas arquivadas com o mesmo
+// slug são ambiguidade e lançam, para o teste não ler a fatia errada em silêncio.
+export const caminhoDaFatia = (slug, raiz = RAIZ_DO_REPO) => {
+  const onde = locate(raiz, slug);
+  if (onde.state !== "archived") return path.join(raiz, SPECS_DIR, slug);
+  if (onde.paths.length > 1) {
+    throw new Error(`ha mais de um arquivado com o slug "${slug}": ${onde.paths.join(", ")}`);
+  }
+  return path.join(raiz, onde.paths[0]);
+};
+
+export const pastasDasFatias = (raiz = RAIZ_DO_REPO) => [
+  ...slugs(raiz).map((slug) => path.join(raiz, SPECS_DIR, slug)),
+  ...archivedEntries(raiz).map((entrada) => path.join(raiz, entrada.path)),
+];

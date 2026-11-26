@@ -49,8 +49,10 @@ origin set greenfield|brownfield` (o spec-init também pergunta). hooks
 gravados em .claude/settings.local.json: SessionStart · PreCompact arquivos
 pessoais do MGR ignorados em .gitignore (bloco gerenciado) git: conferindo se
 .mgr-core/runtime está no índice (git ls-files, só leitura) git: não é um
-repositório git, ou o git não está disponível; conferência pulada Pronto!
-Comece com /spec-init e depois /spec-create por feature.
+repositório git, ou o git não está disponível; conferência pulada revisão
+externa por outro fornecedor: desligada (`mgr review enable` liga; veja
+docs/external-review.md) Pronto! Comece com /spec-init e depois /spec-create
+por feature.
 
 $ mgr status <REPO>
 [project] MGR v<VERSION> — claude-code — self-contained-core-runtime projeto:

@@ -9,8 +9,9 @@ import * as provValidator from "../sdd/prov-validator.js";
 import * as docValidator from "../sdd/doc-validator.js";
 import * as planNext from "../sdd/plan-next.js";
 import * as specStatusModel from "../sdd/spec-status.js";
-import { ARCHIVE_DIR, SPECS_DIR, archivedEntries, locate, slugs } from "../sdd/artifacts.js";
-import { REASONS, applyArchive, planArchive } from "../sdd/archive.js";
+import { ARCHIVE_DIR, SPECS_DIR, locate, slugs } from "../sdd/artifacts.js";
+import { REASONS, applyArchive, archivedWithWaivers, isWaivedEntry, planArchive } from "../sdd/archive.js";
+import { gitComLog } from "./review.js";
 import { blocking, findingTexts, summarize } from "../sdd/findings.js";
 import { getMessages } from "../core/messages.js";
 import { renderText } from "../core/ui-text.js";
@@ -243,7 +244,8 @@ function statusDasArquivadas(repo, flags, positional, io, M) {
     io.err(M.errorPrefix(M.specStatusArchivedExclusive));
     return 1;
   }
-  const arquivadas = archivedEntries(repo);
+  // A fatia arquivada com a revisão externa dispensada ganha a marca; sem prova, nada muda (DT-11).
+  const arquivadas = archivedWithWaivers(repo);
   if (flags.json) {
     io.out(JSON.stringify({ schemaVersion: 1, archived: arquivadas }, null, 2));
     return 0;
@@ -253,9 +255,9 @@ function statusDasArquivadas(repo, flags, positional, io, M) {
     return 0;
   }
   for (const entrada of arquivadas) {
-    io.out(entrada.recognized
-      ? M.specStatusArchivedLine(entrada.date, entrada.slug)
-      : M.specStatusArchivedUnrecognized(entrada.name));
+    if (!entrada.recognized) io.out(M.specStatusArchivedUnrecognized(entrada.name));
+    else if (isWaivedEntry(entrada)) io.out(M.specStatusArchivedLineWaived(entrada.date, entrada.slug));
+    else io.out(M.specStatusArchivedLine(entrada.date, entrada.slug));
   }
   return 0;
 }
@@ -274,6 +276,10 @@ const LINHA_DO_MOTIVO = {
   [REASONS.noCompletion]: (M) => M.specArchiveNoCompletion,
   [REASONS.completionFindings]: (M, motivo) => M.specArchiveCompletionFindings(motivo.codes.join(", "), motivo.slug),
   [REASONS.sddCheckFailed]: (M, motivo) => M.specArchiveSddFailed(motivo.reason),
+  [REASONS.externalReviewMissing]: (M, motivo) => M.specArchiveReviewMissing(motivo.slug, motivo.consent === "given"),
+  [REASONS.externalReviewInvalid]: (M, motivo) => M.specArchiveReviewInvalid(motivo.detail),
+  [REASONS.externalReviewStale]: (M, motivo) => M.specArchiveReviewStale(motivo.paths),
+  [REASONS.externalReviewUnverifiable]: (M) => M.specArchiveReviewUnverifiable,
   [REASONS.destinationExists]: (M, motivo) => M.specArchiveDestinationExists(motivo.destination),
 };
 
@@ -281,7 +287,7 @@ const LINHA_DO_MOTIVO = {
 // as três condições valerem (ADR-0036, K06a). Slug sempre explícito: o movimento é irreversível, e
 // rodar de dentro da pasta que vai mudar de lugar deixaria o shell num diretório que não existe.
 // `--all` é recusado, não ignorado: cada fatia é arquivada pelo nome, uma de cada vez.
-export function specArchive({ root, flags, positional, io, M }) {
+export function specArchive({ root, flags, positional, io, M, reviewIo }) {
   const repo = root;
   if (flags.all) {
     io.err(M.errorPrefix(M.specArchiveAllRefused));
@@ -292,7 +298,9 @@ export function specArchive({ root, flags, positional, io, M }) {
     io.err(M.errorPrefix(M.specArchiveNeedsSlug));
     return 1;
   }
-  const plano = planArchive(repo, slug, Object.hasOwn(flags, "date") ? { date: flags.date } : {});
+  // O git só é chamado com a revisão externa ligada (DT-13), e cada chamada tem o seu par de LOG-2.
+  const git = reviewIo === undefined ? undefined : gitComLog(reviewIo.git, io, M);
+  const plano = planArchive(repo, slug, Object.hasOwn(flags, "date") ? { date: flags.date, git } : { git });
   if (plano.outcome === "refused") {
     io.err(M.errorPrefix(M.specArchiveRefused(slug)));
     for (const motivo of plano.reasons) io.err(LINHA_DO_MOTIVO[motivo.code](M, motivo, slug));
@@ -306,6 +314,8 @@ export function specArchive({ root, flags, positional, io, M }) {
     return 1;
   }
   io.out(M.specArchiveDone(movimento.from, movimento.to));
+  // Dispensa nunca é silenciosa (resposta 3c): o aviso sai em destaque, com quem, quando e o motivo.
+  if (plano.waived) io.out(io.style.bold(io.style.yellow(M.specArchiveWaived(plano.waived.by, plano.waived.at, plano.waived.reason))));
   if (plano.sddWarnings > 0) io.out(M.specArchiveSddWarnings(plano.sddWarnings));
   return 0;
 }

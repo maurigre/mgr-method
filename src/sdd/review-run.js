@@ -8,12 +8,12 @@
 // `unchangedSince` confere que o HEAD e a árvore são os mesmos; se não forem, nada é gravado.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { readExternalReview, readReviewConsent } from "../plugins/registry.js";
+import { readExternalReview, readInitials, readReviewConsent } from "../plugins/registry.js";
 import { get as reviewerOf } from "../reviewers/index.js";
 import { SPECS_DIR, artifactFiles, locate } from "./artifacts.js";
 import {
-  GUIDE_PATH, PROOF_FILE, REVIEW_REASONS, appendEntry, buildPrompt, checkCitations, fileHashes, nextRound,
-  parseProof, reviewedPaths, validateResponse,
+  GUIDE_PATH, PROOF_FILE, REVIEW_REASONS, appendEntry, buildPrompt, checkCitations, fileHashes, lastDecisive,
+  nextRound, parseProof, reviewedPaths, staleFiles, validateResponse,
 } from "./external-review.js";
 
 // A lista PERMITIDA de fontes do eixo Spec (DT-8): os artefatos da fatia, por `artifactFiles`.
@@ -171,3 +171,59 @@ export function appendToProof(repo, plano, entry) {
 }
 
 export const proofFileOf = (repo, plano) => relativo(repo, plano.proofPath);
+
+// A 4ª condição do `spec archive` (spec DT-13; RN-6, RN-7), como FATO para o `decide` do archive. Com a
+// funcionalidade desligada devolve `off` sem ler a prova e sem chamar o git (RN-5): a saída do archive
+// fica a de sempre. Ligada, julga pela última entrada decisiva da prova (`review` ou `waiver`); a
+// `failure` não é prova. A revisão vale se os arquivos dela estão iguais no HEAD de agora (resposta 2).
+export function archiveReviewFact(repo, slug, { coreDir, git }) {
+  const config = readExternalReview(coreDir);
+  if (!isEnabled(config)) return { state: "off" };
+  const proofPath = path.join(repo, SPECS_DIR, slug, PROOF_FILE);
+  const proof = parseProof(existsSync(proofPath) ? readFileSync(proofPath, "utf8") : undefined, slug);
+  if (proof.state === "invalid") return { state: "invalid", detail: proof.detail };
+  const decisiva = proof.state === "valid" ? lastDecisive(proof.proof) : { found: false };
+  if (!decisiva.found) {
+    const consent = config.reviewers.every((id) => readReviewConsent(coreDir, id).state === "given") ? "given" : "absent";
+    return { state: "missing", consent };
+  }
+  const entrada = decisiva.entry;
+  if (entrada.kind === "waiver") return { state: "waived", by: entrada.by, at: entrada.at, reason: entrada.reason };
+  if (!config.reviewers.includes(entrada.reviewer)) return { state: "invalid", detail: `reviewer ${entrada.reviewer}` };
+  if (git === undefined || !git.isRepo(repo)) return { state: "unverifiable" };
+  const atuais = git.contentsAt(repo, "HEAD", entrada.files.map((arquivo) => arquivo.path));
+  if (!atuais.ok) return { state: "unverifiable" };
+  const mudados = staleFiles(entrada.files, fileHashes(atuais.files));
+  return mudados.length ? { state: "stale", paths: mudados } : { state: "ok" };
+}
+
+// A dispensa de uma fatia (para a marca do `spec status --archived`). Sem prova, ou prova que não termina
+// em dispensa, é `{ waived: false }`: projeto sem a funcionalidade não ganha campo nenhum (DT-11).
+export function waiverOf(dir, slug) {
+  const proofPath = path.join(dir, PROOF_FILE);
+  if (!existsSync(proofPath)) return { waived: false };
+  const proof = parseProof(readFileSync(proofPath, "utf8"), slug);
+  if (proof.state !== "valid") return { waived: false };
+  const decisiva = lastDecisive(proof.proof);
+  return decisiva.found && decisiva.entry.kind === "waiver" ? { waived: true } : { waived: false };
+}
+
+// A dispensa (DT-11; resposta 3c): só humana, com motivo, e só depois de uma falha DO REVISOR registrada
+// como última entrada; não é atalho para quem não quer revisar. `by` são as iniciais da camada pessoal.
+export function planWaiver(repo, { slug, flags, reason, coreDir }) {
+  if (slug === undefined || flags.all) return recusa(REVIEW_REASONS.needsSlug);
+  const local = locate(repo, slug);
+  if (local.state === "archived") return recusa(REVIEW_REASONS.archived, { slug });
+  if (local.state !== "active") return recusa(REVIEW_REASONS.notFound, { slug });
+  if (typeof reason !== "string" || reason.trim() === "") return recusa(REVIEW_REASONS.waiveNeedsReason);
+  const iniciais = readInitials(coreDir);
+  if (iniciais.state !== "recorded") return recusa(REVIEW_REASONS.waiveNeedsInitials);
+  const proofPath = path.join(repo, SPECS_DIR, slug, PROOF_FILE);
+  const proof = parseProof(existsSync(proofPath) ? readFileSync(proofPath, "utf8") : undefined, slug);
+  if (proof.state === "invalid") return recusa(REVIEW_REASONS.proofUnreadable, { file: relativo(repo, proofPath), detail: proof.detail });
+  const ultima = proof.state === "valid" ? proof.proof.entries.at(-1) : undefined;
+  if (ultima?.kind !== "failure") return recusa(REVIEW_REASONS.waiveNeedsFailure, { slug });
+  return { outcome: "ready", slug, proofPath, proof, by: iniciais.initials, reason: reason.trim(), failure: ultima.code };
+}
+
+export const waiverEntry = (plano, at) => ({ kind: "waiver", by: plano.by, at, reason: plano.reason, failure: plano.failure });

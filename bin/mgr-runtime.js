@@ -41,7 +41,9 @@ function readManifestSafe(root) {
 
 function specCommand(base, positional) {
   const sub = positional[0];
-  const table = { status: specStatus, validate: specValidate, next: specNext, initials, archive: specArchive };
+  // O archive recebe a borda do git: com a revisão externa ligada, a condição (4) confere o HEAD (DT-13).
+  const arquivar = (contexto) => specArchive({ ...contexto, reviewIo: createReviewIo() });
+  const table = { status: specStatus, validate: specValidate, next: specNext, initials, archive: arquivar };
   if (!table[sub]) {
     console.error(base.M.runtimeUnknownSpecSub(sub || ""));
     return 1;

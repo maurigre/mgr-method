@@ -3745,3 +3745,30 @@ test("should keep an external review that is off byte for byte on update", () =>
   rodarUpdate(repo);
   assert.deepEqual(lerConfigDoTime(repo).externalReview, desligada);
 });
+
+const instalarCapturando = (repo) => {
+  const bin = fileURLToPath(new URL("../../bin/mgr.js", import.meta.url));
+  return execFileSync("node", [bin, "install", repo, "--engine", "claude-code", "--scope", "project", "--all-skills", "-y"], { ...ptBR(repo), encoding: "utf8" });
+};
+const contar = (texto, trecho) => texto.split(trecho).length - 1;
+
+test("should tell once on install that external review is off, and never on update", () => {
+  const repo = diretorioTemporario();
+  const mensagens = getMessages("pt-BR");
+  const saida = instalarCapturando(repo);
+  assert.equal(contar(saida, mensagens.installExternalReviewOff), 1, saida);
+  assert.equal(contar(saida, mensagens.installExternalReviewOn), 0);
+  const atualizacao = `${rodarUpdate(repo)}`;
+  assert.equal(contar(atualizacao, mensagens.installExternalReviewOff), 0);
+  assert.equal(contar(atualizacao, mensagens.installExternalReviewOn), 0);
+});
+
+test("should tell on install that external review is on and keep the config as it was", () => {
+  const repo = diretorioTemporario();
+  instalarPelaCli(repo);
+  const ligada = { enabled: true, reviewers: ["codex"] };
+  writeFileSync(configDoTime(repo), JSON.stringify({ ...lerConfigDoTime(repo), externalReview: ligada }), "utf8");
+  const saida = instalarCapturando(repo);
+  assert.equal(contar(saida, getMessages("pt-BR").installExternalReviewOn), 1, saida);
+  assert.deepEqual(lerConfigDoTime(repo).externalReview, ligada);
+});

@@ -158,7 +158,7 @@ const projetoComRevisaoLigada = (dir) => {
   writeFileSync(path.join(dir, ".mgr-core", "config.local.json"), JSON.stringify({ externalReviewConsent: { codex: { at: "2026-11-26T10:00:00.000Z" } } }));
 };
 
-for (const sub of ["enable", "disable", "consent", "revoke", "set"]) {
+for (const sub of ["enable", "disable", "consent", "revoke", "set", "waive"]) {
   test(`should refuse review ${sub} in the project runtime as a lifecycle command`, comProjeto((dir) => {
     const recusa = runIn(dir, "review", sub);
     assert.equal(recusa.status, 1);

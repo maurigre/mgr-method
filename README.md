@@ -121,7 +121,7 @@ announced; `uninstall` removes the block and deletes the file only if nothing el
 > The skills call the runtime by explicit path. If it is missing, they **stop** and show the restore
 > command (`npx mgr-method@<version> update`) instead of going on without it.
 >
-> The runtime answers only the commands the skills use — `spec status|validate|next`, `spec status --archived`, `spec archive <slug> [--date YYYY-MM-DD]`, `agents`
+> The runtime answers only the commands the skills use — `spec status|validate|next`, `spec status --archived`, `spec archive <slug> [--date YYYY-MM-DD]`, `review external <slug> --base <ref>`, `review status`, `agents`
 > (`set`, `apply`), `origin set`, `spec initials [set <value>]` (your initials for branch names, in `.mgr-core/config.local.json`), `origin [--json]` (reads the recorded origin: `recorded`, `absent` or
 > `invalid`, the last one exits 1), `doctor`, `sdd-check [--json]`, `instructions [--json]` / `instructions write` (the managed block above), `detect`, `precompact`, `version` — and
 > refuses lifecycle commands (`install`, `update`, `add`…), naming the `npx mgr-method@<version>`
@@ -201,6 +201,7 @@ code-analyzer ─ final 2-axis review: Standards (THE project's guide) + Spec (d
 | **Artifact validation** | `mgr spec validate` checks a feature's **plan** and **spec**: a dependency that does not exist, a cycle in the DAG, granularity, a task with no done criterion, and a spec with no identified acceptance criterion. Format declared by a marker; **nothing that already exists is reproved** (ADR-0012, ADR-0013). |
 | **Resolved paths** | `mgr spec status` answers which artifacts exist for a feature and **where they are**, so a skill stops building paths from convention. The vocabulary has no `done`: file existence is not step completion, and the payload says so in `basis` and `warning` (ADR-0015). |
 | **Archived features** | `archive` is a reserved name in `specs/`. `mgr spec archive <slug>` moves a finished feature to `specs/archive/<date>-<slug>/`, and only when every task of the plan is `done`, the `06-completion.md` exists and declares the SDD with no `DOC-3`/`DOC-4`, and `sdd-check` passes. A refusal lists what failed and moves nothing (ADR-0036). |
+| **External review (opt-in)** | Off by default. `mgr review enable` turns it on for the project and each person consents once (`mgr review consent`); `mgr review external <slug> --base <ref>` has a reviewer from another provider (`codex`) review the changed files on both axes, with every citation checked, and records a proof with the hash of each file. **The code goes to the reviewer's provider and uses your account quota.** With it on, `spec archive` also requires that proof to match HEAD. See [docs/external-review.md](docs/external-review.md). |
 | **A model per intent** | `mgr agents` answers which model and effort each step of the flow uses, and where each value came from. Drafting, execution and review are declared once in `.mgr-core/config.json`; the install writes them into each agent and the invocation can override the model without reinstalling. Changing `effort` needs `mgr agents apply`, and the command says so (ADR-0017). |
 | **Verifiable provenance** | `mgr spec validate` also checks the provenance tag you wrote: its form, and whether a `[code:<path>:<line>]` pointer resolves on disk from the repository root. It never **requires** a tag — the rule that would demand one was rejected on measurement, and nothing that already exists is reproved (ADR-0016). |
 | **Next action, not state** | `mgr spec next` answers what to do now: the task, its exact artifact, the helper skill and what it waits on. A task can declare `status: done`, and the answer always says how much state the plan declares — with none, it says it does not know what you have already done (ADR-0014). |
@@ -293,6 +294,7 @@ agents/             # the 3 agent moulds (drafting, execution, review gate)
 shared/             # cross-cutting sources: architecture and quality rules, laws
 docs/adr/           # the decisions, Nygard format — versioned and self-contained
 docs/plugins.md     # plugin skill format: manifest, registry, lockfile, capability matrix
+docs/external-review.md # opt-in external review: what leaves the machine, commands, proof, archive
 docs/engine-hooks.md # hook capability matrix for the six engines studied, with source and date
 test/               # node:test; mirrors the src/ folders, plus scripts/, e2e/, conteudo/ (shipped content), arquitetura/
 ```

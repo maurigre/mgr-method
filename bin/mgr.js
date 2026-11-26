@@ -10,11 +10,12 @@ import * as catalogo from "../src/core/catalog.js";
 import { agents } from "../src/commands/agents.js";
 import { specArchive, specNext, specStatus, specValidate } from "../src/commands/spec.js";
 import { review } from "../src/commands/review.js";
+import { isEnabled } from "../src/sdd/review-run.js";
 import { createReviewIo } from "./review-io.js";
 import { detectHook, precompactHook, suggestionsFor } from "../src/commands/hooks.js";
 import { escreverSync, lerPayload, modificados } from "./hook-io.js";
 import { projectRoot } from "../src/sdd/project-root.js";
-import { LOCAL_CONFIG_NAME, ORIGINS, configPath, misplacedTeamKeys, readAgents, readOrigin, readPersonal, readRuntimeVersioning } from "../src/plugins/registry.js";
+import { LOCAL_CONFIG_NAME, ORIGINS, configPath, misplacedTeamKeys, readAgents, readExternalReview, readOrigin, readPersonal, readRuntimeVersioning } from "../src/plugins/registry.js";
 import { indexedFiles } from "./git-index.js";
 import * as engineRegistry from "../src/engines/index.js";
 import * as tokens from "../src/core/tokens.js";
@@ -421,6 +422,12 @@ async function cmdInstall(flags, positional) {
   // DT-8: a leitura do git fica no fim, depois de todas as escritas (lockfile e sugestoes aceitas).
   if (plan.runtimeVersioning.value === "unversioned") {
     reportGitIndex({ repo: plan.repo, relDir: relRuntime, gitIndex: indexedFiles, M, info: (t) => p.log.info(t), warn: (t) => p.log.warn(t) });
+  }
+  // Uma linha que só descreve a revisão externa, sem perguntar nem gravar (spec §11.3, CA-24): o install
+  // nunca liga a funcionalidade (RN-2), e o update não repete a linha.
+  if (plan.scope === "project") {
+    const revisaoLigada = isEnabled(readExternalReview(installer.coreDir(plan.scope, plan.repo)));
+    p.log.info(revisaoLigada ? M.installExternalReviewOn : M.installExternalReviewOff);
   }
   p.outro(pc.green(M.done));
   return skip.length ? 1 : 0;
@@ -831,7 +838,7 @@ function cmdSpec(flags, positional) {
   if (sub === "next") return cmdSpecNext(flags, positional.slice(1));
   if (sub === "status") return cmdSpecStatus(flags, positional.slice(1));
   if (sub === "initials") return initials(commandIo(flags, positional.slice(1)));
-  if (sub === "archive") return specArchive(commandIo(flags, positional.slice(1)));
+  if (sub === "archive") return specArchive({ ...commandIo(flags, positional.slice(1)), reviewIo: createReviewIo() });
   console.error(M.errorPrefix(M.unknownCommand(`${COMANDO_SPEC} ${sub || ""}`.trim())));
   return 1;
 }

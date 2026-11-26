@@ -377,6 +377,13 @@ const en = ({ invocation, lifecycle }) => ({
   reviewDirty: (paths) => `uncommitted changes outside specs/ (${paths.join(", ")}): commit them first, because the proof records HEAD and the reviewer would read something else. Nothing was sent`,
   reviewEmptyDiff: (base) => `no file changed since ${base} outside specs/: there is nothing to review, and nothing was sent`,
   reviewProofUnreadable: (file, detail) => `${file} is not a proof this version can read (${detail}): it was not overwritten, and nothing was sent`,
+  installExternalReviewOff: `external review by another provider: off (\`${lifecycle} review enable\` turns it on; see docs/external-review.md)`,
+  installExternalReviewOn: `external review by another provider: ON in this project; before your first review, run \`${lifecycle} review consent\``,
+  reviewWaiveConfirm: (slug, failure) => `Archive \`${slug}\` WITHOUT external review, after the reviewer failure ${failure}? The waiver is recorded with your initials and announced by spec archive`,
+  reviewWaiveNeedsReason: "`review waive` needs --reason \"<why>\": a waiver without a reason is not accepted",
+  reviewWaiveNeedsInitials: `\`review waive\` records who waived: set your initials first with \`${invocation} spec initials set <xx>\``,
+  reviewWaiveNeedsFailure: (slug) => `\`${slug}\` has no recorded reviewer failure as its last entry: a waiver exists for a reviewer that is down, not to skip the review`,
+  reviewWaived: (slug, by) => `external review of ${slug} waived by ${by}; spec archive will announce it`,
   reviewCalling: (id, step) => `calling ${id} (${step})...`,
   reviewGitCalling: (step) => `running git (${step})...`,
   reviewGitCalled: (step, ok) => `git (${step}) ${ok ? "succeeded" : "failed"}`,
@@ -537,6 +544,12 @@ specArchiveDone: (from, to) => `archived: ${from} → ${to}`,
   specArchiveNoCompletion: "  (2) no completion: 06-completion.md does not exist",
   specArchiveCompletionFindings: (codes, slug) => `  (2) the completion fails ${codes}: run \`${invocation} spec validate ${slug}\``,
   specArchiveSddFailed: (reason) => `  (3) sdd-check fails (${reason}): run \`${invocation} sdd-check\``,
+  specArchiveReviewMissing: (slug, consentGiven) => `  (4) no external review of this feature: run \`${invocation} review external ${slug} --base <ref>\`${consentGiven ? "" : `; first, consent with \`${lifecycle} review consent\``}`,
+  specArchiveReviewInvalid: (detail) => `  (4) the external review proof cannot be read (${detail}): it was not overwritten`,
+  specArchiveReviewStale: (paths) => `  (4) the external review no longer covers the current files (${paths.join(", ")}): run the review again`,
+  specArchiveReviewUnverifiable: "  (4) the external review cannot be checked against HEAD without a git repository",
+  specArchiveWaived: (by, at, reason) => `ARCHIVED WITHOUT EXTERNAL REVIEW: waived by ${by} on ${at}: ${reason}`,
+  specStatusArchivedLineWaived: (date, slug) => `  ${date}  ${slug}  (external review waived)`,
   specArchiveDestinationExists: (dest) => `  ${dest} already exists: an archived feature is never overwritten`,
   specArchiveReserved: `\`archive\` is a reserved name, not a feature: specs/archive/ holds the archived features — list them with \`${invocation} spec status --archived\``,
   specArchived: (slug, paths) => `\`${slug}\` is archived at ${paths}: an archived feature is not resumed or revalidated — a correction is a new feature`,
@@ -700,7 +713,8 @@ Usage: mgr <command> [options]
   spec status      which artifacts exist ([<slug>], --all, --json)
   spec archive     moves a finished feature to specs/archive/ (<slug> [--date YYYY-MM-DD]); spec status --archived lists them
   review           external review by another provider, off by default (enable | disable | consent |
-                   revoke | set --model --effort | status | external <slug> --base <ref>)
+                   revoke | set --model --effort | status | external <slug> --base <ref> |
+                   waive <slug> --reason <why>)
   spec initials    reads or records your initials for branch names (set <value>, --json)
   agents           which model and effort each intent uses, and where each
                    value came from ([<intent>], --json)
@@ -1286,6 +1300,13 @@ const ptBR = ({ invocation, lifecycle }) => ({
   reviewDirty: (paths) => `há alterações não commitadas fora de specs/ (${paths.join(", ")}): faça o commit antes, porque a prova grava o HEAD e o revisor leria outra coisa. Nada foi enviado`,
   reviewEmptyDiff: (base) => `nenhum arquivo mudou desde ${base} fora de specs/: não há o que revisar, e nada foi enviado`,
   reviewProofUnreadable: (file, detail) => `${file} não é uma prova que esta versão consegue ler (${detail}): ele não foi sobrescrito, e nada foi enviado`,
+  installExternalReviewOff: `revisão externa por outro fornecedor: desligada (\`${lifecycle} review enable\` liga; veja docs/external-review.md)`,
+  installExternalReviewOn: `revisão externa por outro fornecedor: LIGADA neste projeto; antes da sua primeira revisão, rode \`${lifecycle} review consent\``,
+  reviewWaiveConfirm: (slug, failure) => `Arquivar \`${slug}\` SEM revisão externa, depois da falha do revisor ${failure}? A dispensa fica gravada com as suas iniciais e o spec archive a anuncia`,
+  reviewWaiveNeedsReason: "`review waive` precisa de --reason \"<motivo>\": dispensa sem motivo não é aceita",
+  reviewWaiveNeedsInitials: `\`review waive\` grava quem dispensou: grave antes as suas iniciais com \`${invocation} spec initials set <xx>\``,
+  reviewWaiveNeedsFailure: (slug) => `\`${slug}\` não tem uma falha do revisor registrada como última entrada: a dispensa existe para revisor fora do ar, não para pular a revisão`,
+  reviewWaived: (slug, by) => `revisão externa de ${slug} dispensada por ${by}; o spec archive vai anunciar`,
   reviewCalling: (id, step) => `chamando ${id} (${step})...`,
   reviewGitCalling: (step) => `rodando git (${step})...`,
   reviewGitCalled: (step, ok) => `git (${step}) ${ok ? "concluiu" : "falhou"}`,
@@ -1446,6 +1467,12 @@ specArchiveDone: (from, to) => `arquivada: ${from} → ${to}`,
   specArchiveNoCompletion: "  (2) não há fechamento: o 06-completion.md não existe",
   specArchiveCompletionFindings: (codes, slug) => `  (2) o fechamento falha em ${codes}: rode \`${invocation} spec validate ${slug}\``,
   specArchiveSddFailed: (reason) => `  (3) o sdd-check falha (${reason}): rode \`${invocation} sdd-check\``,
+  specArchiveReviewMissing: (slug, consentGiven) => `  (4) não há revisão externa desta fatia: rode \`${invocation} review external ${slug} --base <ref>\`${consentGiven ? "" : `; antes, consinta com \`${lifecycle} review consent\``}`,
+  specArchiveReviewInvalid: (detail) => `  (4) a prova da revisão externa não pode ser lida (${detail}): ela não foi sobrescrita`,
+  specArchiveReviewStale: (paths) => `  (4) a revisão externa não cobre mais os arquivos atuais (${paths.join(", ")}): rode a revisão de novo`,
+  specArchiveReviewUnverifiable: "  (4) a revisão externa não pode ser conferida contra o HEAD sem um repositório git",
+  specArchiveWaived: (by, at, reason) => `ARQUIVADA SEM REVISÃO EXTERNA: dispensada por ${by} em ${at}: ${reason}`,
+  specStatusArchivedLineWaived: (date, slug) => `  ${date}  ${slug}  (revisão externa dispensada)`,
   specArchiveDestinationExists: (dest) => `  ${dest} já existe: uma feature arquivada nunca é sobrescrita`,
   specArchiveReserved: `\`archive\` é um nome reservado, não uma feature: specs/archive/ guarda as features arquivadas — liste-as com \`${invocation} spec status --archived\``,
   specArchived: (slug, paths) => `\`${slug}\` está arquivada em ${paths}: uma feature arquivada não é retomada nem revalidada — uma correção é uma feature nova`,
@@ -1609,7 +1636,8 @@ Uso: mgr <comando> [opções]
   spec status      quais artefatos existem ([<slug>], --all, --json)
   spec archive     move uma feature concluída para specs/archive/ (<slug> [--date AAAA-MM-DD]); spec status --archived lista as arquivadas
   review           revisão externa por outro fornecedor, desligada por padrão (enable | disable |
-                   consent | revoke | set --model --effort | status | external <slug> --base <ref>)
+                   consent | revoke | set --model --effort | status | external <slug> --base <ref> |
+                   waive <slug> --reason <motivo>)
   spec initials    lê ou grava suas iniciais para nomes de branch (set <valor>, --json)
   agents           qual modelo e esforço cada intenção usa, e de onde veio
                    cada valor ([<intenção>], --json)

@@ -16,7 +16,7 @@ import { tempDir } from "../../scripts/lib/tmp.mjs";
 const IDIOMAS = ["en", "pt-BR"];
 const FICHA = reviewerOf("codex");
 const FATIA = "x";
-const SUBCOMANDOS = ["external", "status", "enable", "disable", "consent", "revoke", "set"];
+const SUBCOMANDOS = ["external", "status", "enable", "disable", "consent", "revoke", "set", "waive"];
 const AGORA = "2026-11-26T10:00:00Z";
 const DATA_DO_CONSENTIMENTO = "2026-11-26T10:00:00.000Z";
 const GUIA = "**(SEC-4)** Never build a shell\ncommand line as text.\n";
@@ -702,4 +702,55 @@ test("should warn past the two rounds of the flow before calling the reviewer, e
   const aviso = terceira.out.indexOf(terceira.mensagens.reviewRoundBeyondFlow(3));
   assert.ok(aviso >= 0);
   assert.ok(aviso < terceira.out.indexOf(terceira.mensagens.reviewCalling("codex", "--version")));
+});
+
+function comFalhaRegistrada({ semIniciais = false } = {}) {
+  const { root, core, reviewIo } = cenario({ modo: "falha" });
+  const local = JSON.parse(readFileSync(path.join(core, "config.local.json"), "utf8"));
+  writeFileSync(path.join(core, "config.local.json"), JSON.stringify(semIniciais ? local : { ...local, initials: "mr" }));
+  return { root, core, reviewIo };
+}
+
+test("should record a waiver with the initials, the reason and the failure it follows", async () => {
+  const { root, reviewIo } = comFalhaRegistrada();
+  const revisao = ambienteDe({ root, reviewIo });
+  assert.equal(await revisao.executar(["external", FATIA], { base: "HEAD~1" }), 1);
+  const amb = ambienteDe({ root, confirm: async () => ({ state: "yes" }) });
+  assert.equal(await amb.executar(["waive", FATIA], { reason: "  cota esgotada  " }), 0, amb.err.join("\n"));
+  assert.deepEqual(lerProva(root).entries.at(-1), { kind: "waiver", by: "mr", at: new Date(AGORA).toISOString(), reason: "cota esgotada", failure: "reviewer-failed" });
+  assert.ok(amb.out.includes(amb.mensagens.reviewWaived(FATIA, "mr")));
+});
+
+for (const [descricao, preparar, flags, linha] of [
+  ["without a reason", () => comFalhaRegistrada(), { reason: "   " }, (mensagens) => mensagens.reviewWaiveNeedsReason],
+  ["without initials", () => comFalhaRegistrada({ semIniciais: true }), { reason: "cota" }, (mensagens) => mensagens.reviewWaiveNeedsInitials],
+]) {
+  test(`should refuse a waiver ${descricao} and write nothing`, async () => {
+    const { root, reviewIo } = preparar();
+    const revisao = ambienteDe({ root, reviewIo });
+    await revisao.executar(["external", FATIA], { base: "HEAD~1" });
+    const provaAntes = readFileSync(caminhoDaProva(root), "utf8");
+    const amb = ambienteDe({ root, confirm: async () => ({ state: "yes" }) });
+    assert.equal(await amb.executar(["waive", FATIA], flags), 1);
+    assert.deepEqual(amb.err, [amb.mensagens.errorPrefix(linha(amb.mensagens))]);
+    assert.equal(readFileSync(caminhoDaProva(root), "utf8"), provaAntes);
+  });
+}
+
+test("should refuse a waiver when the last entry is not a reviewer failure", async () => {
+  const { root } = comFalhaRegistrada();
+  const amb = ambienteDe({ root, confirm: async () => ({ state: "yes" }) });
+  assert.equal(await amb.executar(["waive", FATIA], { reason: "cota" }), 1);
+  assert.deepEqual(amb.err, [amb.mensagens.errorPrefix(amb.mensagens.reviewWaiveNeedsFailure(FATIA))]);
+  assert.equal(existsSync(caminhoDaProva(root)), false);
+});
+
+test("should refuse a waiver without a terminal and write nothing", async () => {
+  const { root, reviewIo } = comFalhaRegistrada();
+  await ambienteDe({ root, reviewIo }).executar(["external", FATIA], { base: "HEAD~1" });
+  const provaAntes = readFileSync(caminhoDaProva(root), "utf8");
+  const amb = ambienteDe({ root, confirm: async () => ({ state: "no-tty" }) });
+  assert.equal(await amb.executar(["waive", FATIA], { reason: "cota" }), 1);
+  assert.deepEqual(amb.err, [amb.mensagens.errorPrefix(amb.mensagens.reviewNeedsTty("waive"))]);
+  assert.equal(readFileSync(caminhoDaProva(root), "utf8"), provaAntes);
 });

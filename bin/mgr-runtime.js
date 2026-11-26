@@ -11,6 +11,7 @@ import { detectHook, precompactHook } from "../src/commands/hooks.js";
 import { initials } from "../src/commands/initials.js";
 import { instructions } from "../src/commands/instructions.js";
 import { origin } from "../src/commands/origin.js";
+import { review } from "../src/commands/review.js";
 import { sddCheck } from "../src/commands/sdd-check.js";
 import { specArchive, specNext, specStatus, specValidate } from "../src/commands/spec.js";
 import { parseArgs } from "../src/core/cli-args.js";
@@ -19,8 +20,9 @@ import { readManifest, readUserLanguage } from "../src/install/manifest.js";
 import { renderError } from "../src/core/errors.js";
 import { getMessages } from "../src/core/messages.js";
 import { projectRoot } from "../src/sdd/project-root.js";
-import { detectUserLanguage } from "../src/install/prompts.js";
+import { confirmInTerminal, detectUserLanguage } from "../src/install/prompts.js";
 import { escreverSync, lerPayload, modificados } from "./hook-io.js";
+import { createReviewIo } from "./review-io.js";
 
 const hookProc = {
   escreverSync, lerPayload, modificados, stdoutFd: 1, stderrFd: 2,
@@ -45,6 +47,19 @@ function specCommand(base, positional) {
     return 1;
   }
   return table[sub]({ ...base, positional: positional.slice(1) });
+}
+
+// No runtime, so o que nao muda a politica do projeto: revisar e consultar. Ligar, desligar, consentir e
+// configurar sao do ciclo de vida (DT-14), e consentir exige um humano no terminal.
+const REVIEW_NO_RUNTIME = ["external", "status"];
+
+function reviewCommand(base, positional, lang) {
+  const sub = positional[0];
+  if (sub !== undefined && !REVIEW_NO_RUNTIME.includes(sub)) {
+    base.io.err(base.M.runtimeLifecycleRefused(`review ${sub}`));
+    return 1;
+  }
+  return review({ ...base, reviewIo: createReviewIo(), confirm: confirmInTerminal({}, false), language: lang });
 }
 
 async function main() {
@@ -80,6 +95,7 @@ async function main() {
       case "spec": return specCommand(base, positional);
       case "agents": return agents(base);
       case "origin": return origin(base);
+      case "review": return await reviewCommand(base, positional, lang);
       case "doctor": return doctor(base);
       case "sdd-check": return sddCheck(base);
       case "instructions": return instructions(base);

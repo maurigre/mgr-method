@@ -9,6 +9,8 @@ import * as installer from "../src/install/installer.js";
 import * as catalogo from "../src/core/catalog.js";
 import { agents } from "../src/commands/agents.js";
 import { specArchive, specNext, specStatus, specValidate } from "../src/commands/spec.js";
+import { review } from "../src/commands/review.js";
+import { createReviewIo } from "./review-io.js";
 import { detectHook, precompactHook, suggestionsFor } from "../src/commands/hooks.js";
 import { escreverSync, lerPayload, modificados } from "./hook-io.js";
 import { projectRoot } from "../src/sdd/project-root.js";
@@ -29,7 +31,7 @@ import { buildRuntime, gateSummary, inheritingModel, runtimeIgnoreEffect, runtim
 import { validateAll } from "../src/plugins/validator.js";
 import { printBanner } from "../src/core/banner.js";
 import { PERSONAL_LINES, planGitignore, removeGitignoreBlock, writeGitignoreBlock } from "../src/install/gitignore.js";
-import { GITIGNORE_DECLINE, GITIGNORE_WRITE, askRuntimeVersioning, consentEach, consentToGitignore, consentToBlock, BLOCK_WRITE, BLOCK_DECLINE, updateOutcome, consentToRemove, detectUserLanguage, removalMode, replacementMode, removalOutcome, CANCELLED, OUTCOME_KEPT_BY_CHOICE, OUTCOME_KEPT_NO_CONSENT, OUTCOME_REMOVED, REMOVE, promptsNoIdioma } from "../src/install/prompts.js";
+import { GITIGNORE_DECLINE, GITIGNORE_WRITE, askRuntimeVersioning, confirmInTerminal, consentEach, consentToGitignore, consentToBlock, BLOCK_WRITE, BLOCK_DECLINE, updateOutcome, consentToRemove, detectUserLanguage, removalMode, replacementMode, removalOutcome, CANCELLED, OUTCOME_KEPT_BY_CHOICE, OUTCOME_KEPT_NO_CONSENT, OUTCOME_REMOVED, REMOVE, promptsNoIdioma } from "../src/install/prompts.js";
 import { getMessages } from "../src/core/messages.js";
 import { renderError } from "../src/core/errors.js";
 import { renderText } from "../src/core/ui-text.js";
@@ -56,12 +58,13 @@ const PLUGIN_COMMANDS = ["add", "remove", "registry"];
 // resolveria o repo como `<cwd>/validate`, o manifesto não seria encontrado e o `userLanguage` do
 // projeto seria descartado — quebrando, só para o comando novo, a precedência
 // flag > manifesto > locale que os demais respeitam.
-const SUBCOMMAND_COMMANDS = ["spec", "agents", "tokens", "precompact", "origin", "runtime-versioning"];
+const SUBCOMMAND_COMMANDS = ["spec", "agents", "tokens", "precompact", "origin", "runtime-versioning", "review"];
 const isTTY = process.stdin.isTTY && process.stdout.isTTY;
 
 // Tabela de mensagens da CLI. Começa pelo locale; o main refina com a precedência
 // flag --user-language > manifesto (project > global) > locale.
-let M = getMessages(detectUserLanguage(process.env));
+let idiomaDaSaida = detectUserLanguage(process.env);
+let M = getMessages(idiomaDaSaida);
 
 // Adaptador real de prompts, no idioma escolhido; o src/install/prompts.js o recebe injetado (nos testes,
 // um stub). A tabela e lida na hora da chamada, porque o main refina o `M` depois daqui.
@@ -755,6 +758,12 @@ const cmdPrecompact = (flags) => precompactHook({ ...commandIo(flags, []), proc:
 // `mgr origin` — delegação à cola testável em src/commands/origin.js (despacha `set` lá dentro).
 const cmdOrigin = (flags, positional) => origin(commandIo(flags, positional));
 
+// `mgr review` (revisor externo). A confirmacao humana so existe em terminal (DT-10; ADR-0007, Camada 4):
+// fora dele o adaptador responde "sem terminal" e a cola recusa sem gravar.
+const cmdReview = (flags, positional) => review({
+  ...commandIo(flags, positional), reviewIo: createReviewIo(), confirm: confirmInTerminal(p, isTTY), language: idiomaDaSaida,
+});
+
 // `mgr runtime-versioning` — cola em src/commands/runtime-versioning.js. O git e o .gitignore da raiz
 // são da borda (DT-7, DT-8): entram injetados.
 const cmdRuntimeVersioning = (flags, positional) => {
@@ -1215,7 +1224,8 @@ async function main() {
     return lido.state === "declared" ? lido.value : null;
   };
   const manifestLang = idiomaDe("project") || idiomaDe("global");
-  M = getMessages(flags.userLanguage || manifestLang || detectUserLanguage(process.env));
+  idiomaDaSaida = flags.userLanguage || manifestLang || detectUserLanguage(process.env);
+  M = getMessages(idiomaDaSaida);
   // DT-10: um dist/ gerado para outra versão do package.json ao lado não roda nenhum comando.
   const versaoBundle = bundle.buildVersion();
   if (versaoBundle !== null) {
@@ -1245,6 +1255,7 @@ async function main() {
       case "spec": return cmdSpec(flags, positional);
       case "agents": return cmdAgents(flags, positional);
       case "origin": return cmdOrigin(flags, positional);
+      case "review": return await cmdReview(flags, positional);
       case "runtime-versioning": return cmdRuntimeVersioning(flags, positional);
       case "tokens": return cmdTokens(flags, positional);
       case "list": return await cmdList(flags, positional);

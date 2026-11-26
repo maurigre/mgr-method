@@ -19,6 +19,7 @@
     "src/",
     "bin/mgr-runtime.js",
     "bin/hook-io.js",
+    "bin/review-io.js",
     "LICENSE",
     "README.md"
   ],

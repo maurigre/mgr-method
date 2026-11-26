@@ -1,10 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { tempDir } from "../../scripts/lib/tmp.mjs";
+import { SESSAO_FALSA, criarCodexFalso } from "../helpers/codex-falso.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const ENTRY = path.join(ROOT, "bin", "mgr-runtime.js");
@@ -134,4 +135,55 @@ test("should archive a finished feature through the project runtime and list it 
   const listar = runIn(dir, "spec", "status", "--archived", "--json");
   assert.equal(listar.status, 0, listar.stderr);
   assert.deepEqual(JSON.parse(listar.stdout).archived.map(({ name }) => name), ["2026-01-15-demo"]);
+}));
+
+const gitNoProjeto = (dir) => (...argumentos) => {
+  const resultado = spawnSync("git", argumentos, { cwd: dir, encoding: "utf8" });
+  assert.equal(resultado.status, 0, resultado.stderr);
+};
+
+const projetoComRevisaoLigada = (dir) => {
+  const git = gitNoProjeto(dir);
+  git("init", "-q", "-b", "main");
+  git("config", "user.email", "teste@exemplo.invalid");
+  git("config", "user.name", "teste");
+  writeFileSync(path.join(dir, ".gitignore"), "specs/\n.mgr-core/\n");
+  git("add", ".");
+  git("commit", "-qm", "base");
+  writeFileSync(path.join(dir, "feito.js"), "export const feito = true;\n");
+  git("add", "feito.js");
+  git("commit", "-qm", "fatia");
+  mkdirSync(path.join(dir, ".mgr-core"), { recursive: true });
+  writeFileSync(path.join(dir, ".mgr-core", "config.json"), JSON.stringify({ externalReview: { enabled: true, reviewers: ["codex"] } }));
+  writeFileSync(path.join(dir, ".mgr-core", "config.local.json"), JSON.stringify({ externalReviewConsent: { codex: { at: "2026-11-26T10:00:00.000Z" } } }));
+};
+
+for (const sub of ["enable", "disable", "consent", "revoke", "set"]) {
+  test(`should refuse review ${sub} in the project runtime as a lifecycle command`, comProjeto((dir) => {
+    const recusa = runIn(dir, "review", sub);
+    assert.equal(recusa.status, 1);
+    assert.match(recusa.stderr, new RegExp(`review ${sub}`));
+    assert.equal(existsSync(path.join(dir, ".mgr-core", "config.json")), false);
+  }));
+}
+
+test("should record an external review through the project runtime with the fake codex", comProjeto((dir) => {
+  projetoComRevisaoLigada(dir);
+  const falso = criarCodexFalso("ok");
+  const revisao = spawnSync(process.execPath, [ENTRY, "review", "external", "demo", "--base", "HEAD~1"], {
+    cwd: dir, encoding: "utf8", env: { ...falso.env, LC_ALL: "C" },
+  });
+  assert.equal(revisao.status, 0, revisao.stderr);
+  const prova = JSON.parse(readFileSync(path.join(dir, "specs", "demo", "external-review.json"), "utf8"));
+  assert.deepEqual(prova.entries.map(({ kind, session }) => [kind, session]), [["review", SESSAO_FALSA]]);
+  assert.deepEqual(prova.entries[0].files.map(({ path: caminho }) => caminho), ["feito.js"]);
+  assert.equal(falso.chamadas().length, 3);
+}));
+
+test("should report external review off as JSON through the project runtime", comProjeto((dir) => {
+  const consulta = runIn(dir, "review", "status", "--json");
+  assert.equal(consulta.status, 0, consulta.stderr);
+  assert.deepEqual(JSON.parse(consulta.stdout), {
+    schemaVersion: 1, state: "off", source: "default", reviewers: [], options: {}, consent: { codex: "absent" },
+  });
 }));

@@ -10,6 +10,7 @@ import { text } from "../core/ui-text.js";
 import { EFFORT_LEVELS, isSkillName, parseSkillName } from "../plugin.js";
 import { AGENTS, INHERIT, INTENTS, LAWS_SHARED, RUNTIME_VERSIONING } from "../core/catalog.js";
 import * as engines from "../engines/index.js";
+import { ids as reviewerIds } from "../reviewers/index.js";
 
 export const CONFIG_NAME = "config.json";
 export const LOCAL_CONFIG_NAME = "config.local.json";
@@ -436,6 +437,96 @@ export function writeRuntimeVersioning(coreDir, value) {
   return { antes, depois: value };
 }
 
+// Revisor externo (ADR-0036, DT-2, DT-17). Ativação, revisores e opções ficam na camada do TIME: o
+// interruptor é `enabled`, e escrever modelo ou esforço nunca o liga. Ausente é estado próprio.
+const REVIEWER_FIELD_RE = /^\S+$/;
+
+function assertReviewerKnown(id) {
+  const conhecidos = reviewerIds();
+  if (!conhecidos.includes(id)) throw new UsageError("reviewerUnknown", [id, conhecidos]);
+}
+
+// `model` e `effort` de um revisor: texto não vazio e sem espaço em branco.
+function assertReviewerField(field, value) {
+  if (typeof value !== "string" || !REVIEWER_FIELD_RE.test(value)) {
+    throw new UsageError("externalReviewOptionInvalid", [field, JSON.stringify(value)]);
+  }
+}
+
+function reviewerOptionsOf(options) {
+  if (options === undefined) return {};
+  if (!isPlainObject(options)) {
+    throw new UsageError("configValueNotObject", ["externalReview.options", JSON.stringify(options)]);
+  }
+  for (const [id, opcoes] of Object.entries(options)) {
+    assertReviewerKnown(id);
+    if (!isPlainObject(opcoes)) {
+      throw new UsageError("configValueNotObject", [`externalReview.options.${id}`, JSON.stringify(opcoes)]);
+    }
+    for (const field of ["model", "effort"]) {
+      if (opcoes[field] !== undefined) assertReviewerField(field, opcoes[field]);
+    }
+  }
+  return options;
+}
+
+// Valida a forma inteira do `externalReview` e devolve só os seus campos. Usada na leitura e antes de
+// cada escrita: o que for gravado é o que a leitura aceita.
+function externalReviewOf(value) {
+  if (!isPlainObject(value)) {
+    throw new UsageError("configValueNotObject", ["externalReview", JSON.stringify(value)]);
+  }
+  if (typeof value.enabled !== "boolean") {
+    throw new UsageError("configEnabledInvalid", ["externalReview", JSON.stringify(value.enabled)]);
+  }
+  const { enabled, reviewers } = value;
+  const conhecidos = reviewerIds();
+  const repetido = Array.isArray(reviewers) && new Set(reviewers).size !== reviewers.length;
+  if (!Array.isArray(reviewers) || reviewers.length === 0 || repetido || !reviewers.every((id) => conhecidos.includes(id))) {
+    throw new UsageError("externalReviewReviewersInvalid", [JSON.stringify(reviewers), conhecidos]);
+  }
+  return { enabled, reviewers, options: reviewerOptionsOf(value.options) };
+}
+
+// Estado do `externalReview` lido: `absent`, ou `configured` com a forma validada.
+function externalReviewState(value) {
+  if (value === undefined) return { state: "absent" };
+  return { state: "configured", ...externalReviewOf(value) };
+}
+
+export function readExternalReview(coreDir) {
+  return externalReviewState(readConfig(coreDir).externalReview);
+}
+
+// Grava ativação e revisores, preservando as opções já gravadas. Valida ANTES de gravar.
+export function writeExternalReview(coreDir, { enabled, reviewers }) {
+  const config = readConfig(coreDir);
+  const antes = externalReviewState(config.externalReview);
+  const opcoes = antes.state === "configured" ? antes.options : {};
+  const depois = externalReviewOf({ enabled, reviewers, options: opcoes });
+  writeConfig(coreDir, { ...config, externalReview: depois });
+  return { before: antes, after: depois };
+}
+
+// Mescla modelo e/ou esforço de UM revisor em `externalReview.options[id]`. Sem `externalReview`, cria
+// um DESLIGADO: configurar o modelo não liga a funcionalidade.
+export function writeReviewerOptions(coreDir, id, { model, effort } = {}) {
+  assertReviewerKnown(id);
+  const config = readConfig(coreDir);
+  const atual = externalReviewState(config.externalReview);
+  const opcoesAntes = atual.state === "configured" ? atual.options : {};
+  const antes = opcoesAntes[id] ?? {};
+  const depois = { ...antes };
+  if (model !== undefined) depois.model = model;
+  if (effort !== undefined) depois.effort = effort;
+  const base = atual.state === "configured"
+    ? { enabled: atual.enabled, reviewers: atual.reviewers }
+    : { enabled: false, reviewers: [id] };
+  const gravado = externalReviewOf({ ...base, options: { ...opcoesAntes, [id]: depois } });
+  writeConfig(coreDir, { ...config, externalReview: gravado });
+  return { before: antes, after: depois };
+}
+
 // De onde veio cada valor da política: o que o autor escreveu, ou o default do catálogo.
 //
 // Existe porque a saída do `mgr agents` tem de dizer a ORIGEM, não só o valor — sem isso o autor
@@ -598,10 +689,10 @@ export function readLawsPreamble(coreDir) {
 // `.gitignore`, DT-4). As chaves são disjuntas da camada do time: chave do time escrita aqui é
 // ignorada e avisada, e nenhum leitor de política lê este arquivo — `readAgents`, `readDetectionMode`
 // e `readLawsPreamble` continuam lendo só `config.json`. A precedência é por construção.
-export const PERSONAL_KEYS = Object.freeze(["projectId", "initials"]);
+export const PERSONAL_KEYS = Object.freeze(["projectId", "initials", "externalReviewConsent"]);
 export const TEAM_KEYS = Object.freeze([
   "agents", "reviewGate", "origin", "registries", "detectionMode", "lawsPreamble", "architecture", "language", "userLanguage",
-  "runtimeVersioning",
+  "runtimeVersioning", "externalReview",
 ]);
 
 const localConfigPath = (coreDir) => path.join(coreDir, LOCAL_CONFIG_NAME);
@@ -675,6 +766,63 @@ export function writeInitials(coreDir, valor) {
   mkdirSync(coreDir, { recursive: true });
   writeFileSync(localConfigPath(coreDir), JSON.stringify({ ...local, initials: valor }, null, 2) + "\n", "utf8");
   return { before: estadoDasIniciais(local.initials), after: valor };
+}
+
+// Consentimento do revisor externo (DT-2): é da PESSOA, então vive em `config.local.json`, nunca no
+// `config.json` do time. A data chega pronta de quem chama; esta camada não gera data.
+function writeLocalObject(coreDir, local) {
+  mkdirSync(coreDir, { recursive: true });
+  writeFileSync(localConfigPath(coreDir), JSON.stringify(local, null, 2) + "\n", "utf8");
+}
+
+function consentMapOf(local) {
+  const mapa = local.externalReviewConsent;
+  if (mapa === undefined) return {};
+  if (!isPlainObject(mapa)) {
+    throw new UsageError("configValueNotObject", ["externalReviewConsent", JSON.stringify(mapa)]);
+  }
+  return mapa;
+}
+
+// Entrada sem `at` de texto não prova consentimento: lê como ausente, o lado seguro.
+function consentStateOf(mapa, id) {
+  const entrada = mapa[id];
+  if (entrada === undefined) return { state: "absent" };
+  if (!isPlainObject(entrada)) {
+    throw new UsageError("configValueNotObject", [`externalReviewConsent.${id}`, JSON.stringify(entrada)]);
+  }
+  return typeof entrada.at === "string" ? { state: "given", at: entrada.at } : { state: "absent" };
+}
+
+export function readReviewConsent(coreDir, id) {
+  assertReviewerKnown(id);
+  return consentStateOf(consentMapOf(readLocalObject(coreDir)), id);
+}
+
+// Valida ANTES de gravar. Read-modify-write: `projectId`, `initials` e os outros consentimentos sobrevivem.
+export function writeReviewConsent(coreDir, id, at) {
+  assertReviewerKnown(id);
+  const local = readLocalObject(coreDir);
+  const mapa = consentMapOf(local);
+  const antes = consentStateOf(mapa, id);
+  writeLocalObject(coreDir, { ...local, externalReviewConsent: { ...mapa, [id]: { at } } });
+  return { before: antes, after: { state: "given", at } };
+}
+
+// Remove só o consentimento daquele revisor, e a chave inteira quando ela fica vazia.
+export function removeReviewConsent(coreDir, id) {
+  assertReviewerKnown(id);
+  const local = readLocalObject(coreDir);
+  const mapa = consentMapOf(local);
+  const antes = consentStateOf(mapa, id);
+  if (mapa[id] === undefined) return { before: antes, after: antes };
+  const restantes = { ...mapa };
+  delete restantes[id];
+  const proximo = { ...local };
+  if (Object.keys(restantes).length) proximo.externalReviewConsent = restantes;
+  else delete proximo.externalReviewConsent;
+  writeLocalObject(coreDir, proximo);
+  return { before: antes, after: { state: "absent" } };
 }
 
 // Lado "simetria" da DT-2: `projectId` escrito no config do TIME é ignorado pelo método, e este

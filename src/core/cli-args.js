@@ -29,6 +29,9 @@ export function parseArgs(argv, { engines }) {
     else if (a === "--all") flags.all = true;
     else if (a === "--archived") flags.archived = true;
     else if (a === "--date") flags.date = argv[++i];
+    else if (a === "--base") flags.base = argv[++i];
+    else if (a === "--reviewer") flags.reviewer = argv[++i];
+    else if (a === "--reason") flags.reason = argv[++i];
     else if (a === "--json") flags.json = true;
     else if (a === "--out") flags.out = argv[++i];
     else if (a === "--model") flags.model = argv[++i];

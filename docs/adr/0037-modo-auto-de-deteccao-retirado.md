@@ -5,7 +5,9 @@ Deciders: Mauri Reis
 
 ## Status
 
-Proposed
+Accepted
+
+> Aceito pelo autor em 2026-11-26, com a fatia revisao-do-kickoff-e-auto (PR #60).
 
 ## Context
 
@@ -61,8 +63,8 @@ O kickoff v2 (ADR-0036), na decisão K09, retira o `auto` por ADR.
    - A "CONSTITUTION §6" citada no Context e na decisão 4 é numeração que não vale mais. A base é a
      do item 3.
    - O ADR-0009 muda só a linha de Status, que aponta para este ADR (mesmo padrão do ADR-0004
-     emendado pelo ADR-0010). Enquanto este ADR estiver `Proposed`, a linha diz "emenda proposta no
-     ADR-0037"; no PR que o aceitar, passa a "emendadas pelo ADR-0037" com a data.
+     emendado pelo ADR-0010). A linha diz "emendadas pelo ADR-0037 em 2026-11-26" desde o aceite deste
+     ADR; enquanto ele esteve `Proposed`, dizia "emenda proposta".
 5. **As passagens do ADR-0005 e do ADR-0007 que anunciavam o `auto` com o audit ficam encerradas
    por esta decisão.** Os dois ADRs não são editados. O modelo de quatro camadas do ADR-0007
    continua inteiro.

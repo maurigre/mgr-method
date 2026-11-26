@@ -5,7 +5,9 @@ Deciders: Mauri Reis
 
 ## Status
 
-Proposed
+Accepted
+
+> Aceito pelo autor em 2026-11-26, depois do merge das fatias 3a (PR #63) e 3b (PR #64).
 
 ## Context
 

@@ -5,7 +5,9 @@ Deciders: Mauri Reis
 
 ## Status
 
-Proposed
+Accepted
+
+> Aceito pelo autor em 2026-11-26, com a fatia revisao-do-kickoff-e-auto (PR #60).
 
 ## Context
 

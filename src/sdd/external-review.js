@@ -35,6 +35,10 @@ export const REVIEW_REASONS = Object.freeze({
   sessionMissing: "session-missing",
   pathWithNewline: "path-with-newline",
   changedDuringReview: "changed-during-review",
+  waiveNeedsSlug: "waive-needs-slug",
+  waiveNeedsReason: "waive-needs-reason",
+  waiveNeedsFailure: "waive-needs-failure",
+  waiveNeedsInitials: "waive-needs-initials",
 });
 
 // As falhas do REVISOR (DT-9, casos 6 a 10): só elas viram entrada `failure` na prova, para a dispensa

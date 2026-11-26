@@ -158,7 +158,7 @@ const projetoComRevisaoLigada = (dir) => {
   writeFileSync(path.join(dir, ".mgr-core", "config.local.json"), JSON.stringify({ externalReviewConsent: { codex: { at: "2026-11-26T10:00:00.000Z" } } }));
 };
 
-for (const sub of ["enable", "disable", "consent", "revoke", "set"]) {
+for (const sub of ["enable", "disable", "consent", "revoke", "set", "waive"]) {
   test(`should refuse review ${sub} in the project runtime as a lifecycle command`, comProjeto((dir) => {
     const recusa = runIn(dir, "review", sub);
     assert.equal(recusa.status, 1);
@@ -178,6 +178,12 @@ test("should record an external review through the project runtime with the fake
   assert.deepEqual(prova.entries.map(({ kind, session }) => [kind, session]), [["review", SESSAO_FALSA]]);
   assert.deepEqual(prova.entries[0].files.map(({ path: caminho }) => caminho), ["feito.js"]);
   assert.equal(falso.chamadas().length, 3);
+  fatiaTerminada(dir);
+  const arquivar = spawnSync(process.execPath, [ENTRY, "spec", "archive", "demo", "--date", "2026-01-15"], {
+    cwd: dir, encoding: "utf8", env: { ...falso.env, LC_ALL: "C" },
+  });
+  assert.equal(arquivar.status, 0, arquivar.stderr);
+  assert.equal(existsSync(path.join(dir, "specs", "archive", "2026-01-15-demo", "external-review.json")), true);
 }));
 
 test("should report external review off as JSON through the project runtime", comProjeto((dir) => {

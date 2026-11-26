@@ -15,6 +15,16 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Modo scaffold (geração de estrutura de código no greenfield).
 
 ### Adicionado
+- **Revisão externa opt-in (`mgr review`, ADR-0038 e ADR-0039).** Um revisor de outro fornecedor,
+  chamado sem conversa e só leitura (o primeiro é o `codex`), revisa os arquivos que a fatia mudou
+  nos dois eixos (Padrões e Spec), com cada citação conferida contra o guia e a spec. Desligada por
+  padrão: `review enable` liga para o projeto e cada pessoa consente uma vez (`review consent`)
+  antes de qualquer envio. **O código vai para o fornecedor do revisor e consome a cota da sua
+  conta.** A prova (`specs/<fatia>/external-review.json`) grava a versão, a sessão e o hash de cada
+  arquivo revisado, lido no commit do HEAD antes da chamada. Ligada, o `spec archive` exige que
+  esses arquivos estejam iguais no HEAD; a dispensa (`review waive`) é só humana, com motivo e depois
+  de uma falha do revisor, e o archive a anuncia. A prova é local e não criptográfica. Veja
+  `docs/external-review.md`.
 - **O `doctor` não morre mais em manifesto malformado (ADR-0032).** Manifesto ilegível, que não é
   objeto, ou fora de forma em `skills`, `skillsDirs`, `engines`, `agents` ou `scope` devolve o
   `outcome` `invalid-manifest` (com `manifest.problems` por código, sem remediação automática) e sai

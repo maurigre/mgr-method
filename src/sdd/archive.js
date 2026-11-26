@@ -6,13 +6,16 @@
 // "Arquivada" significa terminada, inclusive o SDD. As três condições usam só regras que já existem
 // (RN-4): o status das tasks (ADR-0014), a declaração de documentação do fechamento (DOC-3/DOC-4,
 // ADR-0020) e o `sdd-check`. A condição do SDD confere a DECLARAÇÃO, não a correção do conteúdo
-// (limite declarado; o conteúdo é a 0.8.0, K06b).
+// (limite declarado; o conteúdo é a 0.8.0, K06b). A quarta, a revisão externa, só existe com a
+// funcionalidade ligada no projeto (fatia revisor-externo, DT-13); desligada, nada muda.
 import { existsSync, mkdirSync, readFileSync, renameSync, rmdirSync } from "node:fs";
 import path from "node:path";
-import { ARCHIVE_DIR, SPECS_DIR, artifactFiles, locate } from "./artifacts.js";
+import { ARCHIVE_DIR, SPECS_DIR, archivedEntries, artifactFiles, locate } from "./artifacts.js";
 import { PLAN_FILE, STATUS_DONE, parse } from "./plan-parser.js";
 import { validateDocs } from "./doc-validator.js";
 import { inspectSdd } from "./sdd-check.js";
+import { RUNTIME_DIR_NAME } from "../core/bundle.js";
+import { archiveReviewFact, waiverOf } from "./review-run.js";
 
 // Códigos estáveis de recusa: dado, não prosa, iguais em todos os idiomas (a cola traduz cada um
 // para uma chave de mensagem).
@@ -28,6 +31,10 @@ export const REASONS = Object.freeze({
   noCompletion: "no-completion",
   completionFindings: "completion-findings",
   sddCheckFailed: "sdd-check-failed",
+  externalReviewMissing: "external-review-missing",
+  externalReviewInvalid: "external-review-invalid",
+  externalReviewStale: "external-review-stale",
+  externalReviewUnverifiable: "external-review-unverifiable",
   destinationExists: "destination-exists",
 });
 
@@ -57,10 +64,10 @@ export function parseDate(valor, hoje) {
 const destinationOf = (date, slug) => path.join(SPECS_DIR, ARCHIVE_DIR, `${date}-${slug}`);
 
 // Decisão pura sobre os fatos já levantados. As pré-condições encerram na hora (sem elas não há
-// fatia a julgar); as três condições são TODAS avaliadas e reportadas na ordem (1), (2), (3), para a
+// fatia a julgar); as condições são TODAS avaliadas e reportadas na ordem (1) a (4), para a
 // recusa trazer o motivo completo de uma vez.
 export function decide(fatos) {
-  const { slug, location, date, plan, completion, sdd, destinationExists } = fatos;
+  const { slug, location, date, plan, completion, sdd, destinationExists, externalReview = { state: "off" } } = fatos;
   if (location.state === "reserved") return recusa([{ code: REASONS.reservedSlug }]);
   if (location.state === "archived") return recusa([{ code: REASONS.alreadyArchived, paths: location.paths }]);
   if (location.state === "absent") return recusa([{ code: REASONS.notFound, slug }]);
@@ -68,11 +75,30 @@ export function decide(fatos) {
 
   const motivos = [...condicaoDoPlano(plan), ...condicaoDoFechamento(completion, slug)];
   if (!sdd.ok) motivos.push({ code: REASONS.sddCheckFailed, reason: sdd.reason });
+  motivos.push(...condicaoDaRevisaoExterna(externalReview, slug));
   const destination = destinationOf(date.date, slug);
   if (destinationExists) motivos.push({ code: REASONS.destinationExists, destination });
   // Os avisos do `sdd-check` não bloqueiam (RN-4, P-2): só a contagem viaja, e a cola aponta o comando.
   const sddWarnings = sdd.warnings?.length ?? 0;
-  return motivos.length ? recusa(motivos) : { outcome: "archive", slug, destination, sddWarnings };
+  if (motivos.length) return recusa(motivos);
+  // A dispensa passa a condição (4), e o resultado a carrega para a cola anunciar em destaque (DT-11).
+  return externalReview.state === "waived"
+    ? { outcome: "archive", slug, destination, sddWarnings, waived: { by: externalReview.by, at: externalReview.at, reason: externalReview.reason } }
+    : { outcome: "archive", slug, destination, sddWarnings };
+}
+
+// A condição (4): o fato chega pronto de `archiveReviewFact`; aqui só vira código de recusa.
+const RECUSA_DA_REVISAO = {
+  missing: (fato, slug) => [{ code: REASONS.externalReviewMissing, slug, consent: fato.consent }],
+  invalid: (fato) => [{ code: REASONS.externalReviewInvalid, detail: fato.detail }],
+  // DT-13: revisor fora da lista do config é prova inválida; o dado do revisor vai junto para a frase.
+  "reviewer-not-configured": (fato) => [{ code: REASONS.externalReviewInvalid, reviewer: fato.reviewer, reviewers: fato.reviewers }],
+  stale: (fato) => [{ code: REASONS.externalReviewStale, paths: fato.paths }],
+  unverifiable: () => [{ code: REASONS.externalReviewUnverifiable }],
+};
+
+function condicaoDaRevisaoExterna(fato, slug) {
+  return Object.hasOwn(RECUSA_DA_REVISAO, fato.state) ? RECUSA_DA_REVISAO[fato.state](fato, slug) : [];
 }
 
 const recusa = (reasons) => ({ outcome: "refused", reasons });
@@ -95,10 +121,10 @@ function condicaoDoFechamento(completion, slug) {
 }
 
 // Levanta os fatos lendo o disco, sem escrever nada (uma recusa nunca move nada).
-// `now` é a única dependência injetada: a data do dia precisa ser determinística no teste. O resto é o
-// disco real (TST-1).
+// `now` é injetado porque a data do dia precisa ser determinística no teste; `git` porque é subprocesso
+// (borda, TST-2) e só é chamado com a revisão externa ligada. O resto é o disco real (TST-1).
 export function planArchive(repo, slug, opcoes = {}) {
-  const { date, now = new Date() } = opcoes;
+  const { date, now = new Date(), git } = opcoes;
   const location = locate(repo, slug);
   const hoje = localDate(now);
   const dataPedida = Object.hasOwn(opcoes, "date") ? { ...parseDate(date, hoje), value: date } : { ok: true, date: hoje };
@@ -113,7 +139,8 @@ export function planArchive(repo, slug, opcoes = {}) {
   const completion = { present: docs.files.length > 0, codes: [...new Set(docs.findings.map((achado) => achado.code))] };
   const sdd = inspectSdd(repo);
   const destinationExists = existsSync(path.join(repo, destinationOf(dataPedida.date, slug)));
-  return decide({ slug, location, date: dataPedida, plan, completion, sdd, destinationExists });
+  const externalReview = archiveReviewFact(repo, slug, { coreDir: path.join(repo, RUNTIME_DIR_NAME), git });
+  return decide({ slug, location, date: dataPedida, plan, completion, sdd, destinationExists, externalReview });
 }
 
 // Move a fatia por um `rename` só: atômico no mesmo sistema de arquivos (ou tudo muda de lugar, ou
@@ -142,3 +169,13 @@ export function applyArchive(repo, plano) {
     return { outcome: "move-failed", from, to, code: erro.code ?? "UNKNOWN" };
   }
 }
+
+// As fatias arquivadas, com a marca da revisão externa dispensada (DT-11): só a entrada reconhecida cuja
+// prova termina em dispensa ganha o campo; sem prova, a entrada fica exatamente como `archivedEntries`.
+export function archivedWithWaivers(repo) {
+  return archivedEntries(repo).map((entrada) => (entrada.recognized && waiverOf(path.join(repo, entrada.path), entrada.slug).waived
+    ? { ...entrada, externalReview: "waived" }
+    : entrada));
+}
+
+export const isWaivedEntry = (entrada) => entrada.externalReview === "waived";

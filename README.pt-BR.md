@@ -125,7 +125,7 @@ bloco e só apaga o arquivo se não havia mais nada nele.
 > As skills chamam o runtime por caminho explícito. Se ele faltar, elas **param** e mostram o comando
 > de restauração (`npx mgr-method@<versão> update`), em vez de seguir sem ele.
 >
-> O runtime atende só os comandos que as skills usam — `spec status|validate|next`, `spec status --archived`, `spec archive <slug> [--date AAAA-MM-DD]`, `agents`
+> O runtime atende só os comandos que as skills usam — `spec status|validate|next`, `spec status --archived`, `spec archive <slug> [--date AAAA-MM-DD]`, `review external <slug> --base <ref>`, `review status`, `agents`
 > (`set`, `apply`), `origin set`, `spec initials [set <valor>]` (suas iniciais para nomes de branch, em `.mgr-core/config.local.json`), `origin [--json]` (lê a origem gravada: `recorded`, `absent` ou
 > `invalid`, este último sai 1), `doctor`, `sdd-check [--json]`, `instructions [--json]` / `instructions write` (o bloco gerenciado acima), `detect`, `precompact`, `version` — e recusa
 > comando de ciclo de vida (`install`, `update`, `add`…), nomeando o `npx mgr-method@<versão>` a rodar
@@ -204,7 +204,8 @@ code-analyzer ─ review final de 2 eixos: Standards (guia DO projeto) + Spec (c
 |---|---|
 | **Validação de artefato** | `mgr spec validate` verifica o **plano** e a **spec** de uma feature: dependência inexistente, ciclo no DAG, granularidade, task sem critério de done, e spec sem critério de aceitação identificado. Formato declarado por marcador; **nada do que já existe é reprovado** (ADR-0012, ADR-0013). |
 | **Caminho resolvido** | `mgr spec status` responde quais artefatos existem numa feature e **onde estão**, para a skill parar de montar caminho por convenção. O vocabulário não tem `done`: existência de arquivo não é conclusão de etapa, e o payload diz isso em `basis` e `warning` (ADR-0015). |
-| **Fatia arquivada** | `archive` é nome reservado em `specs/`. `mgr spec archive <slug>` move uma fatia terminada para `specs/archive/<data>-<slug>/`, e só se toda task do plano estiver `done`, o `06-completion.md` existir e declarar o SDD sem `DOC-3`/`DOC-4`, e o `sdd-check` passar. A recusa lista o que falhou e não move nada (ADR-0036). |
+| **Fatia arquivada** | `archive` é nome reservado em `specs/`. `mgr spec archive <slug>` move uma fatia terminada para `specs/archive/<data>-<slug>/`, e só se toda task do plano estiver `done`, o `06-completion.md` existir e declarar o SDD sem `DOC-3`/`DOC-4`, e o `sdd-check` passar; com a revisão externa ligada, também uma quarta condição (abaixo). A recusa lista o que falhou e não move nada (ADR-0036). |
+| **Revisão externa (opt-in)** | Desligada por padrão; o `mgr install` só mostra o estado dela e nunca a liga. `mgr review enable` / `disable` ligam ou desligam para o projeto, e cada pessoa consente uma vez (`mgr review consent`, desfeito pelo `revoke`); `mgr review set --model --effort` escolhe o modelo e o esforço do revisor. `mgr review external <slug> --base <ref>` faz um revisor de outro fornecedor (`codex`) revisar os arquivos mudados nos dois eixos, com cada citação conferida, e grava uma prova com o hash de cada arquivo. **O código vai para o fornecedor do revisor e consome a cota da sua conta.** Ligada, o `spec archive` também exige que essa prova bata com o HEAD. Com o revisor fora do ar, `mgr review waive <slug> --reason "<motivo>"` (uma pessoa, em terminal, depois de uma falha do revisor registrada) deixa a fatia ser arquivada: o `spec archive` anuncia e o `spec status --archived` marca. Veja [docs/external-review.md](docs/external-review.md). |
 | **Um modelo por intenção** | O `mgr agents` responde qual modelo e qual esforço cada etapa do fluxo usa, e de onde veio cada valor. Redação, execução e revisão são declaradas uma vez no `.mgr-core/config.json`; a instalação grava em cada agente e a invocação troca o modelo sem reinstalar. Mudar o esforço exige `mgr agents apply`, e o comando avisa (ADR-0017). |
 | **Proveniência verificável** | O `mgr spec validate` também confere a etiqueta de proveniência que você escreveu: a forma dela, e se o ponteiro `[code:<caminho>:<linha>]` resolve em disco a partir da raiz do repositório. Ele nunca **cobra** etiqueta — a regra que cobraria foi rejeitada por medição, e nada do que já existe é reprovado (ADR-0016). |
 | **Ação, não estado** | `mgr spec next` responde o que fazer agora: a task, o artefato exato dela, a skill auxiliar e o que ela espera. A task pode declarar `status: done`, e a resposta sempre diz quanto estado o plano declara — sem nenhum, ela diz que não sabe o que você já fez (ADR-0014). |
@@ -295,6 +296,7 @@ agents/             # os 3 moldes de agente (redação, implementação, gate de
 shared/             # fontes transversais: regras de arquitetura e qualidade, leis
 docs/adr/           # as decisões, formato Nygard — versionadas e autocontidas
 docs/plugins.md     # formato de skill plugável: manifest, registry, lockfile, matriz de suporte
+docs/external-review.md # revisão externa opt-in: o que sai da máquina, comandos, prova, archive
 docs/engine-hooks.md # matriz de capacidade de hook dos seis motores estudados, com fonte e data
 test/               # node:test; espelha as pastas da src/, mais scripts/, e2e/, conteudo/ (conteúdo entregue), arquitetura/
 ```

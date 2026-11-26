@@ -14,11 +14,11 @@ import { LOCAL_CONFIG_NAME, readExternalReview, readReviewConsent, removeReviewC
 import { get as reviewerOf, ids as reviewerIds } from "../reviewers/index.js";
 import { RESPONSE_SCHEMA, REVIEW_REASONS } from "../sdd/external-review.js";
 import { appendToProof, chooseReviewer, isEnabled, failureEntry, judgeCall, judgeExec, judgeLogin, judgeVersion, planReview,
-  proofFileOf, promptFor, reviewEntry, unchangedSince } from "../sdd/review-run.js";
+  planWaiver, proofFileOf, promptFor, reviewEntry, unchangedSince, waiverEntry } from "../sdd/review-run.js";
 
 const CONFIG_NAME = "config.json";
 const COMANDO = "review";
-const SUBCOMANDOS = ["external", "status", "enable", "disable", "consent", "revoke", "set"];
+const SUBCOMANDOS = ["external", "status", "enable", "disable", "consent", "revoke", "set", "waive"];
 
 export async function review(contexto) {
   const { positional, io, M } = contexto;
@@ -35,6 +35,7 @@ export async function review(contexto) {
   if (sub === "consent") return reviewConsent(resto);
   if (sub === "revoke") return reviewRevoke(resto);
   if (sub === "set") return reviewSet(resto);
+  if (sub === "waive") return reviewWaive(resto);
   return reviewExternal(resto);
 }
 
@@ -166,6 +167,10 @@ const LINHA_DA_RECUSA = {
   [REVIEW_REASONS.emptyDiff]: (M, recusa) => M.reviewEmptyDiff(recusa.ref),
   [REVIEW_REASONS.pathWithNewline]: (M, recusa) => M.reviewPathWithNewline(recusa.paths),
   [REVIEW_REASONS.proofUnreadable]: (M, recusa) => M.reviewProofUnreadable(recusa.file, recusa.detail),
+  [REVIEW_REASONS.waiveNeedsSlug]: (M) => M.reviewWaiveNeedsSlug,
+  [REVIEW_REASONS.waiveNeedsReason]: (M) => M.reviewWaiveNeedsReason,
+  [REVIEW_REASONS.waiveNeedsInitials]: (M) => M.reviewWaiveNeedsInitials,
+  [REVIEW_REASONS.waiveNeedsFailure]: (M, recusa) => M.reviewWaiveNeedsFailure(recusa.slug),
 };
 
 // Falha do REVISOR (casos 6 a 10): a linha com a mensagem original quando houver.
@@ -182,7 +187,7 @@ const deuCerto = (resultado) => (typeof resultado === "boolean" ? resultado : re
 
 // LOG-2: o git é subprocesso, então cada chamada ganha uma linha antes e outra depois. O núcleo recebe
 // este invólucro e não sabe que há log.
-function gitComLog(git, io, M) {
+export function gitComLog(git, io, M) {
   const comLog = (nome, chamada) => (...argumentos) => {
     io.out(M.reviewGitCalling(nome));
     const resultado = chamada(...argumentos);
@@ -248,6 +253,22 @@ async function reviewExternal(contexto) {
   io.out(M.reviewWriting(proofFileOf(root, plano)));
   io.out(M.reviewWritten(appendToProof(root, plano, entry), plano.round));
   relatar(io, M, checked);
+  return 0;
+}
+
+// `mgr review waive <fatia> --reason "<motivo>"` (DT-11): só humano, em terminal, com motivo e as
+// iniciais, e só depois de uma falha do revisor. A dispensa é gravada na prova, e o archive a anuncia.
+async function reviewWaive(contexto) {
+  const { root, core, flags, positional, io, M, now } = contexto;
+  const plano = planWaiver(root, { slug: positional[0], flags, coreDir: core });
+  if (plano.outcome === "refused") {
+    io.err(M.errorPrefix(LINHA_DA_RECUSA[plano.code](M, plano)));
+    return 1;
+  }
+  if (!(await confirmar(contexto, "waive", M.reviewWaiveConfirm(plano.slug, plano.failure)))) return 1;
+  io.out(M.reviewWriting(proofFileOf(root, plano)));
+  appendToProof(root, plano, waiverEntry(plano, now().toISOString()));
+  io.out(io.style.yellow(M.reviewWaived(plano.slug, plano.by)));
   return 0;
 }
 

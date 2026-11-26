@@ -8,7 +8,7 @@ import * as bundle from "../src/core/bundle.js";
 import * as installer from "../src/install/installer.js";
 import * as catalogo from "../src/core/catalog.js";
 import { agents } from "../src/commands/agents.js";
-import { specNext, specStatus, specValidate } from "../src/commands/spec.js";
+import { specArchive, specNext, specStatus, specValidate } from "../src/commands/spec.js";
 import { detectHook, precompactHook, suggestionsFor } from "../src/commands/hooks.js";
 import { escreverSync, lerPayload, modificados } from "./hook-io.js";
 import { projectRoot } from "../src/sdd/project-root.js";
@@ -822,6 +822,7 @@ function cmdSpec(flags, positional) {
   if (sub === "next") return cmdSpecNext(flags, positional.slice(1));
   if (sub === "status") return cmdSpecStatus(flags, positional.slice(1));
   if (sub === "initials") return initials(commandIo(flags, positional.slice(1)));
+  if (sub === "archive") return specArchive(commandIo(flags, positional.slice(1)));
   console.error(M.errorPrefix(M.unknownCommand(`${COMANDO_SPEC} ${sub || ""}`.trim())));
   return 1;
 }

@@ -1,4 +1,4 @@
-// Oraculo da F2 (specs/entrega-f2-config-e-ciclo-de-vida/03-spec.md secao 7, "Regra do oraculo"). Prova que a
+// Oraculo da F2 (specs/archive/2026-10-09-entrega-f2-config-e-ciclo-de-vida/03-spec.md secao 7, "Regra do oraculo"). Prova que a
 // instalacao entrega o que foi DECIDIDO. Regra inegociavel: este arquivo importa SO `node:*`. Nada de
 // `src/`, nem catalogo, nem descritores. Executa `bin/mgr.js` e o runtime copiado como processo filho e le
 // o disco; todo valor esperado e literal escrito a partir da spec (CA-1, CA-3, CA-5, CA-15 da secao 9).

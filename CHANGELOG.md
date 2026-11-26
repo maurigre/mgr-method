@@ -70,6 +70,13 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   feature e oferece atualizar o guia; o `spec-init` não termina com ele. Medido neste repositório: o
   guia local não tinha 16 regras (`SEC-1..7`, `PERF-1..5`, `MNT-1..3`, `PAT-1`) desde os PRs #36 a #39.
   A comparação é por ID: um guia que só menciona o ID, sem trazer a regra, passa.
+- **`spec archive <slug>` arquiva uma fatia terminada** em `specs/archive/<AAAA-MM-DD>-<slug>/`, e
+  só se as três condições valerem: toda task do plano `done`, `06-completion.md` presente e sem
+  `DOC-3`/`DOC-4`, e `sdd-check` verde. A recusa lista o que falhou e não move nada; não há
+  desarquivar. `--date AAAA-MM-DD` registra outro dia. `spec status --archived` lista as
+  arquivadas, mais recentes primeiro. `spec status`, `spec next` e `spec validate` ignoram o
+  archive e recusam, com o caminho, uma fatia que só existe nele. **`archive` passa a ser nome
+  reservado em `specs/`:** um projeto com uma feature chamada `archive` precisa renomeá-la.
 
 ### Alterado
 - **A `src/` e a `test/` estão organizadas em pastas por papel (ADR-0035):** `core/`, `install/`,

@@ -13,6 +13,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { locate } from "../src/sdd/artifacts.js";
 
 // O 1.2 existe porque essa fatia inteira foi medida com chars / 4 — metade da
 // formula — e todos os numeros sairam 20% baixos. A formula completa ja estava
@@ -227,8 +228,12 @@ export function resolveSlugPath(slug, specsDir = "specs", registra = console.err
     }
   }
 
-  // Fallback: layout literal specs/<slug>/*.md.
-  const sliceDir = join(specsDir, slug);
+  // Fallback: layout literal specs/<slug>/*.md. Uma fatia arquivada nao esta mais ali e o `spec status`
+  // a recusa por desenho (ADR-0036, K06a): sob `specs/`, ela e procurada no archive pela mesma
+  // descoberta do runtime, sem segundo reconhecimento de nome. Mais de uma arquivada com o mesmo slug
+  // nao e escolhida em silencio: cai no problema de diretorio ausente, nomeado.
+  const onde = specsDir === "specs" ? locate(".", slug) : { state: "absent" };
+  const sliceDir = onde.state === "archived" && onde.paths.length === 1 ? onde.paths[0] : join(specsDir, slug);
   if (!existsSync(sliceDir)) {
     return { paths: [], canonicos: [], extras: [], method: "literal layout", problems: [`Diretorio da fatia nao existe: ${sliceDir}`] };
   }

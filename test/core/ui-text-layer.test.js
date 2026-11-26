@@ -1286,6 +1286,7 @@ const IGUAIS_POR_DESENHO = new Map([
   ["specNextSkill", "layout with a technical term"], ["tokensTotal", "layout with a technical term"],
   ["agentsIntent", "layout only"],
   ["specStatusRoot", "layout only"], ["specStatusLine", "layout only"],
+  ["specStatusArchivedLine", "layout only"],
   ["instructionsStateLine", "layout only"], ["artifactSpec0Example", "code example"],
   ["artifactSpec4Example", "code example"], ["artifactPlan0Example", "code example"],
   ["artifactPlan1Example", "code example"], ["artifactPlan3Example", "code example"],

@@ -7,7 +7,8 @@ import {
   checkIdCensus,
   ID_BASELINE,
 } from "../../scripts/check-laws.mjs";
-import { fontePresente } from "../helpers/fonte-presente.js";
+import path from "node:path";
+import { caminhoDaFatia, fontePresente } from "../helpers/fonte-presente.js";
 
 test("shouldCountThirtyOneIdsWithPerfContiguousFromOneToFive", () => {
   const conteudo = readFileSync(
@@ -58,7 +59,7 @@ test("shouldKeepExactlyThreeLevelTwoHeadingsInQualityRules", () => {
 });
 
 test("shouldFindEverySourceIdentifierCitedByTheRulesInTheReadSourcesFile", () => {
-  const caminho = "specs/perf-regras-citaveis/fontes-lidas.md";
+  const caminho = path.join(caminhoDaFatia("perf-regras-citaveis"), "fontes-lidas.md");
 
   if (!fontePresente(caminho)) {
     return;

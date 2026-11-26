@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
   estimateTokens,
@@ -12,9 +12,11 @@ import {
   resolveSlugPath,
 } from "../../scripts/measure-cost.mjs";
 import { tempDir } from "../../scripts/lib/tmp.mjs";
+import { caminhoDaFatia } from "../helpers/fonte-presente.js";
+import { slugs } from "../../src/sdd/artifacts.js";
 
 const fatiaPresente = (slug) => {
-  const existe = existsSync(path.join("specs", slug));
+  const existe = existsSync(caminhoDaFatia(slug));
   if (!existe) {
     console.error(
       `[declarado] fatia ${slug} ausente (specs/ e gitignored): este caso NAO foi conferido nesta execucao`,
@@ -286,9 +288,17 @@ test("shouldCountCharactersAndNotBytesOnAccentedText", () => {
   }
 });
 
+const CANONICO = /^0[1-6]-[a-z-]+\.md$/;
+const fatiaAtivaComExtraEmDisco = () => slugs(".").find((slug) => readdirSync(path.join("specs", slug))
+  .some((nome) => nome.endsWith(".md") && !CANONICO.test(nome)));
+
 test("shouldCountExtraArtifactsOnTheSpecStatusBranchToo", () => {
-  if (!fatiaPresente("sec-regras-citaveis")) return;
-  const comExtras = resolveSlugPath("sec-regras-citaveis");
+  const slug = fatiaAtivaComExtraEmDisco();
+  if (!slug) {
+    console.error("[declarado] nenhuma fatia ativa com artefato extra em specs/: este caso NAO foi conferido nesta execucao");
+    return;
+  }
+  const comExtras = resolveSlugPath(slug, "specs", () => {});
   assert.equal(comExtras.method, "mgr spec status");
   assert.ok(comExtras.extras.length > 0);
   assert.equal(
@@ -491,5 +501,5 @@ test("shouldLogBeforeAndAfterTheSubprocess", () => {
   resolveSlugPath("metodo-mede-o-custo", "specs", (linha) => registradas.push(linha));
   assert.equal(registradas.length, 2);
   assert.match(registradas[0], /resolvendo caminhos de metodo-mede-o-custo via mgr spec status/);
-  assert.match(registradas[1], /mgr spec status devolveu status 0/);
+  assert.match(registradas[1], /mgr spec status devolveu status \d+/);
 });

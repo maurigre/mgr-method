@@ -7,7 +7,8 @@ import {
   checkIdCensus,
   ID_BASELINE,
 } from "../../scripts/check-laws.mjs";
-import { fontePresente } from "../helpers/fonte-presente.js";
+import path from "node:path";
+import { caminhoDaFatia, fontePresente } from "../helpers/fonte-presente.js";
 
 test("shouldCountSeventyNineIdsWithPatAtOneAndMntContiguous", () => {
   const conteudo = readFileSync(
@@ -58,7 +59,7 @@ test("shouldKeepExactlyFiveLevelTwoHeadings", () => {
 });
 
 test("shouldFindEverySourceIdentifierCitedByTheRulesInTheReadSourcesFile", (t) => {
-  const caminho = "specs/sol-pat-regras-citaveis/fontes-lidas.md";
+  const caminho = path.join(caminhoDaFatia("sol-pat-regras-citaveis"), "fontes-lidas.md");
 
   if (!fontePresente(caminho)) {
     t.skip("fontes-lidas.md ausente: a conferencia NAO rodou");

@@ -1,6 +1,7 @@
-// Cola dos comandos `mgr spec status|validate|next`. Humble Object: aqui só há parse de flag,
+// Cola dos comandos `mgr spec status|validate|next|archive`. Humble Object: aqui só há parse de flag,
 // formatação e exit code; o IO (stdout/stderr, cor) entra por `io` e a raiz por `root`, para o
-// teste exercitar sem processo filho. A decisão vive em src/ (plan-validator, plan-next, spec-status).
+// teste exercitar sem processo filho. A decisão vive em src/ (plan-validator, plan-next, spec-status,
+// archive).
 import path from "node:path";
 import * as planValidator from "../sdd/plan-validator.js";
 import * as specValidator from "../sdd/spec-validator.js";
@@ -8,10 +9,30 @@ import * as provValidator from "../sdd/prov-validator.js";
 import * as docValidator from "../sdd/doc-validator.js";
 import * as planNext from "../sdd/plan-next.js";
 import * as specStatusModel from "../sdd/spec-status.js";
-import { SPECS_DIR, slugs } from "../sdd/artifacts.js";
+import { ARCHIVE_DIR, SPECS_DIR, archivedEntries, locate, slugs } from "../sdd/artifacts.js";
+import { REASONS, applyArchive, planArchive } from "../sdd/archive.js";
 import { blocking, findingTexts, summarize } from "../sdd/findings.js";
 import { getMessages } from "../core/messages.js";
 import { renderText } from "../core/ui-text.js";
+
+// Fatia que só existe no archive, ou o próprio nome `archive`: recusa explícita com o caminho, antes
+// do núcleo (resposta 7 do CHECKPOINT 1). Sem ela, `spec validate <arquivada>` diria "nenhuma spec
+// encontrada" — verdadeiro e enganoso. Resultado discriminado (DES-1): `{ refused: false }` para
+// seguir, ou `{ refused: true, exitCode }` depois de escrever a recusa.
+function recusaDeArquivada(repo, slug, io, M) {
+  const seguir = { refused: false };
+  if (!slug) return seguir;
+  const onde = locate(repo, slug);
+  if (onde.state === "reserved") {
+    io.err(M.errorPrefix(M.specArchiveReserved));
+    return { refused: true, exitCode: 1 };
+  }
+  if (onde.state === "archived") {
+    io.err(M.errorPrefix(M.specArchived(slug, onde.paths.join(", "))));
+    return { refused: true, exitCode: 1 };
+  }
+  return seguir;
+}
 
 // `mgr spec validate` — valida artefato do PROJETO do usuário. Não confundir com `mgr validate`,
 // que valida autoria de SKILL.md: são contratos diferentes (ADR-0012). Aqui só há parse de flag,
@@ -19,6 +40,8 @@ import { renderText } from "../core/ui-text.js";
 export function specValidate({ root, cwd, flags, positional, io, M }) {
   const repo = root;
   const slug = flags.all ? null : (positional[0] || planValidator.slugFromCwd(repo, cwd));
+  const recusa = recusaDeArquivada(repo, slug, io, M);
+  if (recusa.refused) return recusa.exitCode;
   // Quatro verificações, um comando: o plano (ADR-0012), a spec (ADR-0013), a proveniência
   // (ADR-0016) e a documentação declarada no fechamento (ADR-0020). As duas primeiras leem UM
   // arquivo por feature, a terceira vale para qualquer artefato e a quarta só para o fechamento —
@@ -84,6 +107,8 @@ export function specNext({ root, cwd, flags, positional, io, M }) {
   }
 
   const slug = positional[0] || planValidator.slugFromCwd(repo, cwd);
+  const recusa = recusaDeArquivada(repo, slug, io, M);
+  if (recusa.refused) return recusa.exitCode;
 
   // Sem slug e fora de `specs/<slug>/`, a descoberta escolhia a primeira feature em ordem
   // alfabética e respondia como se fosse A resposta. Dizer quantas existem e pedir o nome custa uma
@@ -164,6 +189,8 @@ const resumoDeStatus = (feature) =>
 export function specStatus({ root, cwd, flags, positional, io, M }) {
   const repo = root;
 
+  if (flags.archived) return statusDasArquivadas(repo, flags, positional, io, M);
+
   if (flags.all) {
     const todas = specStatusModel.statusAll(repo);
     if (!todas.length) {
@@ -181,6 +208,8 @@ export function specStatus({ root, cwd, flags, positional, io, M }) {
   }
 
   const slug = positional[0] || planValidator.slugFromCwd(repo, cwd);
+  const recusa = recusaDeArquivada(repo, slug, io, M);
+  if (recusa.refused) return recusa.exitCode;
   const resultado = specStatusModel.statusFor(repo, { slug });
 
   if (!resultado.found) {
@@ -203,5 +232,80 @@ export function specStatus({ root, cwd, flags, positional, io, M }) {
     : M.specStatusHandoffNone);
   io.out("");
   io.out(M.specStatusWarning);
+  return 0;
+}
+
+// `mgr spec status --archived` — o que está em specs/archive/, mais recentes primeiro. Vazio sai 0:
+// um projeto sem nada arquivado é o estado inicial legítimo, não erro de diretório. A listagem só diz
+// o que está na pasta (limite declarado: uma pasta posta à mão aparece igual).
+function statusDasArquivadas(repo, flags, positional, io, M) {
+  if (positional[0] || flags.all) {
+    io.err(M.errorPrefix(M.specStatusArchivedExclusive));
+    return 1;
+  }
+  const arquivadas = archivedEntries(repo);
+  if (flags.json) {
+    io.out(JSON.stringify({ schemaVersion: 1, archived: arquivadas }, null, 2));
+    return 0;
+  }
+  if (!arquivadas.length) {
+    io.out(M.specStatusArchivedEmpty(path.join(repo, SPECS_DIR, ARCHIVE_DIR)));
+    return 0;
+  }
+  for (const entrada of arquivadas) {
+    io.out(entrada.recognized
+      ? M.specStatusArchivedLine(entrada.date, entrada.slug)
+      : M.specStatusArchivedUnrecognized(entrada.name));
+  }
+  return 0;
+}
+
+// Código de recusa (dado, `REASONS`) → linha no idioma. A tabela mora na cola, como a de
+// `src/commands/sdd-check.js`: o núcleo devolve o código, e só a borda escolhe as palavras.
+const LINHA_DO_MOTIVO = {
+  [REASONS.reservedSlug]: (M) => M.specArchiveReserved,
+  [REASONS.notFound]: (M, motivo) => M.specStatusNotFound(motivo.slug),
+  [REASONS.alreadyArchived]: (M, motivo, slug) => M.specArchived(slug, motivo.paths.join(", ")),
+  [REASONS.invalidDate]: (M, motivo) => M.specArchiveDateInvalid(motivo.value ?? ""),
+  [REASONS.futureDate]: (M, motivo) => M.specArchiveDateFuture(motivo.value),
+  [REASONS.noPlan]: (M) => M.specArchiveNoPlan,
+  [REASONS.noTasks]: (M) => M.specArchiveNoTasks,
+  [REASONS.tasksNotDone]: (M, motivo) => M.specArchiveTasksNotDone(motivo.ids.join(", ")),
+  [REASONS.noCompletion]: (M) => M.specArchiveNoCompletion,
+  [REASONS.completionFindings]: (M, motivo) => M.specArchiveCompletionFindings(motivo.codes.join(", "), motivo.slug),
+  [REASONS.sddCheckFailed]: (M, motivo) => M.specArchiveSddFailed(motivo.reason),
+  [REASONS.destinationExists]: (M, motivo) => M.specArchiveDestinationExists(motivo.destination),
+};
+
+// `mgr spec archive <slug> [--date AAAA-MM-DD]` — move a fatia terminada para specs/archive/, e só se
+// as três condições valerem (ADR-0036, K06a). Slug sempre explícito: o movimento é irreversível, e
+// rodar de dentro da pasta que vai mudar de lugar deixaria o shell num diretório que não existe.
+// `--all` é recusado, não ignorado: cada fatia é arquivada pelo nome, uma de cada vez.
+export function specArchive({ root, flags, positional, io, M }) {
+  const repo = root;
+  if (flags.all) {
+    io.err(M.errorPrefix(M.specArchiveAllRefused));
+    return 1;
+  }
+  const slug = positional[0];
+  if (!slug) {
+    io.err(M.errorPrefix(M.specArchiveNeedsSlug));
+    return 1;
+  }
+  const plano = planArchive(repo, slug, Object.hasOwn(flags, "date") ? { date: flags.date } : {});
+  if (plano.outcome === "refused") {
+    io.err(M.errorPrefix(M.specArchiveRefused(slug)));
+    for (const motivo of plano.reasons) io.err(LINHA_DO_MOTIVO[motivo.code](M, motivo, slug));
+    return 1;
+  }
+  // LOG-1: uma linha logo antes e outra logo depois de alterar o disco.
+  io.out(M.specArchiveMoving(path.join(SPECS_DIR, slug), plano.destination));
+  const movimento = applyArchive(repo, plano);
+  if (movimento.outcome !== "moved") {
+    io.err(M.errorPrefix(M.specArchiveMoveFailed(movimento.from, movimento.to, movimento.code)));
+    return 1;
+  }
+  io.out(M.specArchiveDone(movimento.from, movimento.to));
+  if (plano.sddWarnings > 0) io.out(M.specArchiveSddWarnings(plano.sddWarnings));
   return 0;
 }

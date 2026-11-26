@@ -4,6 +4,7 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse, STATUS_VALUES, STATUS_DONE } from "../../src/sdd/plan-parser.js";
+import { pastasDasFatias } from "../helpers/fonte-presente.js";
 
 const RAIZ = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -91,11 +92,8 @@ test("no plano misto, o depends_on em inglês é lido mesmo sem marcador", () =>
 // Reforço de ambiente: quando os planos vivos existem (máquina do autor), eles também valem como
 // amostra. Ausentes — CI, clone limpo — o teste acima já garante o comportamento.
 test("os planos vivos, quando existem, também são lidos sem quebra", () => {
-  const raizSpecs = path.join(RAIZ, "specs");
-  if (!existsSync(raizSpecs)) return;
-  const planos = readdirSync(raizSpecs, { withFileTypes: true })
-    .filter((entrada) => entrada.isDirectory())
-    .map((entrada) => path.join(raizSpecs, entrada.name, "04-plan.md"))
+  const planos = pastasDasFatias()
+    .map((pasta) => path.join(pasta, "04-plan.md"))
     .filter(existsSync);
   for (const plano of planos) {
     assert.doesNotThrow(() => parse(readFileSync(plano, "utf8")), `quebrou em ${plano}`);

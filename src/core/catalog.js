@@ -132,6 +132,7 @@ export const RUNTIME_FILES = [
   "src/plugin.js",
   "src/plugins/detector.js",
   "src/plugins/registry.js",
+  "src/sdd/archive.js",
   "src/sdd/artifacts.js",
   "src/sdd/doc-rules.js",
   "src/sdd/doc-validator.js",

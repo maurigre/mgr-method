@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { tempDir } from "../../scripts/lib/tmp.mjs";
@@ -117,4 +117,21 @@ test("should answer help and an unknown flag in English when the manifest userLa
   assert.match(helpRun.stdout, /^mgr-method project runtime$/m);
   assert.match(helpRun.stdout, /run through npx mgr-method@latest\./);
   assert.equal(runIn(dir, "help", "--nope").stderr, "unknown flag: --nope\n");
+}));
+
+const fatiaTerminada = (dir) => {
+  writeFileSync(path.join(dir, "specs", "demo", "04-plan.md"), "### P0.1 — demo\n- **status:** done\n");
+  writeFileSync(path.join(dir, "specs", "demo", "06-completion.md"),
+    "# Conclusao\n\n## Diff do SDD (local)\n\nNão houve alteração no SDD: a fatia nao muda contrato.\n");
+};
+
+test("should archive a finished feature through the project runtime and list it as JSON", comProjeto((dir) => {
+  fatiaTerminada(dir);
+  const arquivar = runIn(dir, "spec", "archive", "demo", "--date", "2026-01-15");
+  assert.equal(arquivar.status, 0, arquivar.stderr);
+  assert.equal(existsSync(path.join(dir, "specs", "demo")), false);
+  assert.equal(existsSync(path.join(dir, "specs", "archive", "2026-01-15-demo", "04-plan.md")), true);
+  const listar = runIn(dir, "spec", "status", "--archived", "--json");
+  assert.equal(listar.status, 0, listar.stderr);
+  assert.deepEqual(JSON.parse(listar.stdout).archived.map(({ name }) => name), ["2026-01-15-demo"]);
 }));

@@ -17,9 +17,9 @@ confirmation, at closing).
 
 0. **Resolve the paths, do not assume them.** `node {{MGR_RUNTIME}} spec status <slug> --json`
    returns `specRoot`, the resolved `path` of each artifact and `handoff`. If the runtime is
-   missing, STOP as described in "MGR runtime (mandatory)" below.
+   missing, STOP as described in "MGR runtime (mandatory)" below. If it exits 1, show its message and STOP — never continue with a path built from the convention.
    The payload's `basis` is `file-existence`: an artifact on disk is not an approved artifact.
-1. **Resumption first:** if `/specs/<slug>/.handoff.md` exists, load ONLY the saved
+1. **Resumption first:** if the `handoff.path` returned in step 0 exists, load ONLY the saved
    state, skip completed tasks and warn: "Resuming <slug> from task <id>."
 2. Otherwise, load the tiers from disk:
    - **S:** `docs/sdd/CONSTITUTION.md` + `01-brief.md`

@@ -371,6 +371,7 @@ const en = ({ invocation, lifecycle }) => ({
     "mgr-method project runtime",
     "",
     "  spec status|validate|next|initials",
+    "  spec archive <slug> [--date YYYY-MM-DD] · spec status --archived",
     "  spec initials set <value>",
     "  agents [<intent>|set|apply]",
     "  origin set <value>",
@@ -459,6 +460,28 @@ const en = ({ invocation, lifecycle }) => ({
     "This is FILE EXISTENCE, not progress. It does not know which checkpoint you approved, and an artifact on disk is not an approved artifact.",
   specStatusNotFound: (slug) => `no feature \`${slug}\` in specs/`,
   specStatusEmpty: (dir) => `no feature found in ${dir}`,
+  specArchiveMoving: (from, to) => `archiving: ${from} → ${to}`,
+  specArchiveSddWarnings: (count) => `sdd-check passed with ${count} warning(s): see them with \`${invocation} sdd-check\``,
+specArchiveDone: (from, to) => `archived: ${from} → ${to}`,
+  specArchiveRefused: (slug) => `not archived: \`${slug}\` — nothing was moved`,
+  specArchiveTasksNotDone: (ids) => `  (1) tasks not marked done in the plan: ${ids}`,
+  specArchiveNoPlan: "  (1) no plan: 04-plan.md does not exist",
+  specArchiveNoTasks: "  (1) the plan has no task the parser recognizes",
+  specArchiveNoCompletion: "  (2) no completion: 06-completion.md does not exist",
+  specArchiveCompletionFindings: (codes, slug) => `  (2) the completion fails ${codes}: run \`${invocation} spec validate ${slug}\``,
+  specArchiveSddFailed: (reason) => `  (3) sdd-check fails (${reason}): run \`${invocation} sdd-check\``,
+  specArchiveDestinationExists: (dest) => `  ${dest} already exists: an archived feature is never overwritten`,
+  specArchiveReserved: `\`archive\` is a reserved name, not a feature: specs/archive/ holds the archived features — list them with \`${invocation} spec status --archived\``,
+  specArchived: (slug, paths) => `\`${slug}\` is archived at ${paths}: an archived feature is not resumed or revalidated — a correction is a new feature`,
+  specArchiveNeedsSlug: `\`${invocation} spec archive\` needs the feature slug: moving a feature is never decided by the current directory`,
+  specArchiveAllRefused: `\`${invocation} spec archive\` does not accept \`--all\`: each feature is archived by name, one at a time`,
+  specArchiveDateInvalid: (value) => `invalid --date "${value}": use YYYY-MM-DD with a real calendar day`,
+  specArchiveDateFuture: (value) => `invalid --date ${value}: it is after today, and the date says when the feature ended`,
+  specArchiveMoveFailed: (from, to, code) => `could not move ${from} to ${to} (${code}): nothing was moved`,
+  specStatusArchivedLine: (date, slug) => `  ${date}  ${slug}`,
+  specStatusArchivedUnrecognized: (name) => `  ${name}  (name outside YYYY-MM-DD-<slug>)`,
+  specStatusArchivedEmpty: (dir) => `no archived feature in ${dir}`,
+  specStatusArchivedExclusive: "`--archived` lists every archived feature: it takes no slug and no `--all`",
   statusGate: (state) => `  gate:    ${state}`,
   statusGateOffLine: "  gate:    off (every intent disabled in `agents`)",
   statusGateEngineLine: (engine, model, effort) =>
@@ -608,6 +631,7 @@ Usage: mgr <command> [options]
                    ([<slug>], --all, --strict, --json)
   spec next        the next action from the plan ([<slug>], --json)
   spec status      which artifacts exist ([<slug>], --all, --json)
+  spec archive     moves a finished feature to specs/archive/ (<slug> [--date YYYY-MM-DD]); spec status --archived lists them
   spec initials    reads or records your initials for branch names (set <value>, --json)
   agents           which model and effort each intent uses, and where each
                    value came from ([<intent>], --json)
@@ -1183,6 +1207,7 @@ const ptBR = ({ invocation, lifecycle }) => ({
     "runtime do projeto mgr-method",
     "",
     "  spec status|validate|next|initials",
+    "  spec archive <slug> [--date AAAA-MM-DD] · spec status --archived",
     "  spec initials set <valor>",
     "  agents [<intencao>|set|apply]",
     "  origin set <valor>",
@@ -1271,6 +1296,28 @@ const ptBR = ({ invocation, lifecycle }) => ({
     "Isto é EXISTÊNCIA DE ARQUIVO, não progresso. Ele não sabe qual checkpoint você aprovou, e artefato em disco não é artefato aprovado.",
   specStatusNotFound: (slug) => `não há a feature \`${slug}\` em specs/`,
   specStatusEmpty: (dir) => `nenhuma feature encontrada em ${dir}`,
+  specArchiveMoving: (from, to) => `arquivando: ${from} → ${to}`,
+  specArchiveSddWarnings: (count) => `o sdd-check passou com ${count} aviso(s): veja-os com \`${invocation} sdd-check\``,
+specArchiveDone: (from, to) => `arquivada: ${from} → ${to}`,
+  specArchiveRefused: (slug) => `não arquivada: \`${slug}\` — nada foi movido`,
+  specArchiveTasksNotDone: (ids) => `  (1) tasks não marcadas como concluídas no plano: ${ids}`,
+  specArchiveNoPlan: "  (1) não há plano: o 04-plan.md não existe",
+  specArchiveNoTasks: "  (1) o plano não tem nenhuma task que o parser reconheça",
+  specArchiveNoCompletion: "  (2) não há fechamento: o 06-completion.md não existe",
+  specArchiveCompletionFindings: (codes, slug) => `  (2) o fechamento falha em ${codes}: rode \`${invocation} spec validate ${slug}\``,
+  specArchiveSddFailed: (reason) => `  (3) o sdd-check falha (${reason}): rode \`${invocation} sdd-check\``,
+  specArchiveDestinationExists: (dest) => `  ${dest} já existe: uma feature arquivada nunca é sobrescrita`,
+  specArchiveReserved: `\`archive\` é um nome reservado, não uma feature: specs/archive/ guarda as features arquivadas — liste-as com \`${invocation} spec status --archived\``,
+  specArchived: (slug, paths) => `\`${slug}\` está arquivada em ${paths}: uma feature arquivada não é retomada nem revalidada — uma correção é uma feature nova`,
+  specArchiveNeedsSlug: `\`${invocation} spec archive\` precisa do slug da feature: mover uma feature nunca é decidido pelo diretório atual`,
+  specArchiveAllRefused: `\`${invocation} spec archive\` não aceita \`--all\`: cada feature é arquivada pelo nome, uma de cada vez`,
+  specArchiveDateInvalid: (value) => `--date "${value}" inválido: use AAAA-MM-DD com um dia real do calendário`,
+  specArchiveDateFuture: (value) => `--date ${value} inválido: é posterior a hoje, e a data diz quando a feature terminou`,
+  specArchiveMoveFailed: (from, to, code) => `não foi possível mover ${from} para ${to} (${code}): nada foi movido`,
+  specStatusArchivedLine: (date, slug) => `  ${date}  ${slug}`,
+  specStatusArchivedUnrecognized: (name) => `  ${name}  (nome fora de AAAA-MM-DD-<slug>)`,
+  specStatusArchivedEmpty: (dir) => `nenhuma feature arquivada em ${dir}`,
+  specStatusArchivedExclusive: "`--archived` lista todas as features arquivadas: não aceita slug nem `--all`",
   statusGate: (state) => `  gate:    ${state}`,
   statusGateOffLine: "  gate:    desligado (todas as intenções desligadas em `agents`)",
   statusGateEngineLine: (engine, model, effort) =>
@@ -1420,6 +1467,7 @@ Uso: mgr <comando> [opções]
                    ([<slug>], --all, --strict, --json)
   spec next        a próxima ação a partir do plano ([<slug>], --json)
   spec status      quais artefatos existem ([<slug>], --all, --json)
+  spec archive     move uma feature concluída para specs/archive/ (<slug> [--date AAAA-MM-DD]); spec status --archived lista as arquivadas
   spec initials    lê ou grava suas iniciais para nomes de branch (set <valor>, --json)
   agents           qual modelo e esforço cada intenção usa, e de onde veio
                    cada valor ([<intenção>], --json)

@@ -277,8 +277,9 @@ const LINHA_DO_MOTIVO = {
   [REASONS.completionFindings]: (M, motivo) => M.specArchiveCompletionFindings(motivo.codes.join(", "), motivo.slug),
   [REASONS.sddCheckFailed]: (M, motivo) => M.specArchiveSddFailed(motivo.reason),
   [REASONS.externalReviewMissing]: (M, motivo) => M.specArchiveReviewMissing(motivo.slug, motivo.consent === "given"),
-  [REASONS.externalReviewInvalid]: (M, motivo) => M.specArchiveReviewInvalid(motivo.detail),
-  [REASONS.externalReviewReviewerNotConfigured]: (M, motivo) => M.specArchiveReviewReviewerNotConfigured(motivo.reviewer, motivo.reviewers),
+  [REASONS.externalReviewInvalid]: (M, motivo) => (Object.hasOwn(motivo, "reviewer")
+    ? M.specArchiveReviewReviewerNotConfigured(motivo.reviewer, motivo.reviewers)
+    : M.specArchiveReviewInvalid(motivo.detail)),
   [REASONS.externalReviewStale]: (M, motivo) => M.specArchiveReviewStale(motivo.paths),
   [REASONS.externalReviewUnverifiable]: (M) => M.specArchiveReviewUnverifiable,
   [REASONS.destinationExists]: (M, motivo) => M.specArchiveDestinationExists(motivo.destination),

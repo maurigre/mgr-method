@@ -33,7 +33,6 @@ export const REASONS = Object.freeze({
   sddCheckFailed: "sdd-check-failed",
   externalReviewMissing: "external-review-missing",
   externalReviewInvalid: "external-review-invalid",
-  externalReviewReviewerNotConfigured: "external-review-reviewer-not-configured",
   externalReviewStale: "external-review-stale",
   externalReviewUnverifiable: "external-review-unverifiable",
   destinationExists: "destination-exists",
@@ -92,7 +91,8 @@ export function decide(fatos) {
 const RECUSA_DA_REVISAO = {
   missing: (fato, slug) => [{ code: REASONS.externalReviewMissing, slug, consent: fato.consent }],
   invalid: (fato) => [{ code: REASONS.externalReviewInvalid, detail: fato.detail }],
-  "reviewer-not-configured": (fato) => [{ code: REASONS.externalReviewReviewerNotConfigured, reviewer: fato.reviewer, reviewers: fato.reviewers }],
+  // DT-13: revisor fora da lista do config é prova inválida; o dado do revisor vai junto para a frase.
+  "reviewer-not-configured": (fato) => [{ code: REASONS.externalReviewInvalid, reviewer: fato.reviewer, reviewers: fato.reviewers }],
   stale: (fato) => [{ code: REASONS.externalReviewStale, paths: fato.paths }],
   unverifiable: () => [{ code: REASONS.externalReviewUnverifiable }],
 };

@@ -285,10 +285,11 @@ for (const idioma of IDIOMAS) {
     assert.deepEqual(arvore(path.join(root, "specs")), antes);
   });
 
-  test(`should list the task, completion and review reasons in that order when all three fail [${idioma}]`, () => {
+  test(`should list the task, completion, sdd-check and review reasons in that order when all four fail [${idioma}]`, () => {
     const mensagens = getMessages(idioma);
     const root = montarFatia({ statusDaTask: "todo" });
     rmSync(path.join(root, "specs", "x", "06-completion.md"));
+    rmSync(path.join(root, "docs", "sdd", "CONSTITUTION.md"));
     const { codigo, err } = arquivar({ root, idioma, reviewIo: reviewIoReal() });
 
     assert.equal(codigo, 1);
@@ -296,6 +297,7 @@ for (const idioma of IDIOMAS) {
       mensagens,
       mensagens.specArchiveTasksNotDone("P0.1"),
       mensagens.specArchiveNoCompletion,
+      mensagens.specArchiveSddFailed("no-constitution"),
       mensagens.specArchiveReviewMissing("x", true),
     ));
   });

@@ -157,3 +157,21 @@ test("should throw UsageError with reviewerUnknown when the reviewer is unknown"
 test("should list only codex as the registered reviewer id", () => {
   assert.deepEqual(reviewers.ids(), ["codex"]);
 });
+
+test("should return the raw error and turn.failed lines of the event stream", () => {
+  const fluxo = [
+    "{\"type\":\"thread.started\",\"thread_id\":\"abc\"}",
+    "nao e json",
+    "{\"type\":\"error\",\"message\":\"modelo desconhecido\"}",
+    "{\"type\":\"turn.failed\",\"error\":{\"message\":\"x\"}}",
+    "null",
+  ].join("\n");
+  assert.deepEqual(codex.failureEventsFrom(fluxo), [
+    "{\"type\":\"error\",\"message\":\"modelo desconhecido\"}",
+    "{\"type\":\"turn.failed\",\"error\":{\"message\":\"x\"}}",
+  ]);
+});
+
+test("should return no failure lines when the stream has none", () => {
+  assert.deepEqual(codex.failureEventsFrom("{\"type\":\"turn.completed\"}\n"), []);
+});

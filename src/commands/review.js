@@ -287,7 +287,8 @@ async function reviewExternal(contexto) {
   if (!chamada.ok) return naoTerminou(chamada);
   const { resultado } = chamada;
   if (resultado.status !== 0) {
-    return falha(REVIEW_REASONS.reviewerFailed, M.errorPrefix(M.reviewFailed(ficha.id, resultado.status, resultado.stderr)));
+    const original = [resultado.stderr.trim(), ...ficha.failureEventsFrom(resultado.stdout)].filter((linha) => linha !== "").join("\n");
+    return falha(REVIEW_REASONS.reviewerFailed, M.errorPrefix(M.reviewFailed(ficha.id, resultado.status, original)));
   }
   const resposta = interpretar(resultado);
   if (!resposta.ok) return falha(REVIEW_REASONS.responseInvalid, M.errorPrefix(M.reviewResponseInvalid(ficha.id, resposta.field)));

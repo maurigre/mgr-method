@@ -13,7 +13,7 @@ export const VERSAO_FALSA = "codex-cli 0.0.0-falso";
 export const SESSAO_FALSA = "sessao-falsa-1";
 export const RESPOSTA_VAZIA = Object.freeze({ specAxis: "reviewed", standards: [], spec: [], suggestions: [] });
 
-export const MODOS = Object.freeze(["ok", "nao-logado", "falha", "json-invalido", "fora-do-schema", "sem-o", "sem-sessao", "recusa-esforco", "sem-versao", "sem-permissao"]);
+export const MODOS = Object.freeze(["ok", "nao-logado", "falha", "json-invalido", "fora-do-schema", "sem-o", "sem-sessao", "recusa-esforco", "sem-versao", "sem-permissao", "falha-no-fluxo"]);
 
 const temCodex = (pasta) => existsSync(path.join(pasta, "codex")) || existsSync(path.join(pasta, "codex.cmd"));
 
@@ -39,6 +39,13 @@ if (argv[0] === "login") {
   process.stderr.write("Logged in using ChatGPT\\n"); process.exit(0);
 }
 if (argv[0] !== "exec") { process.stderr.write("comando inesperado\\n"); process.exit(9); }
+if (config.modo === "falha-no-fluxo") {
+  process.stderr.write("Reading additional input from stdin...\\n");
+  process.stdout.write(JSON.stringify({ type: "thread.started", thread_id: config.sessao }) + "\\n");
+  process.stdout.write(JSON.stringify({ type: "error", message: "modelo desconhecido" }) + "\\n");
+  process.stdout.write(JSON.stringify({ type: "turn.failed", error: { message: "modelo desconhecido" } }) + "\\n");
+  process.exit(1);
+}
 if (config.modo === "falha") { process.stderr.write("erro do revisor: limite atingido\\n"); process.exit(2); }
 if (config.modo === "recusa-esforco" && argv.some((valor) => valor.startsWith("model_reasoning_effort="))) {
   process.stderr.write("unsupported reasoning effort\\n"); process.exit(1);

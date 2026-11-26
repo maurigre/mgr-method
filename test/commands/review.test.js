@@ -588,3 +588,14 @@ test("should record the consent with the current time when no clock is injected"
   const gravado = Date.parse(JSON.parse(readFileSync(path.join(core, "config.local.json"), "utf8")).externalReviewConsent.codex.at);
   assert.ok(gravado >= antes && gravado <= Date.now());
 });
+
+test("should show the error events of the reviewer stream when exec fails with only a notice on stderr", async () => {
+  const { root, reviewIo } = cenario({ modo: "falha-no-fluxo" });
+  const amb = ambienteDe({ root, reviewIo });
+  assert.equal(await amb.executar(["external", FATIA], { base: "HEAD~1" }), 1);
+  const saida = amb.err.join("\n");
+  assert.ok(saida.includes("Reading additional input from stdin..."));
+  assert.ok(saida.includes("{\"type\":\"error\",\"message\":\"modelo desconhecido\"}"));
+  assert.ok(saida.includes("\"type\":\"turn.failed\""));
+  assert.deepEqual(lerProva(root).entries.map(({ kind, code }) => [kind, code]), [["failure", "reviewer-failed"]]);
+});

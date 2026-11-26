@@ -7,8 +7,13 @@
 // do próprio `codex`.
 
 const SESSION_EVENT = "thread.started";
-// [A CONFIRMAR na primeira execução real] — nome do campo não medido; a medição é da P1.2.
+// Documentação oficial do modo não interativo (learn.chatgpt.com/docs/non-interactive-mode, lida em
+// 2026-11-26): `{"type":"thread.started","thread_id":"0199a213-..."}`.
 const SESSION_FIELD = "thread_id";
+// A mesma página lista `turn.failed` e `error` entre os eventos, mas não documenta os campos deles. Por
+// isso a falha repete a LINHA CRUA desses eventos, sem supor onde mora a mensagem (medido na P1.2: com
+// `--json`, o stderr trouxe só "Reading additional input from stdin..." e o motivo real não apareceu).
+const FAILURE_EVENTS = Object.freeze(["error", "turn.failed"]);
 
 const isNonEmptyString = (value) => typeof value === "string" && value.length > 0;
 
@@ -67,6 +72,17 @@ export default Object.freeze({
     }
     argv.push(prompt);
     return argv;
+  },
+
+  failureEventsFrom(jsonlText) {
+    return jsonlText.split("\n").map((linha) => linha.trim()).filter((linha) => {
+      try {
+        const evento = JSON.parse(linha);
+        return evento !== null && typeof evento === "object" && FAILURE_EVENTS.includes(evento.type);
+      } catch {
+        return false;
+      }
+    });
   },
 
   sessionFrom(jsonlText) {

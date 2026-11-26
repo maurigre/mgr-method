@@ -79,10 +79,11 @@ export function planReview(repo, { slug, flags, coreDir, git }) {
   const specSources = SPEC_SOURCES.flatMap((nome) => artifactFiles(repo, slug, nome))
     .map((absoluto) => ({ path: relativo(repo, absoluto), text: readFileSync(absoluto, "utf8") }));
   const guia = path.join(repo, GUIDE_PATH);
+  const round = nextRound(proof);
   return {
     outcome: "ready", slug, reviewer, options: config.options[reviewer.id] ?? {},
     base: { ref: flags.base, commit: base.commit }, head: head.commit, paths, files: fileHashes(conteudos.files),
-    proofPath, proof, round: nextRound(proof), beyondFlow: nextRound(proof) > RODADAS_DO_FLUXO, specSources,
+    proofPath, proof, round, beyondFlow: round > RODADAS_DO_FLUXO, specSources,
     guide: existsSync(guia) ? { present: true, text: readFileSync(guia, "utf8") } : { present: false },
   };
 }

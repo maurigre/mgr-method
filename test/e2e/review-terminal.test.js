@@ -23,6 +23,7 @@ function responderComEnter(projeto, idioma, rotuloDoNao) {
     let saida = "";
     let respondeu = false;
     const prazo = setTimeout(() => filho.kill(), PRAZO_MS);
+    filho.stdout.setEncoding("utf8");
     filho.stdout.on("data", (pedaco) => {
       saida += pedaco;
       if (!respondeu && saida.includes(rotuloDoNao)) {

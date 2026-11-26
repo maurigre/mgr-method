@@ -424,7 +424,7 @@ for (const idioma of IDIOMAS) {
     const amb = ambienteDe({ root, idioma, reviewIo });
     assert.equal(await amb.executar(["external", FATIA], { base: "HEAD~1" }), 1);
     assert.deepEqual(amb.err, [
-      amb.mensagens.errorPrefix(amb.mensagens.reviewNotLoggedIn(FICHA.id, "Not logged in")),
+      amb.mensagens.errorPrefix(amb.mensagens.reviewNotLoggedIn(FICHA.id, FICHA.binary, "Not logged in")),
       amb.mensagens.reviewFailureRecorded(RELATIVA_DA_PROVA),
     ]);
   });

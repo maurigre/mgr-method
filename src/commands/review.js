@@ -171,7 +171,7 @@ const LINHA_DA_RECUSA = {
 // Falha do REVISOR (casos 6 a 10): a linha com a mensagem original quando houver.
 const LINHA_DA_FALHA = {
   [REVIEW_REASONS.notInstalled]: (M, falha, ficha) => M.reviewNotInstalled(ficha.id, ficha.binary),
-  [REVIEW_REASONS.notLoggedIn]: (M, falha, ficha) => M.reviewNotLoggedIn(ficha.id, falha.detail),
+  [REVIEW_REASONS.notLoggedIn]: (M, falha, ficha) => M.reviewNotLoggedIn(ficha.id, ficha.binary, falha.detail),
   [REVIEW_REASONS.reviewerFailed]: (M, falha, ficha) => M.reviewFailed(ficha.id, falha.status, falha.detail),
   [REVIEW_REASONS.responseInvalid]: (M, falha, ficha) => M.reviewResponseInvalid(ficha.id, falha.field),
   [REVIEW_REASONS.sessionMissing]: (M, falha, ficha) => M.reviewSessionMissing(ficha.id),

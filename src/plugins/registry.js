@@ -785,13 +785,18 @@ function consentMapOf(local) {
 }
 
 // Entrada sem `at` de texto não prova consentimento: lê como ausente, o lado seguro.
+// O consentimento vale só com a data no formato que `Date#toISOString` grava (SEC-1; R2-S1): data vazia
+// ou inventada não libera o envio de código. Inválido conta como ausente, o lado seguro.
+const DATA_ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const dataDoConsentimento = (valor) => typeof valor === "string" && DATA_ISO.test(valor) && !Number.isNaN(Date.parse(valor));
+
 function consentStateOf(mapa, id) {
   const entrada = mapa[id];
   if (entrada === undefined) return { state: "absent" };
   if (!isPlainObject(entrada)) {
     throw new UsageError("configValueNotObject", [`externalReviewConsent.${id}`, JSON.stringify(entrada)]);
   }
-  return typeof entrada.at === "string" ? { state: "given", at: entrada.at } : { state: "absent" };
+  return dataDoConsentimento(entrada.at) ? { state: "given", at: entrada.at } : { state: "absent" };
 }
 
 export function readReviewConsent(coreDir, id) {
@@ -802,6 +807,7 @@ export function readReviewConsent(coreDir, id) {
 // Valida ANTES de gravar. Read-modify-write: `projectId`, `initials` e os outros consentimentos sobrevivem.
 export function writeReviewConsent(coreDir, id, at) {
   assertReviewerKnown(id);
+  if (!dataDoConsentimento(at)) throw new UsageError("externalReviewConsentAtInvalid", [JSON.stringify(at)]);
   const local = readLocalObject(coreDir);
   const mapa = consentMapOf(local);
   const antes = consentStateOf(mapa, id);

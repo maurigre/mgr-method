@@ -13,14 +13,12 @@ import { LOCAL_CONFIG_NAME, readExternalReview, readReviewConsent, removeReviewC
   writeReviewConsent, writeReviewerOptions } from "../plugins/registry.js";
 import { get as reviewerOf, ids as reviewerIds } from "../reviewers/index.js";
 import { RESPONSE_SCHEMA, REVIEW_REASONS } from "../sdd/external-review.js";
-import { appendToProof, chooseReviewer, failureEntry, judgeCall, judgeExec, judgeLogin, judgeVersion, planReview,
+import { appendToProof, chooseReviewer, isEnabled, failureEntry, judgeCall, judgeExec, judgeLogin, judgeVersion, planReview,
   proofFileOf, promptFor, reviewEntry, unchangedSince } from "../sdd/review-run.js";
 
 const CONFIG_NAME = "config.json";
 const COMANDO = "review";
 const SUBCOMANDOS = ["external", "status", "enable", "disable", "consent", "revoke", "set"];
-// Rodadas do fluxo (RN-19): passar disso é decisão humana, e a saída avisa.
-const RODADAS_DO_FLUXO = 2;
 
 export async function review(contexto) {
   const { positional, io, M } = contexto;
@@ -40,7 +38,6 @@ export async function review(contexto) {
   return reviewExternal(resto);
 }
 
-const ligada = (config) => config.state === "configured" && config.enabled === true;
 
 function recusaDoRevisor(escolha, io, M) {
   const linha = escolha.code === REVIEW_REASONS.reviewerAmbiguous
@@ -52,7 +49,7 @@ function recusaDoRevisor(escolha, io, M) {
 
 function reviewStatus({ core, flags, io, M }) {
   const config = readExternalReview(core);
-  const estado = ligada(config) ? "on" : "off";
+  const estado = isEnabled(config) ? "on" : "off";
   const origem = config.state === "configured" ? "configured" : "default";
   const revisores = config.state === "configured" ? config.reviewers : [];
   const opcoes = config.state === "configured" ? config.options : {};
@@ -101,7 +98,7 @@ async function reviewEnable(contexto) {
 
 function reviewDisable({ core, io, M }) {
   const config = readExternalReview(core);
-  if (!ligada(config)) {
+  if (!isEnabled(config)) {
     io.out(M.reviewAlreadyOff);
     return 0;
   }
@@ -180,10 +177,8 @@ const LINHA_DA_FALHA = {
   [REVIEW_REASONS.sessionMissing]: (M, falha, ficha) => M.reviewSessionMissing(ficha.id),
 };
 
-const descreverResultadoDoGit = (resultado) => {
-  if (typeof resultado === "boolean") return String(resultado);
-  return resultado.ok === true || resultado.found === true ? "ok" : "failed";
-};
+// O resultado vira booleano, e a palavra vem da tabela de cada idioma (QUAL-8; R2-S4).
+const deuCerto = (resultado) => (typeof resultado === "boolean" ? resultado : resultado.ok === true || resultado.found === true);
 
 // LOG-2: o git é subprocesso, então cada chamada ganha uma linha antes e outra depois. O núcleo recebe
 // este invólucro e não sabe que há log.
@@ -191,7 +186,7 @@ function gitComLog(git, io, M) {
   const comLog = (nome, chamada) => (...argumentos) => {
     io.out(M.reviewGitCalling(nome));
     const resultado = chamada(...argumentos);
-    io.out(M.reviewGitCalled(nome, descreverResultadoDoGit(resultado)));
+    io.out(M.reviewGitCalled(nome, deuCerto(resultado)));
     return resultado;
   };
   return {
@@ -228,10 +223,11 @@ async function reviewExternal(contexto) {
   };
   const executar = (etapa, rodar, julgar) => {
     const resultado = chamar(io, M, ficha, etapa, rodar);
-    const chamada = judgeCall(ficha, resultado);
+    const chamada = judgeCall(resultado);
     return chamada.ok ? julgar(ficha, resultado) : chamada;
   };
 
+  if (plano.beyondFlow) io.out(io.style.yellow(M.reviewRoundBeyondFlow(plano.round)));
   const versao = executar("--version", () => reviewIo.run(ficha.binary, ficha.versionArgv, { cwd: root }), judgeVersion);
   if (!versao.ok) return falhou(versao);
   const login = executar("login status", () => reviewIo.run(ficha.binary, ficha.loginArgv, { cwd: root }), judgeLogin);
@@ -252,7 +248,6 @@ async function reviewExternal(contexto) {
   io.out(M.reviewWriting(proofFileOf(root, plano)));
   io.out(M.reviewWritten(appendToProof(root, plano, entry), plano.round));
   relatar(io, M, checked);
-  if (plano.round > RODADAS_DO_FLUXO) io.out(io.style.yellow(M.reviewRoundBeyondFlow(plano.round)));
   return 0;
 }
 

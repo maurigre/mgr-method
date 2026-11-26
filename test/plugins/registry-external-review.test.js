@@ -238,3 +238,19 @@ test("should refuse an externalReviewConsent that is not an object with the conf
   assert.throws(() => readReviewConsent(core, "codex"),
     (erro) => erro instanceof UsageError && erro.key === "configValueNotObject" && erro.params[0] === "externalReviewConsent");
 });
+
+for (const at of ["", "ontem", "2026-11-26", "2026-13-40T99:99:99.999Z"]) {
+  test(`should read a consent with the time ${JSON.stringify(at)} as absent`, () => {
+    const core = diretorioTemporario();
+    mkdirSync(core, { recursive: true });
+    writeFileSync(path.join(core, "config.local.json"), JSON.stringify({ externalReviewConsent: { codex: { at } } }));
+    assert.deepEqual(readReviewConsent(core, "codex"), { state: "absent" });
+  });
+}
+
+test("should refuse to write a consent whose time is not an ISO time and write nothing", () => {
+  const core = diretorioTemporario();
+  assert.throws(() => writeReviewConsent(core, "codex", ""),
+    (erro) => erro instanceof UsageError && erro.key === "externalReviewConsentAtInvalid");
+  assert.equal(existsSync(path.join(core, "config.local.json")), false);
+});

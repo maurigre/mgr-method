@@ -7,7 +7,7 @@ import path from "node:path";
 import { review } from "../../src/commands/review.js";
 import { createReviewIo } from "../../bin/review-io.js";
 import { getMessages } from "../../src/core/messages.js";
-import { GUIDE_PATH, PROOF_FILE } from "../../src/sdd/external-review.js";
+import { GUIDE_PATH, PROOF_FILE, buildPrompt } from "../../src/sdd/external-review.js";
 import { readExternalReview, readReviewConsent } from "../../src/plugins/registry.js";
 import { get as reviewerOf } from "../../src/reviewers/index.js";
 import { criarCodexFalso, envSemCodex, SESSAO_FALSA, VERSAO_FALSA } from "../helpers/codex-falso.js";
@@ -92,8 +92,9 @@ function montarProjeto({ ligada = true, consentimento = true, options, semRevisa
 function cenario({ modo = "ok", resposta, env, ...projeto } = {}) {
   const montado = montarProjeto(projeto);
   const falso = criarCodexFalso(modo, { resposta });
-  const reviewIo = createReviewIo({ env: env ?? falso.env, tmpRoot: tempDir("mgr-review-tmp-") });
-  return { ...montado, falso, reviewIo };
+  const tmpRoot = tempDir("mgr-review-tmp-");
+  const reviewIo = createReviewIo({ env: env ?? falso.env, tmpRoot });
+  return { ...montado, falso, reviewIo, tmpRoot };
 }
 
 function ambienteDe({ root, idioma = "pt-BR", reviewIo, confirm = confirmacaoProibida }) {
@@ -601,13 +602,15 @@ test("should show the error events of the reviewer stream when exec fails with o
 });
 
 test("should send exactly the argv of the reviewer sheet to the fake codex", async () => {
-  const { root, reviewIo, falso } = cenario();
+  const { root, reviewIo, falso, tmpRoot } = cenario();
   const amb = ambienteDe({ root, reviewIo });
   assert.equal(await amb.executar(["external", FATIA], { base: "HEAD~1" }), 0, amb.err.join("\n"));
   const enviado = falso.chamadas().at(-1);
-  const esperado = FICHA.execArgv({ repo: root, schemaFile: enviado[4], lastMessageFile: enviado[6], prompt: enviado.at(-1) });
-  assert.deepEqual(enviado, esperado);
-  assert.ok(enviado.at(-1).includes(`"${FATIA}"`));
+  const prompt = buildPrompt({
+    slug: FATIA, base: git(root, "rev-parse", "HEAD~1").trim(), files: ["b.js"], specSources: [`specs/${FATIA}/03-spec.md`], language: "pt-BR",
+  });
+  assert.deepEqual(enviado, FICHA.execArgv({ repo: root, schemaFile: enviado[4], lastMessageFile: enviado[6], prompt }));
+  assert.ok(enviado[4].startsWith(tmpRoot) && enviado[6].startsWith(tmpRoot));
 });
 
 test("should log a line before and after every git and reviewer call", async () => {
@@ -623,7 +626,7 @@ test("should log a line before and after every git and reviewer call", async () 
   for (const etapa of ["rev-parse --is-inside-work-tree", "rev-parse --verify", "rev-parse HEAD", "status --porcelain", "diff --name-only", "cat-file --batch"]) {
     const antes = linhas.indexOf(amb.mensagens.reviewGitCalling(etapa));
     assert.ok(antes >= 0, etapa);
-    assert.ok(linhas[antes + 1].startsWith(amb.mensagens.reviewGitCalled(etapa, "")), etapa);
+    assert.equal(linhas[antes + 1], amb.mensagens.reviewGitCalled(etapa, true), etapa);
   }
 });
 
@@ -670,4 +673,33 @@ test("should print the review state as JSON with enabled as a boolean", async ()
   assert.deepEqual(JSON.parse(amb.out[0]), {
     schemaVersion: 1, enabled: true, source: "configured", reviewers: ["codex"], options: {}, consent: { codex: "given" },
   });
+});
+
+test("should record a file that became a directory as deleted in the proof", async () => {
+  const { root, reviewIo } = cenario();
+  git(root, "rm", "-q", "a.js");
+  mkdirSync(path.join(root, "a.js"));
+  writeFileSync(path.join(root, "a.js", "dentro.js"), "w\n");
+  git(root, "add", ".");
+  git(root, "commit", "-qm", "arquivo vira pasta");
+  const amb = ambienteDe({ root, reviewIo });
+  assert.equal(await amb.executar(["external", FATIA], { base: "HEAD~2" }), 0, amb.err.join("\n"));
+  assert.deepEqual(lerProva(root).entries[0].files, [
+    { path: "a.js", state: "deleted" },
+    { path: "a.js/dentro.js", state: "present", sha256: sha256("w\n") },
+    { path: "b.js", state: "present", sha256: sha256("y\n") },
+  ]);
+});
+
+test("should warn past the two rounds of the flow before calling the reviewer, even when the call fails", async () => {
+  const { root, reviewIo } = cenario();
+  const amb = ambienteDe({ root, reviewIo });
+  assert.equal(await amb.executar(["external", FATIA], { base: "HEAD~1" }), 0);
+  assert.equal(await amb.executar(["external", FATIA], { base: "HEAD~1" }), 0);
+  const falha = criarCodexFalso("falha");
+  const terceira = ambienteDe({ root, reviewIo: createReviewIo({ env: falha.env, tmpRoot: tempDir("mgr-review-tmp-") }) });
+  assert.equal(await terceira.executar(["external", FATIA], { base: "HEAD~1" }), 1);
+  const aviso = terceira.out.indexOf(terceira.mensagens.reviewRoundBeyondFlow(3));
+  assert.ok(aviso >= 0);
+  assert.ok(aviso < terceira.out.indexOf(terceira.mensagens.reviewCalling("codex", "--version")));
 });

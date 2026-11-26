@@ -17,7 +17,7 @@ import {
 } from "./external-review.js";
 
 // A lista PERMITIDA de fontes do eixo Spec (DT-8): os artefatos da fatia, por `artifactFiles`.
-export const SPEC_SOURCES = Object.freeze(["02-prd.md", "03-spec.md"]);
+const SPEC_SOURCES = Object.freeze(["02-prd.md", "03-spec.md"]);
 
 const relativo = (repo, absoluto) => path.relative(repo, absoluto).split(path.sep).join("/");
 const recusa = (code, dados = {}) => ({ outcome: "refused", code, ...dados });
@@ -33,7 +33,11 @@ export function chooseReviewer(flags, candidatos) {
   return { ok: false, code: REVIEW_REASONS.reviewerAmbiguous, ids: candidatos };
 }
 
-const ligada = (config) => config.state === "configured" && config.enabled === true;
+// A RN-1 num lugar só: a funcionalidade vale quando o time a ligou. Usado pelo comando e, na 3b, pelo archive.
+export const isEnabled = (config) => config.state === "configured" && config.enabled === true;
+
+// Rodadas do fluxo (RN-19): passar disso é decisão humana, e a saída avisa ANTES de gastar a cota.
+const RODADAS_DO_FLUXO = 2;
 
 // Pré-condições na ordem da tabela do DT-9 (casos 1 a 5) e os hashes do HEAD: nada é chamado, nada é
 // gravado. `git` é a borda injetada (subprocesso, TST-2).
@@ -43,7 +47,7 @@ export function planReview(repo, { slug, flags, coreDir, git }) {
   if (local.state === "archived") return recusa(REVIEW_REASONS.archived, { slug });
   if (local.state !== "active") return recusa(REVIEW_REASONS.notFound, { slug });
   const config = readExternalReview(coreDir);
-  if (!ligada(config)) return recusa(REVIEW_REASONS.disabled);
+  if (!isEnabled(config)) return recusa(REVIEW_REASONS.disabled);
   const escolha = chooseReviewer(flags, config.reviewers);
   if (!escolha.ok) return recusa(escolha.code, { id: escolha.id, ids: escolha.ids });
   const reviewer = reviewerOf(escolha.id);
@@ -78,7 +82,7 @@ export function planReview(repo, { slug, flags, coreDir, git }) {
   return {
     outcome: "ready", slug, reviewer, options: config.options[reviewer.id] ?? {},
     base: { ref: flags.base, commit: base.commit }, head: head.commit, paths, files: fileHashes(conteudos.files),
-    proofPath, proof, round: nextRound(proof), specSources,
+    proofPath, proof, round: nextRound(proof), beyondFlow: nextRound(proof) > RODADAS_DO_FLUXO, specSources,
     guide: existsSync(guia) ? { present: true, text: readFileSync(guia, "utf8") } : { present: false },
   };
 }
@@ -89,7 +93,7 @@ export const promptFor = (plano, language) => buildPrompt({
 });
 
 // As duas falhas comuns às três chamadas: binário ausente e processo que não iniciou.
-export function judgeCall(reviewer, resultado) {
+export function judgeCall(resultado) {
   if (resultado.outcome === "not-found") return { ok: false, code: REVIEW_REASONS.notInstalled };
   if (resultado.outcome !== "exited") {
     return { ok: false, code: REVIEW_REASONS.reviewerFailed, status: `${resultado.outcome} (${resultado.code})`, detail: "" };

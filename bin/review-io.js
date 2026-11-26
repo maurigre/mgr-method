@@ -76,9 +76,14 @@ function lerBatch(saida, caminhos) {
       arquivos.push({ path: caminho, state: "deleted" });
       continue;
     }
-    const tamanho = Number(cabecalho.split(" ")[2]);
+    const [, tipo, campoDoTamanho] = cabecalho.split(" ");
+    const tamanho = Number(campoDoTamanho);
     if (!Number.isInteger(tamanho) || posicao + tamanho + 1 > saida.length) return { ok: false };
-    arquivos.push({ path: caminho, state: "present", content: saida.subarray(posicao, posicao + tamanho) });
+    // Só `blob` é arquivo: um caminho que virou diretório (`tree`) ou submódulo deixou de ser o arquivo
+    // revisado e conta como removido (spec DT-5; R2-P2). Os bytes são consumidos para manter o alinhamento.
+    arquivos.push(tipo === "blob"
+      ? { path: caminho, state: "present", content: saida.subarray(posicao, posicao + tamanho) }
+      : { path: caminho, state: "deleted" });
     posicao += tamanho + 1;
   }
   return posicao === saida.length ? { ok: true, files: arquivos } : { ok: false };

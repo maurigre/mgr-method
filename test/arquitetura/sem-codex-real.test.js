@@ -4,6 +4,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createReviewIo } from "../../bin/review-io.js";
+import { MARCA_DO_BLOQUEIO } from "../helpers/bloqueia-codex-real.mjs";
 import { tempDir } from "../../scripts/lib/tmp.mjs";
 import { criarCodexFalso, pathSemCodex, VERSAO_FALSA } from "../helpers/codex-falso.js";
 
@@ -41,4 +42,16 @@ test("should import codex-falso.js in every test file that runs the external rev
     })
     .map(relativo);
   assert.deepEqual(semFalso, [], `arquivos que rodam a revisao externa sem o codex falso: ${semFalso.join(", ")}`);
+});
+
+test("should preload the codex blocker in the test and coverage scripts", () => {
+  const scripts = JSON.parse(readFileSync(path.join(RAIZ, "package.json"), "utf8")).scripts;
+  const semBloqueio = ["test", "coverage"].filter((nome) => !scripts[nome].includes("--import ./test/helpers/bloqueia-codex-real.mjs"));
+  assert.deepEqual(semBloqueio, [], `scripts sem o bloqueio do codex real: ${semBloqueio.join(", ")}`);
+});
+
+test("should hit the blocker and never the real codex when a test calls codex with the ambient PATH", () => {
+  const resultado = createReviewIo({ env: process.env }).run("codex", ["--version"], { cwd: tempDir("sem-codex-real-") });
+  assert.equal(resultado.status, 97, `o codex do PATH ambiente nao e o bloqueio (outcome: ${resultado.outcome})`);
+  assert.equal(resultado.stderr.trim(), MARCA_DO_BLOQUEIO);
 });

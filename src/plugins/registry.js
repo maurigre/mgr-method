@@ -483,7 +483,7 @@ function externalReviewOf(value) {
   const conhecidos = reviewerIds();
   const repetido = Array.isArray(reviewers) && new Set(reviewers).size !== reviewers.length;
   if (!Array.isArray(reviewers) || reviewers.length === 0 || repetido || !reviewers.every((id) => conhecidos.includes(id))) {
-    throw new UsageError("externalReviewReviewersInvalid", [JSON.stringify(reviewers), conhecidos]);
+    throw new UsageError("externalReviewReviewersInvalid", ["externalReview", JSON.stringify(reviewers), conhecidos]);
   }
   return { enabled, reviewers, options: reviewerOptionsOf(value.options) };
 }

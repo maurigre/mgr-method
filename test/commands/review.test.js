@@ -259,7 +259,7 @@ for (const idioma of IDIOMAS) {
     assert.equal(entrada.findings.spec[0].id, "R1-P1");
     assert.deepEqual(entrada.suggestions, [
       { text: "renomear a variavel" },
-      { text: "b.js:1 sem regra", demotedFrom: "standards", reason: "rule-not-in-guide" },
+      { text: "b.js:1 sem regra", demotedFrom: "standards", reason: "rule-not-in-guide", rule: "X-1", quote: "regra inventada" },
     ]);
   });
 
@@ -507,7 +507,7 @@ test("should record a reviewer failure when the reviewer binary cannot start", a
   const { root, reviewIo } = cenario({ modo: "sem-permissao" });
   const amb = ambienteDe({ root, reviewIo });
   assert.equal(await amb.executar(["external", FATIA], { base: "HEAD~1" }), 1);
-  assert.ok(amb.err[0].startsWith(amb.mensagens.errorPrefix(amb.mensagens.reviewFailed("codex", "failed-to-start", ""))));
+  assert.ok(amb.err[0].startsWith(amb.mensagens.errorPrefix(amb.mensagens.reviewFailed("codex", "failed-to-start (EACCES)", ""))));
   assert.deepEqual(lerProva(root).entries.map(({ kind, code }) => [kind, code]), [["failure", "reviewer-failed"]]);
 });
 
@@ -598,4 +598,76 @@ test("should show the error events of the reviewer stream when exec fails with o
   assert.ok(saida.includes("{\"type\":\"error\",\"message\":\"modelo desconhecido\"}"));
   assert.ok(saida.includes("\"type\":\"turn.failed\""));
   assert.deepEqual(lerProva(root).entries.map(({ kind, code }) => [kind, code]), [["failure", "reviewer-failed"]]);
+});
+
+test("should send exactly the argv of the reviewer sheet to the fake codex", async () => {
+  const { root, reviewIo, falso } = cenario();
+  const amb = ambienteDe({ root, reviewIo });
+  assert.equal(await amb.executar(["external", FATIA], { base: "HEAD~1" }), 0, amb.err.join("\n"));
+  const enviado = falso.chamadas().at(-1);
+  const esperado = FICHA.execArgv({ repo: root, schemaFile: enviado[4], lastMessageFile: enviado[6], prompt: enviado.at(-1) });
+  assert.deepEqual(enviado, esperado);
+  assert.ok(enviado.at(-1).includes(`"${FATIA}"`));
+});
+
+test("should log a line before and after every git and reviewer call", async () => {
+  const { root, reviewIo } = cenario();
+  const amb = ambienteDe({ root, reviewIo });
+  assert.equal(await amb.executar(["external", FATIA], { base: "HEAD~1" }), 0, amb.err.join("\n"));
+  const linhas = amb.out;
+  for (const etapa of ["--version", "login status", "exec"]) {
+    const antes = linhas.indexOf(amb.mensagens.reviewCalling("codex", etapa));
+    assert.ok(antes >= 0, etapa);
+    assert.equal(linhas[antes + 1], amb.mensagens.reviewCalled("codex", etapa, "0"));
+  }
+  for (const etapa of ["rev-parse --is-inside-work-tree", "rev-parse --verify", "rev-parse HEAD", "status --porcelain", "diff --name-only", "cat-file --batch"]) {
+    const antes = linhas.indexOf(amb.mensagens.reviewGitCalling(etapa));
+    assert.ok(antes >= 0, etapa);
+    assert.ok(linhas[antes + 1].startsWith(amb.mensagens.reviewGitCalled(etapa, "")), etapa);
+  }
+});
+
+for (const [modo, campo] of [["json-invalido", "json"], ["fora-do-schema", "$.specAxis"], ["sem-o", "output-last-message"]]) {
+  test(`should name the field ${campo} when the reviewer answers outside the format in mode ${modo}`, async () => {
+    const { root, reviewIo } = cenario({ modo });
+    const amb = ambienteDe({ root, reviewIo });
+    assert.equal(await amb.executar(["external", FATIA], { base: "HEAD~1" }), 1);
+    assert.equal(amb.err[0], amb.mensagens.errorPrefix(amb.mensagens.reviewResponseInvalid("codex", campo)));
+  });
+}
+
+test("should record nothing when the working tree changes while the reviewer runs", async () => {
+  const { root, reviewIo } = cenario({ modo: "suja-a-arvore" });
+  const amb = ambienteDe({ root, reviewIo });
+  assert.equal(await amb.executar(["external", FATIA], { base: "HEAD~1" }), 1);
+  assert.deepEqual(amb.err, [amb.mensagens.errorPrefix(amb.mensagens.reviewChangedDuringReview)]);
+  assert.equal(existsSync(caminhoDaProva(root)), false);
+});
+
+test("should refuse a reviewed file name with a line break and call no reviewer", async () => {
+  const { root, reviewIo, falso } = cenario();
+  writeFileSync(path.join(root, "a\nb.js"), "z\n");
+  git(root, "add", ".");
+  git(root, "commit", "-qm", "nome com quebra");
+  const amb = ambienteDe({ root, reviewIo });
+  assert.equal(await amb.executar(["external", FATIA], { base: "HEAD~2" }), 1);
+  assert.deepEqual(amb.err, [amb.mensagens.errorPrefix(amb.mensagens.reviewPathWithNewline([JSON.stringify("a\nb.js")]))]);
+  assert.deepEqual(falso.chamadas(), []);
+});
+
+test("should write nothing when the person declines the consent", async () => {
+  const { root, core } = montarProjeto({ consentimento: false });
+  const amb = ambienteDe({ root, confirm: async () => ({ state: "no" }) });
+  assert.equal(await amb.executar(["consent"]), 1);
+  assert.deepEqual(amb.err, [amb.mensagens.reviewDeclined]);
+  assert.equal(existsSync(path.join(core, "config.local.json")), false);
+});
+
+test("should print the review state as JSON with enabled as a boolean", async () => {
+  const { root } = montarProjeto();
+  const amb = ambienteDe({ root });
+  assert.equal(await amb.executar(["status"], { json: true }), 0);
+  assert.deepEqual(JSON.parse(amb.out[0]), {
+    schemaVersion: 1, enabled: true, source: "configured", reviewers: ["codex"], options: {}, consent: { codex: "given" },
+  });
 });

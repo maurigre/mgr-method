@@ -21,7 +21,7 @@ pessoal: config.local.json + .env) .gitignore → bloco gerenciado com
 skills (8): spec-init, spec-create, spec-execute, adr-create, code-analyzer,
 diagnosing-bugs, configure-agents, arch-hexagonal hooks →
 .claude/settings.local.json (detecção por sessão e hand-off antes da
-compactação, por motor) Runtime do MGR → .mgr-core/runtime (59 arquivos,
+compactação, por motor) Runtime do MGR → .mgr-core/runtime (60 arquivos,
 legível, só Node) Runtime do MGR no git → não versionado (padrão, não
 gravado): .mgr-core/runtime/.gitignore ignora a pasta
 .mgr-core/runtime/.gitignore → será gravado (o runtime do MGR fica fora do
@@ -35,7 +35,7 @@ desta ferramenta. Declare um por intenção em `.mgr-core/config.json` para ter
 o benefício. leis → .claude/skills/_shared/laws/execution-laws.md (leis de
 execução: fonte única, apontada por toda skill do CORE) preâmbulo de sessão:
 ligado (as leis centrais entram antes da primeira mensagem) Skills instaladas
-em <REPO>/.claude/skills. runtime do MGR gravado em .mgr-core/runtime (59
+em <REPO>/.claude/skills. runtime do MGR gravado em .mgr-core/runtime (60
 arquivos) .mgr-core/runtime/.gitignore gravado: o runtime do MGR está fora do
 versionamento Runtime do MGR no git → não versionado (padrão aplicado sem
 pergunta; não gravado). Para gravar uma escolha: mgr runtime-versioning set

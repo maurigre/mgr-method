@@ -150,6 +150,7 @@ export const RUNTIME_FILES = [
   "src/sdd/prov-rules.js",
   "src/sdd/prov-validator.js",
   "src/sdd/provenance.js",
+  "src/sdd/review-run.js",
   "src/sdd/sdd-check.js",
   "src/sdd/spec-parser.js",
   "src/sdd/spec-rules.js",

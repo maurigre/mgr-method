@@ -10,7 +10,7 @@ import { createHash } from "node:crypto";
 import { SPECS_DIR } from "./artifacts.js";
 
 export const PROOF_FILE = "external-review.json";
-export const PROOF_SCHEMA_VERSION = 1;
+const PROOF_SCHEMA_VERSION = 1;
 export const GUIDE_PATH = "docs/sdd/09-review-rules.md";
 
 // Códigos estáveis: dado, não prosa (a cola traduz cada um para uma chave de mensagem).
@@ -33,6 +33,8 @@ export const REVIEW_REASONS = Object.freeze({
   reviewerFailed: "reviewer-failed",
   responseInvalid: "response-invalid",
   sessionMissing: "session-missing",
+  pathWithNewline: "path-with-newline",
+  changedDuringReview: "changed-during-review",
 });
 
 // As falhas do REVISOR (DT-9, casos 6 a 10): só elas viram entrada `failure` na prova, para a dispensa
@@ -98,42 +100,49 @@ const caminhoSeguro = (valor) =>
   typeof valor === "string" && valor !== "" && !valor.startsWith("/") && !/^[A-Za-z]:/.test(valor)
   && !valor.split(/[\\/]/).includes("..");
 
+// Confere `valor` contra a forma do schema. Resultado discriminado (DES-1): `{ ok: true }` ou
+// `{ ok: false, field }` com o caminho do PRIMEIRO campo errado.
+const certo = { ok: true };
+const errado = (field) => ({ ok: false, field });
+
+function conferirLista(valor, schema, caminho) {
+  if (!Array.isArray(valor)) return errado(caminho);
+  for (const [posicao, item] of valor.entries()) {
+    const conferido = conferir(item, schema.items, `${caminho}[${posicao}]`);
+    if (!conferido.ok) return conferido;
+  }
+  return certo;
+}
+
+function conferirObjeto(valor, schema, caminho) {
+  if (!isPlainObject(valor)) return errado(caminho);
+  const extra = Object.keys(valor).find((chave) => !Object.hasOwn(schema.properties, chave));
+  if (extra !== undefined) return errado(`${caminho}.${extra}`);
+  for (const chave of schema.required) {
+    if (!Object.hasOwn(valor, chave)) return errado(`${caminho}.${chave}`);
+    const conferido = conferir(valor[chave], schema.properties[chave], `${caminho}.${chave}`);
+    if (!conferido.ok) return conferido;
+  }
+  return certo;
+}
+
 function conferir(valor, schema, caminho) {
   if (schema.type === "string") {
-    if (typeof valor !== "string") return caminho;
-    return schema.enum && !schema.enum.includes(valor) ? caminho : undefined;
+    return typeof valor === "string" && (!schema.enum || schema.enum.includes(valor)) ? certo : errado(caminho);
   }
-  if (schema.type === "integer") {
-    return Number.isInteger(valor) && valor >= schema.minimum ? undefined : caminho;
-  }
-  if (schema.type === "array") {
-    if (!Array.isArray(valor)) return caminho;
-    for (const [posicao, item] of valor.entries()) {
-      const errado = conferir(item, schema.items, `${caminho}[${posicao}]`);
-      if (errado !== undefined) return errado;
-    }
-    return undefined;
-  }
-  if (!isPlainObject(valor)) return caminho;
-  const extra = Object.keys(valor).find((chave) => !Object.hasOwn(schema.properties, chave));
-  if (extra !== undefined) return `${caminho}.${extra}`;
-  for (const chave of schema.required) {
-    const errado = Object.hasOwn(valor, chave)
-      ? conferir(valor[chave], schema.properties[chave], `${caminho}.${chave}`)
-      : `${caminho}.${chave}`;
-    if (errado !== undefined) return errado;
-  }
-  return undefined;
+  if (schema.type === "integer") return Number.isInteger(valor) && valor >= schema.minimum ? certo : errado(caminho);
+  if (schema.type === "array") return conferirLista(valor, schema, caminho);
+  return conferirObjeto(valor, schema, caminho);
 }
 
 // Revalida a resposta já interpretada como JSON. Devolve o caminho do PRIMEIRO campo errado.
 export function validateResponse(valor) {
-  const errado = conferir(valor, RESPONSE_SCHEMA, "$");
-  if (errado !== undefined) return { ok: false, field: errado };
+  const conferido = conferir(valor, RESPONSE_SCHEMA, "$");
+  if (!conferido.ok) return conferido;
   const achados = [...valor.standards.map((achado, posicao) => [achado, `$.standards[${posicao}].file`]),
     ...valor.spec.map((achado, posicao) => [achado, `$.spec[${posicao}].file`])];
   const inseguro = achados.find(([achado]) => !caminhoSeguro(achado.file));
-  if (inseguro) return { ok: false, field: inseguro[1] };
+  if (inseguro) return errado(inseguro[1]);
   return { ok: true, response: valor };
 }
 
@@ -142,16 +151,24 @@ export function validateResponse(valor) {
 const normalizar = (valor) => valor.replace(/\s+/g, " ").trim();
 const contem = (fonte, citacao) => normalizar(citacao) !== "" && normalizar(fonte).includes(normalizar(citacao));
 
-function motivoStandards(achado, guide) {
-  if (!guide.present) return "no-guide";
-  if (!guide.text.includes(`(${achado.rule})`)) return "rule-not-in-guide";
-  return contem(guide.text, achado.quote) ? undefined : "quote-not-in-guide";
+// O ID como o guia o escreve, sem a moldura: o revisor pode devolver `(SEC-4)` ou `` `SEC-4` ``, e o guia
+// é conferido pelo texto `(SEC-4)` (medido na primeira revisão real, 2026-11-26).
+const ruleId = (valor) => valor.trim().replace(/^[(`\s]+|[)`\s]+$/g, "");
+
+// Citação conferida ou o motivo do rebaixamento, discriminados (DES-1).
+const confirmada = { confirmed: true };
+const rebaixar = (reason) => ({ confirmed: false, reason });
+
+function citacaoDoGuia(achado, guide) {
+  if (!guide.present) return rebaixar("no-guide");
+  if (!guide.text.includes(`(${ruleId(achado.rule)})`)) return rebaixar("rule-not-in-guide");
+  return contem(guide.text, achado.quote) ? confirmada : rebaixar("quote-not-in-guide");
 }
 
-function motivoSpec(achado, specSources) {
+function citacaoDaSpec(achado, specSources) {
   const fonte = specSources.find((candidata) => candidata.path === achado.source);
-  if (!fonte) return "source-not-allowed";
-  return contem(fonte.text, achado.quote) ? undefined : "quote-not-in-source";
+  if (!fonte) return rebaixar("source-not-allowed");
+  return contem(fonte.text, achado.quote) ? confirmada : rebaixar("quote-not-in-source");
 }
 
 // Confere cada citação no texto da fonte (DT-8). `guide` é `{ present: false }` ou `{ present: true,
@@ -161,15 +178,15 @@ export function checkCitations(response, { guide, specSources, round }) {
   const rebaixadas = [];
   const standards = [];
   for (const achado of response.standards) {
-    const motivo = motivoStandards(achado, guide);
-    if (motivo === undefined) standards.push({ id: `R${round}-S${standards.length + 1}`, ...achado });
-    else rebaixadas.push({ text: `${achado.file}:${achado.line} ${achado.violation}`, demotedFrom: "standards", reason: motivo });
+    const citacao = citacaoDoGuia(achado, guide);
+    if (citacao.confirmed) standards.push({ id: `R${round}-S${standards.length + 1}`, ...achado, rule: ruleId(achado.rule) });
+    else rebaixadas.push({ text: `${achado.file}:${achado.line} ${achado.violation}`, demotedFrom: "standards", reason: citacao.reason, rule: achado.rule, quote: achado.quote });
   }
   const spec = [];
   for (const achado of response.spec) {
-    const motivo = motivoSpec(achado, specSources);
-    if (motivo === undefined) spec.push({ id: `R${round}-P${spec.length + 1}`, ...achado });
-    else rebaixadas.push({ text: `${achado.file}:${achado.line} ${achado.finding}`, demotedFrom: "spec", reason: motivo });
+    const citacao = citacaoDaSpec(achado, specSources);
+    if (citacao.confirmed) spec.push({ id: `R${round}-P${spec.length + 1}`, ...achado });
+    else rebaixadas.push({ text: `${achado.file}:${achado.line} ${achado.finding}`, demotedFrom: "spec", reason: citacao.reason, source: achado.source, quote: achado.quote });
   }
   return {
     specAxis: response.specAxis,
@@ -217,19 +234,53 @@ function arquivoValido(arquivo) {
 }
 
 const CAMPOS_DA_REVISAO = ["reviewer", "provider", "version", "session", "at", "language", "base", "baseCommit", "head"];
+const comId = (schema) => ({ ...schema, required: ["id", ...schema.required], properties: { id: texto, ...schema.properties } });
+const ACHADO_GRAVADO = Object.freeze({
+  standards: comId(RESPONSE_SCHEMA.properties.standards.items),
+  spec: comId(RESPONSE_SCHEMA.properties.spec.items),
+});
+const CAMPOS_DA_SUGESTAO = ["text", "demotedFrom", "reason", "rule", "quote", "source"];
 
-function entradaInvalida(entrada) {
-  if (!isPlainObject(entrada) || !ENTRY_KINDS.includes(entrada.kind)) return "kind";
-  if (entrada.kind === "waiver") {
-    return ["by", "at", "reason", "failure"].find((campo) => !textoNaoVazio(entrada[campo]));
+const sugestaoValida = (sugestao) => isPlainObject(sugestao) && typeof sugestao.text === "string"
+  && Object.entries(sugestao).every(([chave, valor]) => CAMPOS_DA_SUGESTAO.includes(chave) && typeof valor === "string");
+
+function achadosValidos(findings) {
+  if (!isPlainObject(findings)) return errado("findings");
+  for (const eixo of ["standards", "spec"]) {
+    if (!Array.isArray(findings[eixo])) return errado(`findings.${eixo}`);
+    for (const [posicao, achado] of findings[eixo].entries()) {
+      if (!conferir(achado, ACHADO_GRAVADO[eixo], "").ok) return errado(`findings.${eixo}[${posicao}]`);
+    }
   }
-  if (!textoNaoVazio(entrada.reviewer)) return "reviewer";
-  if (!Number.isInteger(entrada.round) || entrada.round < 1) return "round";
-  if (entrada.kind === "failure") return textoNaoVazio(entrada.code) ? undefined : "code";
+  return certo;
+}
+
+// A forma inteira de cada entrada (spec DT-6; R1-P5): `{ ok: true }` ou o campo errado.
+function conferirRevisao(entrada) {
   const faltando = CAMPOS_DA_REVISAO.find((campo) => !textoNaoVazio(entrada[campo]));
-  if (faltando) return faltando;
-  if (!Array.isArray(entrada.files) || entrada.files.length === 0 || !entrada.files.every(arquivoValido)) return "files";
-  return isPlainObject(entrada.findings) ? undefined : "findings";
+  if (faltando) return errado(faltando);
+  const opcional = ["model", "effort"].find((campo) => Object.hasOwn(entrada, campo) && !textoNaoVazio(entrada[campo]));
+  if (opcional) return errado(opcional);
+  if (!Array.isArray(entrada.files) || entrada.files.length === 0 || !entrada.files.every(arquivoValido)) return errado("files");
+  if (!["reviewed", "abstained"].includes(entrada.specAxis)) return errado("specAxis");
+  const achados = achadosValidos(entrada.findings);
+  if (!achados.ok) return achados;
+  return Array.isArray(entrada.suggestions) && entrada.suggestions.every(sugestaoValida) ? certo : errado("suggestions");
+}
+
+function conferirEntrada(entrada) {
+  if (!isPlainObject(entrada) || !ENTRY_KINDS.includes(entrada.kind)) return errado("kind");
+  if (entrada.kind === "waiver") {
+    const faltando = ["by", "at", "reason", "failure"].find((campo) => !textoNaoVazio(entrada[campo]));
+    return faltando ? errado(faltando) : certo;
+  }
+  if (!textoNaoVazio(entrada.reviewer)) return errado("reviewer");
+  if (!Number.isInteger(entrada.round) || entrada.round < 1) return errado("round");
+  if (entrada.kind === "failure") {
+    const faltando = ["at", "code"].find((campo) => !textoNaoVazio(entrada[campo]));
+    return faltando ? errado(faltando) : certo;
+  }
+  return conferirRevisao(entrada);
 }
 
 // Lê a prova (DT-6). `text` ausente (o arquivo não existe) é estado próprio, não prova vazia. Arquivo
@@ -247,8 +298,8 @@ export function parseProof(text, slug) {
   if (proof.slug !== slug) return { state: "invalid", detail: "slug" };
   if (!Array.isArray(proof.entries)) return { state: "invalid", detail: "entries" };
   for (const [posicao, entrada] of proof.entries.entries()) {
-    const campo = entradaInvalida(entrada);
-    if (campo !== undefined) return { state: "invalid", detail: `entries[${posicao}].${campo}` };
+    const conferida = conferirEntrada(entrada);
+    if (!conferida.ok) return { state: "invalid", detail: `entries[${posicao}].${conferida.field}` };
   }
   return { state: "valid", proof };
 }

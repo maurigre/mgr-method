@@ -11,7 +11,6 @@ const MODULOS_COM_LITERAL = new Set([
   "src/commands/review.js",
   "src/sdd/external-review.js",
   "src/sdd/archive.js",
-  "src/core/messages.js",
 ]);
 const DONO_DAS_ESCRITAS = "src/commands/review.js";
 const REGISTRO_DE_CONFIG = "src/plugins/registry.js";

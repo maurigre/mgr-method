@@ -761,7 +761,7 @@ const cmdOrigin = (flags, positional) => origin(commandIo(flags, positional));
 // `mgr review` (revisor externo). A confirmacao humana so existe em terminal (DT-10; ADR-0007, Camada 4):
 // fora dele o adaptador responde "sem terminal" e a cola recusa sem gravar.
 const cmdReview = (flags, positional) => review({
-  ...commandIo(flags, positional), reviewIo: createReviewIo(), confirm: confirmInTerminal(p, isTTY), language: idiomaDaSaida,
+  ...commandIo(flags, positional), reviewIo: createReviewIo(), confirm: confirmInTerminal(CLACK, isTTY), language: idiomaDaSaida,
 });
 
 // `mgr runtime-versioning` — cola em src/commands/runtime-versioning.js. O git e o .gitignore da raiz

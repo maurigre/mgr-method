@@ -442,7 +442,8 @@ export function updateOutcome({ keptAbandoned = [], keptOrphans = [], keptNoSour
 export function confirmInTerminal(clack, isTTY) {
   return async (message) => {
     if (!isTTY) return { state: "no-tty" };
-    const resposta = await clack.confirm({ message });
+    // O padrão é "não": é a opção que não envia nada (sugestão N-1 do gate, como os outros confirms).
+    const resposta = await clack.confirm({ message, initialValue: false });
     return !clack.isCancel(resposta) && resposta === true ? { state: "yes" } : { state: "no" };
   };
 }

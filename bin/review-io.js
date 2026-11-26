@@ -21,19 +21,22 @@ function executar(binary, argv, { cwd, env, input, pasta }) {
   const arquivoOut = path.join(pasta, "stdout");
   const arquivoErr = path.join(pasta, "stderr");
   const fdOut = openSync(arquivoOut, "w");
-  const fdErr = openSync(arquivoErr, "w");
   let resultado;
   try {
-    resultado = spawnSync(binary, argv, {
-      cwd,
-      env,
-      shell: false,
-      input,
-      stdio: [input === undefined ? "ignore" : "pipe", fdOut, fdErr],
-    });
+    const fdErr = openSync(arquivoErr, "w");
+    try {
+      resultado = spawnSync(binary, argv, {
+        cwd,
+        env,
+        shell: false,
+        input,
+        stdio: [input === undefined ? "ignore" : "pipe", fdOut, fdErr],
+      });
+    } finally {
+      closeSync(fdErr);
+    }
   } finally {
     closeSync(fdOut);
-    closeSync(fdErr);
   }
   if (resultado.error?.code === "ENOENT") return { outcome: "not-found" };
   if (resultado.error) return { outcome: "failed-to-start", code: resultado.error.code ?? "UNKNOWN" };
@@ -60,22 +63,25 @@ const comoTexto = (resultado) => (resultado.outcome === "exited"
   : resultado);
 
 // Lê a saída do `git cat-file --batch`: `<oid> <type> <size>\n<conteúdo>\n`, ou `<pedido> missing\n`.
+// Saída que não fecha exatamente com os pedidos é falha alta, nunca hash desalinhado (R1-P2).
 function lerBatch(saida, caminhos) {
   const arquivos = [];
   let posicao = 0;
   for (const caminho of caminhos) {
     const fimDoCabecalho = saida.indexOf(0x0a, posicao);
+    if (fimDoCabecalho < 0) return { ok: false };
     const cabecalho = saida.subarray(posicao, fimDoCabecalho).toString("utf8");
     posicao = fimDoCabecalho + 1;
-    if (cabecalho.endsWith(" missing") || cabecalho.endsWith(" ambiguous")) {
+    if (cabecalho.endsWith(" missing")) {
       arquivos.push({ path: caminho, state: "deleted" });
       continue;
     }
     const tamanho = Number(cabecalho.split(" ")[2]);
+    if (!Number.isInteger(tamanho) || posicao + tamanho + 1 > saida.length) return { ok: false };
     arquivos.push({ path: caminho, state: "present", content: saida.subarray(posicao, posicao + tamanho) });
     posicao += tamanho + 1;
   }
-  return arquivos;
+  return posicao === saida.length ? { ok: true, files: arquivos } : { ok: false };
 }
 
 // `git status --porcelain=v1 -z`: cada entrada é `XY <caminho>\0`.
@@ -86,6 +92,11 @@ export function createReviewIo({ env = process.env, tmpRoot = os.tmpdir() } = {}
   const git = (cwd, argv, input) =>
     comPasta(tmpRoot, (pasta) => executar("git", argv, { cwd, env: envDoGit, input, pasta }));
   const gitOk = (resultado) => resultado.outcome === "exited" && resultado.status === 0;
+  const resolver = (cwd, ref) => {
+    if (typeof ref !== "string" || ref === "" || ref.startsWith("-")) return { found: false };
+    const resultado = git(cwd, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
+    return gitOk(resultado) ? { found: true, commit: resultado.stdout.toString("utf8").trim() } : { found: false };
+  };
 
   return {
     // Chamada curta (versão, login): a saída volta como texto.
@@ -115,14 +126,8 @@ export function createReviewIo({ env = process.env, tmpRoot = os.tmpdir() } = {}
         return gitOk(resultado) && resultado.stdout.toString("utf8").trim() === "true";
       },
       // Ref que começa por `-` seria lida como opção do git: recusada antes de chegar ao argv.
-      resolve(cwd, ref) {
-        if (typeof ref !== "string" || ref === "" || ref.startsWith("-")) return { found: false };
-        const resultado = git(cwd, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
-        return gitOk(resultado) ? { found: true, commit: resultado.stdout.toString("utf8").trim() } : { found: false };
-      },
-      head(cwd) {
-        return this.resolve(cwd, "HEAD");
-      },
+      resolve: resolver,
+      head: (cwd) => resolver(cwd, "HEAD"),
       // Três pontos: desde a merge-base. `--no-renames`: rename aparece como remoção mais inclusão.
       changedFiles(cwd, baseCommit) {
         const resultado = git(cwd, ["diff", "--name-only", "--no-renames", "-z", `${baseCommit}...HEAD`]);
@@ -134,12 +139,13 @@ export function createReviewIo({ env = process.env, tmpRoot = os.tmpdir() } = {}
         if (!gitOk(resultado)) return { ok: false };
         return { ok: true, files: caminhosDoStatus(resultado.stdout.toString("utf8")) };
       },
-      // Um processo só para todos os caminhos.
-      headContents(cwd, caminhos) {
-        const pedido = caminhos.map((caminho) => `HEAD:${caminho}\n`).join("");
+      // Um processo só para todos os caminhos, lidos no commit dado (e não no HEAD de quando a leitura
+      // acontece): o conteúdo revisado fica fixado antes da chamada ao revisor (R1-P1).
+      contentsAt(cwd, commit, caminhos) {
+        const pedido = caminhos.map((caminho) => `${commit}:${caminho}\n`).join("");
         const resultado = git(cwd, ["cat-file", "--batch"], pedido);
         if (!gitOk(resultado)) return { ok: false };
-        return { ok: true, files: lerBatch(resultado.stdout, caminhos) };
+        return lerBatch(resultado.stdout, caminhos);
       },
     },
   };

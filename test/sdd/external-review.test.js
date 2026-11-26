@@ -57,8 +57,9 @@ const REVISAO = {
   head: "2222222",
   round: 1,
   files: [{ path: "src/a.js", state: "present", sha256: HASH }],
-  findings: { standards: [], spec: [] },
-  suggestions: [],
+  specAxis: "reviewed",
+  findings: { standards: [{ id: "R1-S1", ...ACHADO_NORMA }], spec: [{ id: "R1-P1", ...ACHADO_SPEC }] },
+  suggestions: [{ text: "s1" }, { text: "s2", demotedFrom: "standards", reason: "no-guide", rule: "SEC-4", quote: "q" }],
 };
 const DISPENSA = { kind: "waiver", by: "mr", at: "2026-11-26T11:00", reason: "cota", failure: "reviewer-failed" };
 
@@ -165,19 +166,19 @@ test("checkCitations should demote a standards finding with reason no-guide when
   assert.deepEqual(revisar({ standards: [ACHADO_NORMA] }, { present: false }), {
     specAxis: "reviewed",
     findings: { standards: [], spec: [] },
-    suggestions: [{ text: "src/a.js:3 Log de token", demotedFrom: "standards", reason: "no-guide" }],
+    suggestions: [{ text: "src/a.js:3 Log de token", demotedFrom: "standards", reason: "no-guide", rule: "SEC-4", quote: "Nunca logar segredos em texto puro." }],
   });
 });
 
 test("checkCitations should demote with rule-not-in-guide when the rule ID is absent from the guide", () => {
   assert.deepEqual(revisar({ standards: [{ ...ACHADO_NORMA, rule: "SEC-9" }] }).suggestions, [
-    { text: "src/a.js:3 Log de token", demotedFrom: "standards", reason: "rule-not-in-guide" },
+    { text: "src/a.js:3 Log de token", demotedFrom: "standards", reason: "rule-not-in-guide", rule: "SEC-9", quote: ACHADO_NORMA.quote },
   ]);
 });
 
 test("checkCitations should demote with quote-not-in-guide when the rule exists but the quote does not", () => {
   assert.deepEqual(revisar({ standards: [{ ...ACHADO_NORMA, quote: "Texto inventado." }] }).suggestions, [
-    { text: "src/a.js:3 Log de token", demotedFrom: "standards", reason: "quote-not-in-guide" },
+    { text: "src/a.js:3 Log de token", demotedFrom: "standards", reason: "quote-not-in-guide", rule: "SEC-4", quote: "Texto inventado." },
   ]);
 });
 
@@ -192,7 +193,7 @@ test("checkCitations should keep a standards finding whose quote matches after w
 
 test("checkCitations should demote with quote-not-in-guide when the quote is only whitespace", () => {
   assert.deepEqual(revisar({ standards: [{ ...ACHADO_NORMA, quote: "   " }] }).suggestions, [
-    { text: "src/a.js:3 Log de token", demotedFrom: "standards", reason: "quote-not-in-guide" },
+    { text: "src/a.js:3 Log de token", demotedFrom: "standards", reason: "quote-not-in-guide", rule: "SEC-4", quote: "   " },
   ]);
 });
 
@@ -203,13 +204,13 @@ test("checkCitations should number two valid standards findings S1 and S2 in ord
 
 test("checkCitations should demote with source-not-allowed when the spec source is outside the allowed list", () => {
   assert.deepEqual(revisar({ spec: [{ ...ACHADO_SPEC, source: "specs/y/02-spec.md" }] }).suggestions, [
-    { text: "src/b.js:4 Falta validação", demotedFrom: "spec", reason: "source-not-allowed" },
+    { text: "src/b.js:4 Falta validação", demotedFrom: "spec", reason: "source-not-allowed", source: "specs/y/02-spec.md", quote: ACHADO_SPEC.quote },
   ]);
 });
 
 test("checkCitations should demote with quote-not-in-source when the allowed source lacks the quote", () => {
   assert.deepEqual(revisar({ spec: [{ ...ACHADO_SPEC, quote: "Texto que não existe." }] }).suggestions, [
-    { text: "src/b.js:4 Falta validação", demotedFrom: "spec", reason: "quote-not-in-source" },
+    { text: "src/b.js:4 Falta validação", demotedFrom: "spec", reason: "quote-not-in-source", source: ACHADO_SPEC.source, quote: "Texto que não existe." },
   ]);
 });
 
@@ -226,7 +227,7 @@ test("checkCitations should number two valid spec findings P1 and P2 in order", 
 test("checkCitations should list original suggestions first, keeping only their text, before demoted ones", () => {
   assert.deepEqual(revisar({ suggestions: [{ text: "Ajuste o log", extra: "x" }], standards: [ACHADO_NORMA] }, { present: false }).suggestions, [
     { text: "Ajuste o log" },
-    { text: "src/a.js:3 Log de token", demotedFrom: "standards", reason: "no-guide" },
+    { text: "src/a.js:3 Log de token", demotedFrom: "standards", reason: "no-guide", rule: "SEC-4", quote: "Nunca logar segredos em texto puro." },
   ]);
 });
 
@@ -458,4 +459,30 @@ test("parseProof should report entries[0].reviewer when a failure has no reviewe
 
 test("parseProof should report entries[0].findings when a review has findings that are not an object", () => {
   assert.deepEqual(parseProof(textoDaProva([{ ...REVISAO, findings: [] }]), SLUG), { state: "invalid", detail: "entries[0].findings" });
+});
+
+for (const moldura of ["(SEC-4)", "`SEC-4`", " SEC-4 "]) {
+  test(`checkCitations should accept the rule ID written as ${JSON.stringify(moldura)} and record it bare`, () => {
+    const resultado = revisar({ standards: [{ ...ACHADO_NORMA, rule: moldura }] });
+    assert.deepEqual(resultado.findings.standards.map(({ id, rule }) => [id, rule]), [["R2-S1", "SEC-4"]]);
+    assert.deepEqual(resultado.suggestions, []);
+  });
+}
+
+for (const [campo, valor, detalhe] of [
+  ["specAxis", "talvez", "specAxis"],
+  ["findings", { standards: {}, spec: [] }, "findings.standards"],
+  ["findings", { standards: [], spec: [{ id: "R1-P1" }] }, "findings.spec[0]"],
+  ["suggestions", [{ text: 1 }], "suggestions"],
+  ["suggestions", [{ text: "s", extra: "x" }], "suggestions"],
+  ["model", "", "model"],
+  ["effort", 3, "effort"],
+]) {
+  test(`parseProof should report entries[0].${detalhe} when a review has an invalid ${campo}`, () => {
+    assert.deepEqual(parseProof(textoDaProva([{ ...REVISAO, [campo]: valor }]), SLUG), { state: "invalid", detail: `entries[0].${detalhe}` });
+  });
+}
+
+test("parseProof should report entries[0].at when a failure has no time", () => {
+  assert.deepEqual(parseProof(textoDaProva([semCampo(FALHA, "at")]), SLUG), { state: "invalid", detail: "entries[0].at" });
 });

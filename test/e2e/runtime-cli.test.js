@@ -184,6 +184,6 @@ test("should report external review off as JSON through the project runtime", co
   const consulta = runIn(dir, "review", "status", "--json");
   assert.equal(consulta.status, 0, consulta.stderr);
   assert.deepEqual(JSON.parse(consulta.stdout), {
-    schemaVersion: 1, state: "off", source: "default", reviewers: [], options: {}, consent: { codex: "absent" },
+    schemaVersion: 1, enabled: false, source: "default", reviewers: [], options: {}, consent: { codex: "absent" },
   });
 }));

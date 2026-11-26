@@ -13,7 +13,7 @@ export const VERSAO_FALSA = "codex-cli 0.0.0-falso";
 export const SESSAO_FALSA = "sessao-falsa-1";
 export const RESPOSTA_VAZIA = Object.freeze({ specAxis: "reviewed", standards: [], spec: [], suggestions: [] });
 
-export const MODOS = Object.freeze(["ok", "nao-logado", "falha", "json-invalido", "fora-do-schema", "sem-o", "sem-sessao", "recusa-esforco", "sem-versao", "sem-permissao", "falha-no-fluxo"]);
+export const MODOS = Object.freeze(["ok", "nao-logado", "falha", "json-invalido", "fora-do-schema", "sem-o", "sem-sessao", "recusa-esforco", "sem-versao", "sem-permissao", "falha-no-fluxo", "suja-a-arvore"]);
 
 const temCodex = (pasta) => existsSync(path.join(pasta, "codex")) || existsSync(path.join(pasta, "codex.cmd"));
 
@@ -51,6 +51,7 @@ if (config.modo === "recusa-esforco" && argv.some((valor) => valor.startsWith("m
   process.stderr.write("unsupported reasoning effort\\n"); process.exit(1);
 }
 const destino = argv[argv.indexOf("--output-last-message") + 1];
+if (config.modo === "suja-a-arvore") fs.writeFileSync(path.join(argv[argv.indexOf("--cd") + 1], "intruso.js"), "x\\n");
 if (config.modo !== "sem-o") {
   const texto = config.modo === "json-invalido" ? "isto nao e json"
     : config.modo === "fora-do-schema" ? JSON.stringify({ specAxis: "talvez" })

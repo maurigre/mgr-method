@@ -1014,3 +1014,22 @@ for (const idioma of IDIOMAS) {
     exigirIdiomaUnico(idioma, [resultado.out, resultado.err], PADRAO_ARCHIVE, [repo], "spec status de fatia arquivada");
   });
 }
+
+import { pathSemCodex } from "../helpers/codex-falso.js";
+
+const PADRAO_REVIEW = /^review/;
+
+for (const idioma of IDIOMAS) {
+  test(`should print review status and the review refusal when off only in ${idioma}`, () => {
+    const projeto = tempDir("mgr-review-idioma-");
+    mkdirSync(path.join(projeto, "specs", "demo"), { recursive: true });
+    const mensagens = getMessages(idioma);
+    const consulta = cli(["review", "status", "--user-language", idioma], { cwd: projeto, env: { LC_ALL: LOCALE_CONTRARIO[idioma] } });
+    assert.equal(consulta.status, 0, consulta.err);
+    assert.ok(consulta.out.includes(mensagens.reviewStatusLine("off", "default")));
+    const recusa = cli(["review", "external", "demo", "--base", "HEAD", "--user-language", idioma], { cwd: projeto, env: { LC_ALL: LOCALE_CONTRARIO[idioma], PATH: pathSemCodex() } });
+    assert.equal(recusa.status, 1);
+    assert.ok(recusa.err.includes(getMessages(idioma, { lifecycle: "mgr" }).reviewDisabled));
+    exigirIdiomaUnico(idioma, [consulta.out, consulta.err, recusa.out, recusa.err], PADRAO_REVIEW, [projeto], "review desligada");
+  });
+}

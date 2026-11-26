@@ -210,6 +210,20 @@ test("should read --date value from the next argument", () => {
   assert.equal(flags.date, "2026-01-15");
 });
 
+for (const [flag, chave] of [["--base", "base"], ["--reviewer", "reviewer"], ["--reason", "reason"]]) {
+  test(`should read ${flag} value from the next argument`, () => {
+    const { flags, positional } = parseArgs(["review", flag, "valor com espaço", "x"], { engines: ENGINES });
+    assert.equal(flags[chave], "valor com espaço");
+    assert.deepEqual(positional, ["review", "x"]);
+  });
+
+  test(`should create the ${chave} key with undefined when ${flag} is the last argument`, () => {
+    const { flags } = parseArgs([flag], { engines: ENGINES });
+    assert.equal(Object.hasOwn(flags, chave), true);
+    assert.equal(flags[chave], undefined);
+  });
+}
+
 test("should create the date key with undefined when --date is the last argument", () => {
   const { flags } = parseArgs(["--date"], { engines: ENGINES });
   assert.equal(Object.hasOwn(flags, "date"), true);

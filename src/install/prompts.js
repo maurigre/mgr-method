@@ -435,3 +435,15 @@ export function updateOutcome({ keptAbandoned = [], keptOrphans = [], keptNoSour
   const divergent = [...keptAbandoned, ...keptOrphans, ...keptNoSource, ...keptEntering].map(nameOf);
   return { exit: divergent.length ? 1 : 0, divergent };
 }
+
+// Confirmacao sim/nao de um comando que exige uma pessoa no terminal (revisor externo, DT-10; ADR-0007,
+// Camada 4). Fora de terminal responde "sem terminal" sem perguntar, e a cola recusa sem gravar. O
+// `clack` chega injetado, como no resto deste modulo.
+export function confirmInTerminal(clack, isTTY) {
+  return async (message) => {
+    if (!isTTY) return { state: "no-tty" };
+    // O padrão é "não": é a opção que não envia nada (sugestão N-1 do gate, como os outros confirms).
+    const resposta = await clack.confirm({ message, initialValue: false });
+    return !clack.isCancel(resposta) && resposta === true ? { state: "yes" } : { state: "no" };
+  };
+}

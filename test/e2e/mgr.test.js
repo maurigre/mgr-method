@@ -3725,3 +3725,23 @@ test("should answer the same for active features with or without a specs/archive
   writeFileSync(path.join(velha, "04-plan.md"), "<!-- mgr-plan-format: 1 -->\n### P0.1 — velha\n- **status:** done\n");
   assert.deepEqual(responder(), antes, "uma fatia arquivada nao muda nenhuma resposta sobre as ativas");
 });
+
+const configDoTime = (repo) => path.join(installer.coreDir("project", repo), "config.json");
+const lerConfigDoTime = (repo) => (existsSync(configDoTime(repo)) ? JSON.parse(readFileSync(configDoTime(repo), "utf8")) : {});
+
+test("should never turn on external review on install -y nor on update of a project without it", () => {
+  const repo = diretorioTemporario();
+  instalarPelaCli(repo);
+  assert.equal(Object.hasOwn(lerConfigDoTime(repo), "externalReview"), false);
+  rodarUpdate(repo);
+  assert.equal(Object.hasOwn(lerConfigDoTime(repo), "externalReview"), false);
+});
+
+test("should keep an external review that is off byte for byte on update", () => {
+  const repo = diretorioTemporario();
+  instalarPelaCli(repo);
+  const desligada = { enabled: false, reviewers: ["codex"] };
+  writeFileSync(configDoTime(repo), JSON.stringify({ ...lerConfigDoTime(repo), externalReview: desligada }), "utf8");
+  rodarUpdate(repo);
+  assert.deepEqual(lerConfigDoTime(repo).externalReview, desligada);
+});

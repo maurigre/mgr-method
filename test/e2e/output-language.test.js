@@ -1033,3 +1033,22 @@ for (const idioma of IDIOMAS) {
     exigirIdiomaUnico(idioma, [consulta.out, consulta.err, recusa.out, recusa.err], PADRAO_REVIEW, [projeto], "review desligada");
   });
 }
+
+const PADRAO_ARCHIVE_REVISAO = /^specArchive/;
+
+for (const idioma of IDIOMAS) {
+  test(`should print the external review refusal of spec archive only in ${idioma}`, () => {
+    const projeto = tempDir("mgr-archive-revisao-idioma-");
+    mkdirSync(path.join(projeto, "docs", "sdd"), { recursive: true });
+    writeFileSync(path.join(projeto, "docs", "sdd", "CONSTITUTION.md"), "# C\n");
+    mkdirSync(path.join(projeto, "specs", "x"), { recursive: true });
+    writeFileSync(path.join(projeto, "specs", "x", "04-plan.md"), "### P0.1 — x\n- **status:** done\n");
+    writeFileSync(path.join(projeto, "specs", "x", "06-completion.md"), "## Diff do SDD (local)\n\nNão houve alteração no SDD: motivo.\n");
+    mkdirSync(path.join(projeto, ".mgr-core"), { recursive: true });
+    writeFileSync(path.join(projeto, ".mgr-core", "config.json"), JSON.stringify({ externalReview: { enabled: true, reviewers: ["codex"] } }));
+    const recusa = cli(["spec", "archive", "x", "--user-language", idioma], { cwd: projeto, env: { LC_ALL: LOCALE_CONTRARIO[idioma], PATH: pathSemCodex() } });
+    assert.equal(recusa.status, 1);
+    assert.ok(recusa.err.includes(getMessages(idioma, { lifecycle: "mgr" }).specArchiveReviewMissing("x", false)), recusa.err);
+    exigirIdiomaUnico(idioma, [recusa.out, recusa.err], PADRAO_ARCHIVE_REVISAO, [projeto], "recusa (4) do archive");
+  });
+}

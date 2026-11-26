@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { specArchive, specStatus } from "../../src/commands/spec.js";
 import { PROOF_FILE } from "../../src/sdd/external-review.js";
@@ -226,3 +226,137 @@ test("should mark the waived archived feature in JSON and leave the one without 
   assert.equal(dispensada.externalReview, "waived");
   assert.equal(Object.hasOwn(velha, "externalReview"), false);
 });
+
+const arvore = (dir, relativo = "") => readdirSync(path.join(dir, relativo)).sort().flatMap((nome) => {
+  const caminho = path.join(relativo, nome);
+  return statSync(path.join(dir, caminho)).isDirectory()
+    ? [[caminho, null], ...arvore(dir, caminho)]
+    : [[caminho, readFileSync(path.join(dir, caminho))]];
+});
+
+const comRevisaoSemGit = () => {
+  const root = montarFatia({ prova: provaCom(REVISAO) });
+  rmSync(path.join(root, ".git"), { recursive: true, force: true });
+  return root;
+};
+
+const comRevisaoAlterada = () => {
+  const root = montarFatia({ prova: provaCom(REVISAO) });
+  mudarB(root, "z\n");
+  return root;
+};
+
+const CASOS_DE_REVISAO_RECUSADA = [
+  ["missing", () => montarFatia(), (mensagens) => mensagens.specArchiveReviewMissing("x", true)],
+  ["invalid", () => montarFatia({ prova: "lixo" }), (mensagens) => mensagens.specArchiveReviewInvalid("json")],
+  ["stale", comRevisaoAlterada, (mensagens) => mensagens.specArchiveReviewStale(["b.js"])],
+  ["reviewer-not-configured", () => montarFatia({ prova: provaCom({ ...REVISAO, reviewer: "outro" }) }),
+    (mensagens) => mensagens.specArchiveReviewReviewerNotConfigured("outro", ["codex"])],
+  ["unverifiable", comRevisaoSemGit, (mensagens) => mensagens.specArchiveReviewUnverifiable],
+];
+
+for (const idioma of IDIOMAS) {
+  for (const [nome, montar, linhaDe] of CASOS_DE_REVISAO_RECUSADA) {
+    test(`should refuse the ${nome} external review and leave specs byte for byte [${idioma}]`, () => {
+      const mensagens = getMessages(idioma);
+      const root = montar();
+      const antes = arvore(path.join(root, "specs"));
+      const { codigo, out, err } = arquivar({ root, idioma, reviewIo: reviewIoReal() });
+
+      assert.equal(codigo, 1);
+      assert.deepEqual(err, recusa(mensagens, linhaDe(mensagens)));
+      assert.deepEqual(out.filter((linha) => !linha.startsWith("git (") && !linha.startsWith(mensagens.reviewGitCalling("").split("(")[0])), []);
+      assert.deepEqual(arvore(path.join(root, "specs")), antes);
+    });
+  }
+
+  test(`should refuse a file deleted in the review that exists again at HEAD as stale [${idioma}]`, () => {
+    const mensagens = getMessages(idioma);
+    const root = montarFatia({ prova: provaCom({ ...REVISAO, files: [{ path: "c.js", state: "deleted" }] }) });
+    writeFileSync(path.join(root, "c.js"), "novo\n");
+    git(root, "add", "c.js");
+    git(root, "commit", "-qm", "recria c");
+    const antes = arvore(path.join(root, "specs"));
+    const { codigo, out, err } = arquivar({ root, idioma, reviewIo: reviewIoReal() });
+
+    assert.equal(codigo, 1);
+    assert.deepEqual(err, recusa(mensagens, mensagens.specArchiveReviewStale(["c.js"])));
+    assert.deepEqual(out.filter((linha) => !linha.startsWith("git (") && !linha.startsWith(mensagens.reviewGitCalling("").split("(")[0])), []);
+    assert.deepEqual(arvore(path.join(root, "specs")), antes);
+  });
+
+  test(`should list the task, completion and review reasons in that order when all three fail [${idioma}]`, () => {
+    const mensagens = getMessages(idioma);
+    const root = montarFatia({ statusDaTask: "todo" });
+    rmSync(path.join(root, "specs", "x", "06-completion.md"));
+    const { codigo, err } = arquivar({ root, idioma, reviewIo: reviewIoReal() });
+
+    assert.equal(codigo, 1);
+    assert.deepEqual(err, recusa(
+      mensagens,
+      mensagens.specArchiveTasksNotDone("P0.1"),
+      mensagens.specArchiveNoCompletion,
+      mensagens.specArchiveReviewMissing("x", true),
+    ));
+  });
+
+  test(`should wrap the cat-file git call with its log lines when archiving with a valid proof [${idioma}]`, () => {
+    const mensagens = getMessages(idioma);
+    const root = montarFatia({ prova: provaCom(REVISAO) });
+    const { codigo, out, err } = arquivar({ root, idioma, reviewIo: reviewIoReal() });
+    const posicao = out.indexOf(mensagens.reviewGitCalling("cat-file --batch"));
+
+    assert.equal(codigo, 0);
+    assert.deepEqual(err, []);
+    assert.notEqual(posicao, -1);
+    assert.equal(out[posicao + 1], mensagens.reviewGitCalled("cat-file --batch", true));
+  });
+}
+
+function arquivadasComProvas() {
+  const root = tempDir("mgr-arch-rev-");
+  mkdirSync(path.join(root, "specs", "archive", "2026-01-15-x"), { recursive: true });
+  writeFileSync(path.join(root, "specs", "archive", "2026-01-15-x", PROOF_FILE), JSON.stringify(provaCom(REVISAO), null, 2));
+  mkdirSync(path.join(root, "specs", "archive", "2026-01-16-y"), { recursive: true });
+  writeFileSync(path.join(root, "specs", "archive", "2026-01-16-y", PROOF_FILE), "lixo");
+  return root;
+}
+
+for (const idioma of IDIOMAS) {
+  test(`should list the archived features without the waiver mark when no proof ends in a waiver [${idioma}]`, () => {
+    const mensagens = getMessages(idioma);
+    const root = arquivadasComProvas();
+    const { io, out, err } = coletor();
+
+    assert.equal(specStatus({ root, cwd: root, flags: { archived: true }, positional: [], io, M: mensagens }), 0);
+    assert.deepEqual(err, []);
+    assert.deepEqual(
+      [...out].sort(),
+      [mensagens.specStatusArchivedLine("2026-01-15", "x"), mensagens.specStatusArchivedLine("2026-01-16", "y")].sort(),
+    );
+  });
+}
+
+test("should leave the externalReview key out of the JSON when no proof ends in a waiver", () => {
+  const root = arquivadasComProvas();
+  const { io, out, err } = coletor();
+
+  assert.equal(specStatus({ root, cwd: root, flags: { archived: true, json: true }, positional: [], io, M: getMessages("en") }), 0);
+  assert.deepEqual(err, []);
+  const { archived } = JSON.parse(out[0]);
+  assert.equal(archived.length, 2);
+  for (const slug of ["x", "y"]) {
+    assert.equal(Object.hasOwn(archived.find((entrada) => entrada.slug === slug), "externalReview"), false);
+  }
+});
+
+for (const idioma of IDIOMAS) {
+  test(`should refuse with the reason (4) when the proof is a directory and cannot be read [${idioma}]`, () => {
+    const mensagens = getMessages(idioma);
+    const root = montarFatia({});
+    mkdirSync(path.join(root, "specs", "x", "external-review.json"));
+    const { codigo, err } = arquivar({ root, idioma, reviewIo: reviewIoReal() });
+    assert.equal(codigo, 1);
+    assert.deepEqual(err, recusa(mensagens, mensagens.specArchiveReviewInvalid("EISDIR")));
+  });
+}

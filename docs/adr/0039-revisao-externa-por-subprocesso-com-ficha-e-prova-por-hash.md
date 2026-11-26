@@ -72,7 +72,7 @@ Os fatos medidos sobre o primeiro revisor estão no brief e no log da fatia:
 ### Risks and Mitigations
 - **Risk:** a ficha divergir do CLI numa versão nova do `codex`. — **Mitigation:** a prova grava a
   versão que o revisor informa, e o argv é conferido exatamente. — **proved by:**
-  `test/reviewers/codex.test.js` e o teste "should send exactly the argv of the reviewer sheet" de
+  `test/reviewers/codex.test.js` e o teste "should send exactly the argv of the reviewer sheet to the fake codex" de
   `test/commands/review.test.js`.
 - **Risk:** a prova afirmar conteúdo que o revisor não viu. — **Mitigation:** hashes lidos antes da
   chamada e fixados no commit; conferência de HEAD e árvore depois. — **proved by:**

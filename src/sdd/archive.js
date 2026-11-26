@@ -33,6 +33,7 @@ export const REASONS = Object.freeze({
   sddCheckFailed: "sdd-check-failed",
   externalReviewMissing: "external-review-missing",
   externalReviewInvalid: "external-review-invalid",
+  externalReviewReviewerNotConfigured: "external-review-reviewer-not-configured",
   externalReviewStale: "external-review-stale",
   externalReviewUnverifiable: "external-review-unverifiable",
   destinationExists: "destination-exists",
@@ -64,7 +65,7 @@ export function parseDate(valor, hoje) {
 const destinationOf = (date, slug) => path.join(SPECS_DIR, ARCHIVE_DIR, `${date}-${slug}`);
 
 // Decisão pura sobre os fatos já levantados. As pré-condições encerram na hora (sem elas não há
-// fatia a julgar); as três condições são TODAS avaliadas e reportadas na ordem (1), (2), (3), para a
+// fatia a julgar); as condições são TODAS avaliadas e reportadas na ordem (1) a (4), para a
 // recusa trazer o motivo completo de uma vez.
 export function decide(fatos) {
   const { slug, location, date, plan, completion, sdd, destinationExists, externalReview = { state: "off" } } = fatos;
@@ -91,6 +92,7 @@ export function decide(fatos) {
 const RECUSA_DA_REVISAO = {
   missing: (fato, slug) => [{ code: REASONS.externalReviewMissing, slug, consent: fato.consent }],
   invalid: (fato) => [{ code: REASONS.externalReviewInvalid, detail: fato.detail }],
+  "reviewer-not-configured": (fato) => [{ code: REASONS.externalReviewReviewerNotConfigured, reviewer: fato.reviewer, reviewers: fato.reviewers }],
   stale: (fato) => [{ code: REASONS.externalReviewStale, paths: fato.paths }],
   unverifiable: () => [{ code: REASONS.externalReviewUnverifiable }],
 };

@@ -3746,29 +3746,61 @@ test("should keep an external review that is off byte for byte on update", () =>
   assert.deepEqual(lerConfigDoTime(repo).externalReview, desligada);
 });
 
-const instalarCapturando = (repo) => {
+const instalarCapturando = (repo, idioma = "pt-BR") => {
   const bin = fileURLToPath(new URL("../../bin/mgr.js", import.meta.url));
-  return execFileSync("node", [bin, "install", repo, "--engine", "claude-code", "--scope", "project", "--all-skills", "-y"], { ...ptBR(repo), encoding: "utf8" });
+  return execFileSync("node", [bin, "install", repo, "--engine", "claude-code", "--scope", "project", "--all-skills", "-y", "--user-language", idioma], { ...ptBR(repo), encoding: "utf8" });
 };
 const contar = (texto, trecho) => texto.split(trecho).length - 1;
 
-test("should tell once on install that external review is off, and never on update", () => {
-  const repo = diretorioTemporario();
-  const mensagens = getMessages("pt-BR");
-  const saida = instalarCapturando(repo);
-  assert.equal(contar(saida, mensagens.installExternalReviewOff), 1, saida);
-  assert.equal(contar(saida, mensagens.installExternalReviewOn), 0);
-  const atualizacao = `${rodarUpdate(repo)}`;
-  assert.equal(contar(atualizacao, mensagens.installExternalReviewOff), 0);
-  assert.equal(contar(atualizacao, mensagens.installExternalReviewOn), 0);
-});
+for (const idioma of ["en", "pt-BR"]) {
+  test(`should tell once on install that external review is off, and never on update (${idioma})`, () => {
+    const repo = diretorioTemporario();
+    const mensagens = getMessages(idioma);
+    const saida = instalarCapturando(repo, idioma);
+    assert.equal(contar(saida, mensagens.installExternalReviewOff), 1, saida);
+    assert.equal(contar(saida, mensagens.installExternalReviewOn), 0);
+    const atualizacao = `${rodarUpdate(repo)}`;
+    for (const tabela of [getMessages("en"), getMessages("pt-BR")]) {
+      assert.equal(contar(atualizacao, tabela.installExternalReviewOff), 0);
+      assert.equal(contar(atualizacao, tabela.installExternalReviewOn), 0);
+    }
+  });
 
-test("should tell on install that external review is on and keep the config as it was", () => {
-  const repo = diretorioTemporario();
-  instalarPelaCli(repo);
-  const ligada = { enabled: true, reviewers: ["codex"] };
-  writeFileSync(configDoTime(repo), JSON.stringify({ ...lerConfigDoTime(repo), externalReview: ligada }), "utf8");
-  const saida = instalarCapturando(repo);
-  assert.equal(contar(saida, getMessages("pt-BR").installExternalReviewOn), 1, saida);
-  assert.deepEqual(lerConfigDoTime(repo).externalReview, ligada);
-});
+  test(`should tell on install that external review is on and keep the config as it was (${idioma})`, () => {
+    const repo = diretorioTemporario();
+    instalarPelaCli(repo);
+    const ligada = { enabled: true, reviewers: ["codex"] };
+    writeFileSync(configDoTime(repo), JSON.stringify({ ...lerConfigDoTime(repo), externalReview: ligada }), "utf8");
+    const saida = instalarCapturando(repo, idioma);
+    assert.equal(contar(saida, getMessages(idioma).installExternalReviewOn), 1, saida);
+    assert.deepEqual(lerConfigDoTime(repo).externalReview, ligada);
+  });
+}
+
+const montarFatiaParaArquivar = (repo, { statusDaTask, comConfig }) => {
+  mkdirSync(path.join(repo, "docs", "sdd"), { recursive: true });
+  writeFileSync(path.join(repo, "docs", "sdd", "CONSTITUTION.md"), "# Constituicao\n");
+  mkdirSync(path.join(repo, "specs", "x"), { recursive: true });
+  writeFileSync(path.join(repo, "specs", "x", "04-plan.md"), `### P0.1 — x\n- **status:** ${statusDaTask}\n`);
+  writeFileSync(path.join(repo, "specs", "x", "06-completion.md"), "## Diff do SDD (local)\n\nNão houve alteração no SDD: motivo.\n");
+  if (comConfig) {
+    mkdirSync(path.join(repo, ".mgr-core"), { recursive: true });
+    writeFileSync(path.join(repo, ".mgr-core", "config.json"), JSON.stringify({ externalReview: { enabled: false, reviewers: ["codex"] } }));
+  }
+};
+
+for (const statusDaTask of ["todo", "done"]) {
+  test(`should print the same bytes and exit on spec archive with review absent or off (task ${statusDaTask})`, () => {
+    const bin = fileURLToPath(new URL("../../bin/mgr.js", import.meta.url));
+    const resultados = [false, true].map((comConfig) => {
+      const repo = diretorioTemporario();
+      montarFatiaParaArquivar(repo, { statusDaTask, comConfig });
+      const resultado = spawnSync("node", [bin, "spec", "archive", "x", "--date", "2026-11-26"], {
+        cwd: repo, encoding: "utf8", env: { ...process.env, LC_ALL: "C", NO_COLOR: "1" },
+      });
+      return { status: resultado.status, stdout: resultado.stdout, stderr: resultado.stderr };
+    });
+    assert.deepEqual(resultados[1], resultados[0]);
+    assert.equal(resultados[0].status, statusDaTask === "done" ? 0 : 1);
+  });
+}

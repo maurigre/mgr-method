@@ -35,6 +35,7 @@ export const REVIEW_REASONS = Object.freeze({
   sessionMissing: "session-missing",
   pathWithNewline: "path-with-newline",
   changedDuringReview: "changed-during-review",
+  waiveNeedsSlug: "waive-needs-slug",
   waiveNeedsReason: "waive-needs-reason",
   waiveNeedsFailure: "waive-needs-failure",
   waiveNeedsInitials: "waive-needs-initials",

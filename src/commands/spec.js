@@ -278,13 +278,14 @@ const LINHA_DO_MOTIVO = {
   [REASONS.sddCheckFailed]: (M, motivo) => M.specArchiveSddFailed(motivo.reason),
   [REASONS.externalReviewMissing]: (M, motivo) => M.specArchiveReviewMissing(motivo.slug, motivo.consent === "given"),
   [REASONS.externalReviewInvalid]: (M, motivo) => M.specArchiveReviewInvalid(motivo.detail),
+  [REASONS.externalReviewReviewerNotConfigured]: (M, motivo) => M.specArchiveReviewReviewerNotConfigured(motivo.reviewer, motivo.reviewers),
   [REASONS.externalReviewStale]: (M, motivo) => M.specArchiveReviewStale(motivo.paths),
   [REASONS.externalReviewUnverifiable]: (M) => M.specArchiveReviewUnverifiable,
   [REASONS.destinationExists]: (M, motivo) => M.specArchiveDestinationExists(motivo.destination),
 };
 
 // `mgr spec archive <slug> [--date AAAA-MM-DD]` — move a fatia terminada para specs/archive/, e só se
-// as três condições valerem (ADR-0036, K06a). Slug sempre explícito: o movimento é irreversível, e
+// as condições valerem: as três de sempre e, com a revisão externa ligada, a quarta (ADR-0036, K06a; ADR-0039). Slug sempre explícito: o movimento é irreversível, e
 // rodar de dentro da pasta que vai mudar de lugar deixaria o shell num diretório que não existe.
 // `--all` é recusado, não ignorado: cada fatia é arquivada pelo nome, uma de cada vez.
 export function specArchive({ root, flags, positional, io, M, reviewIo }) {

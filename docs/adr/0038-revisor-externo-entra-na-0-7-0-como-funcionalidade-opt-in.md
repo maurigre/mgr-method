@@ -15,7 +15,7 @@ opt-in, ficava para depois da 1.0. A decisão 6 do mesmo ADR exige um ADR de rev
 
 No CHECKPOINT 1 do PRD da fatia, o autor mudou o escopo: "na realidade a minha intenção tambem era que
 este possibilidade de revisao externa seria mais uma funcionalidade do MGR-METHOD o qual o usuario
-queria ativar esta funcionalidade. Não somente neste repositório." E acrescentou que o `spec archive`
+queria ativar esta funcionalidade. Não somente neste repositorio." E acrescentou que o `spec archive`
 exige a revisão quando ela está ligada.
 
 **Reference:** Technical spec at specs/revisor-externo/03-spec.md.
@@ -31,10 +31,10 @@ exige a revisão quando ela está ligada.
   de 4 fatias, decidida pelo autor no CHECKPOINT 2 (P-10), porque é uma funcionalidade só, em duas
   partes que se provam cada uma.
 - A primeira execução real é a de 2026-11-26, registrada em `specs/revisor-externo/05-execution.md`:
-  - a primeira chamada falhou pela grafia do modelo e expôs que a falha não mostrava o motivo, o que
-    foi corrigido;
-  - a segunda passou com `codex-cli 0.172.0`, modelo `gpt-6.2-sol`, esforço `medium`, em 157 s, na
-    sessão `01a217aa-bb75-7801-8ddf-7c030c9dfd5b`;
+  - a primeira chamada falhou e expôs que a falha não mostrava o motivo, o que foi corrigido; a causa,
+    a grafia do modelo, ficou confirmada por eliminação (a única mudança entre as duas chamadas);
+  - a segunda passou com `codex-cli 0.172.0`, modelo `gpt-6.2-sol` e esforço `medium` pedidos (a saída
+    não diz se o esforço foi aplicado), em 157 s, na sessão `01a217aa-bb75-7801-8ddf-7c030c9dfd5b`;
   - a rodada 2 levou 131 s.
 
 ## Alternatives Considered
@@ -51,7 +51,7 @@ exige a revisão quando ela está ligada.
 - O mantenedor usa a mesma funcionalidade que distribui (dogfooding), em vez de um script à parte.
 
 ### Negative
-- A 0.7.0 ganha superfície pública nova (sete subcomandos e uma quarta condição no archive) e passa
+- A 0.7.0 ganha superfície pública nova (oito subcomandos e uma quarta condição no archive) e passa
   a ter 5 PRs.
 - O código das fatias sai da máquina a cada revisão e consome a cota de quem a roda.
 

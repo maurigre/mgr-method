@@ -167,6 +167,7 @@ const LINHA_DA_RECUSA = {
   [REVIEW_REASONS.emptyDiff]: (M, recusa) => M.reviewEmptyDiff(recusa.ref),
   [REVIEW_REASONS.pathWithNewline]: (M, recusa) => M.reviewPathWithNewline(recusa.paths),
   [REVIEW_REASONS.proofUnreadable]: (M, recusa) => M.reviewProofUnreadable(recusa.file, recusa.detail),
+  [REVIEW_REASONS.waiveNeedsSlug]: (M) => M.reviewWaiveNeedsSlug,
   [REVIEW_REASONS.waiveNeedsReason]: (M) => M.reviewWaiveNeedsReason,
   [REVIEW_REASONS.waiveNeedsInitials]: (M) => M.reviewWaiveNeedsInitials,
   [REVIEW_REASONS.waiveNeedsFailure]: (M, recusa) => M.reviewWaiveNeedsFailure(recusa.slug),
@@ -259,7 +260,7 @@ async function reviewExternal(contexto) {
 // iniciais, e só depois de uma falha do revisor. A dispensa é gravada na prova, e o archive a anuncia.
 async function reviewWaive(contexto) {
   const { root, core, flags, positional, io, M, now } = contexto;
-  const plano = planWaiver(root, { slug: positional[0], flags, reason: flags.reason, coreDir: core });
+  const plano = planWaiver(root, { slug: positional[0], flags, coreDir: core });
   if (plano.outcome === "refused") {
     io.err(M.errorPrefix(LINHA_DA_RECUSA[plano.code](M, plano)));
     return 1;

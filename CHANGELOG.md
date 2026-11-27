@@ -14,7 +14,20 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
-## [0.7.0-rc.1] - 2026-11-26
+## [0.7.0] - 2026-11-27
+> Versão estável, com o mesmo conteúdo da `0.7.0-rc.1`. Quem vem da `0.5.0` encontra o que exige ação
+> ou pode quebrar em "Da 0.5.0 para a 0.7.0", na seção `[0.7.0-rc.1]` abaixo.
+
+A rc passou pela verificação de saída: instalação do zero pelo `npx mgr-method@next`, sem terminal
+e num terminal de verdade; `status` e `doctor`; os comandos do runtime que as skills chamam;
+atualização a partir da `0.5.0`, também contra o pacote publicado; e uma sessão do Claude Code com
+a `/spec-init` num projeto instalado pela rc.
+
+### Corrigido
+- No resumo "Da 0.5.0 para a 0.7.0", a frase sobre pasta de skill sem a marca do MGR dizia "nunca é
+  sobrescrita"; a seção de origem diz que só a resposta "sim" no terminal a substitui.
+
+## [0.7.0-rc.1] - 2026-11-27
 > Release candidate da 0.7.0. Pré-release no dist-tag `next`. Se a sessão real passar, a `0.7.0`
 > estável sai com este mesmo conteúdo.
 
@@ -50,8 +63,9 @@ ele nos itens marcados "esta versão" e nas seções das betas posteriores à su
   versão, Adicionado e Alterado). O bloco gerenciado no `.gitignore` da raiz, que protege
   `config.local.json` e `.env`, é oferecido com consentimento (`0.7.0-beta.10`, `install`); no teste
   de atualização, o `update -y` o grava.
-- **Pasta de skill sem a marca do MGR nunca é sobrescrita nem apagada.** Com `-y` ou sem terminal ela
-  fica, o caso é anunciado e o comando sai 1 (esta versão, Segurança, C-20).
+- **Pasta de skill sem a marca do MGR não é sobrescrita nem apagada sem um "sim" explícito no
+  terminal.** Com `-y` ou sem terminal ela fica, o caso é anunciado e o comando sai 1 (esta versão,
+  Segurança, C-20).
 - **Declaração do manifesto fora de forma** (e raiz que não é objeto) faz `install` e `update` saírem
   1 sem gravar nada, com o campo nomeado; o `uninstall` recusa só pelo que usa (`engines` e a pasta do
   `--skills-dir`). Campo que o MGR recalcula (`skillsDirs`, `scope`, `agents`) é reparado e anunciado

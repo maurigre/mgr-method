@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
-import { describeItem, judgeUpdate, main, parseArgs, STEPS } from "../../scripts/check-update.mjs";
+import { classifyRegistry, describeItem, judgeUpdate, main, parseArgs, STEPS } from "../../scripts/check-update.mjs";
 
 function fatosVerdes(sobrescritos = {}) {
   return {
@@ -36,6 +36,27 @@ test("should fail as not-published and not blame the network when the origin ver
 test("should fail with setup and run no step judgement when the test project could not be prepared", () => {
   const resultado = judgeUpdate(fatosVerdes({ setup: { ok: false, detail: "git init saiu 127" } }));
   assert.deepStrictEqual(resultado, { ok: false, failures: [{ kind: "setup", detail: "git init saiu 127" }], warnings: [] });
+});
+
+test("should pass the registry only when npm view exits 0 and returns the requested version", () => {
+  assert.deepStrictEqual(classifyRegistry("0.5.0", { exit: 0, stdout: "0.5.0\n", saida: "0.5.0\n" }), { ok: true });
+  assert.equal(classifyRegistry("0.5.0", { exit: 0, stdout: "0.4.0\n", saida: "0.4.0\n" }).ok, false);
+  assert.equal(classifyRegistry("0.5.0", { exit: 1, stdout: "0.5.0\n", saida: "0.5.0\n" }).ok, false);
+});
+
+test("should classify E404 as not-published and any other npm view failure as unreachable", () => {
+  assert.equal(classifyRegistry("9.9.9", { exit: 1, stdout: "", saida: "npm error code E404" }).reason, "not-published");
+  assert.equal(classifyRegistry("0.5.0", { exit: 1, stdout: "", saida: "npm error syscall connect" }).reason, "unreachable");
+});
+
+test("should fail with version-mismatch when the update exits 0 but the manifest is not at the tested version", () => {
+  const resultado = judgeUpdate(fatosVerdes({ versions: { expected: "0.7.0-rc.1", afterUpdate: "0.5.0" } }));
+  assert.deepStrictEqual(resultado.failures, [{ kind: "version-mismatch", expected: "0.7.0-rc.1", found: "0.5.0" }]);
+});
+
+test("should stay ok when the manifest reaches the tested version after the update", () => {
+  const resultado = judgeUpdate(fatosVerdes({ versions: { expected: "0.7.0-rc.1", afterUpdate: "0.7.0-rc.1" } }));
+  assert.equal(resultado.ok, true);
 });
 
 test("should fail naming the step when any single step exits 1", () => {
@@ -122,6 +143,11 @@ test("should accept a pre-release origin and reject versions cut at the boundary
 
 test("should exit 2 from main on an invalid argument before running anything", () => {
   assert.equal(main(["--nada"]), 2);
+});
+
+test("should exit 2 from main when the tarball does not exist or is not a package", () => {
+  assert.equal(main(["--tarball", path.join(import.meta.dirname, "nao-existe.tgz")]), 2);
+  assert.equal(main(["--tarball", import.meta.dirname]), 2);
 });
 
 test("should resolve the tarball to an absolute path ending with the given name", () => {

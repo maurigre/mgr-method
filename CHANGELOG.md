@@ -22,7 +22,8 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 O que exige ação ou pode quebrar para quem atualiza da `0.5.0` (o `latest`), juntando as betas
 `0.6.0-beta.1` a `0.7.0-beta.11` e esta versão. Cada item diz em que seção está o detalhe. A
 atualização a partir da `0.5.0` publicada é provada no CI: `install` pela `0.5.0`, `update -y`,
-`doctor` e `uninstall` (veja Adicionado).
+`doctor` e `uninstall` (veja Adicionado). Quem já está numa beta da 0.7.0 encontra o que muda para
+ele nos itens marcados "esta versão" e nas seções das betas posteriores à sua.
 
 - **Atualize com `npx mgr-method@<versão> update`.** A migração é automática e anunciada: o runtime
   passa a uma cópia só em `.mgr-core/runtime/` (quem vem da `0.5.0`, que não tinha runtime no
@@ -44,9 +45,10 @@ atualização a partir da `0.5.0` publicada é provada no CI: `install` pela `0.
   de atualização, o `update -y` o grava.
 - **Pasta de skill sem a marca do MGR nunca é sobrescrita nem apagada.** Com `-y` ou sem terminal ela
   fica, o caso é anunciado e o comando sai 1 (esta versão, Segurança, C-20).
-- **Declaração do manifesto fora de forma** (e raiz que não é objeto) faz `install`, `update` e
-  `uninstall` saírem 1 sem gravar nada, com o campo nomeado; campo que o MGR recalcula (`skillsDirs`,
-  `scope`, `agents`) é reparado e anunciado (esta versão, Alterado, ADR-0034).
+- **Declaração do manifesto fora de forma** (e raiz que não é objeto) faz `install` e `update` saírem
+  1 sem gravar nada, com o campo nomeado; o `uninstall` recusa só pelo que usa (`engines` e a pasta do
+  `--skills-dir`). Campo que o MGR recalcula (`skillsDirs`, `scope`, `agents`) é reparado e anunciado
+  (esta versão, Alterado, ADR-0034).
 - **A mensagem de divergência do `update` sai no stdout** (`0.7.0-beta.10`, Modificado).
 - **O `doctor` ganha o exit 2** (não conseguiu diagnosticar), e os textos do `--json` saem em inglês
   canônico em qualquer idioma (esta versão, Alterado).
@@ -73,7 +75,8 @@ atualização a partir da `0.5.0` publicada é provada no CI: `install` pela `0.
   arquivo do MGR sobra e que os arquivos do usuário (inclusive `.gitignore` e `.claude/settings.json`)
   voltam iguais byte a byte. Usa a rede (o registro npm), com cache npm vazio; se o registro não
   responde ou a versão de origem não está publicada, o passo falha e diz qual dos dois. Roda com
-  `npm run check:update`.
+  `npm run check:update`. Depois do `update`, confere que o manifesto ficou na versão do pacote em
+  teste.
 - **Revisão externa opt-in (`mgr review`, ADR-0038 e ADR-0039).** Um revisor de outro fornecedor,
   chamado sem conversa e só leitura (o primeiro é o `codex`), revisa os arquivos que a fatia mudou
   nos dois eixos (Padrões e Spec), com cada citação conferida contra o guia e a spec. Desligada por

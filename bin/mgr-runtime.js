@@ -14,7 +14,7 @@ import { origin } from "../src/commands/origin.js";
 import { review } from "../src/commands/review.js";
 import { sddCheck } from "../src/commands/sdd-check.js";
 import { specArchive, specNext, specStatus, specValidate } from "../src/commands/spec.js";
-import { parseArgs } from "../src/core/cli-args.js";
+import { PACKAGE_COMMANDS, RUNTIME_COMMANDS, checkFlags, parseArgs } from "../src/core/cli-args.js";
 import { ids as engineIds } from "../src/engines/index.js";
 import { readManifest, readUserLanguage } from "../src/install/manifest.js";
 import { renderError } from "../src/core/errors.js";
@@ -66,7 +66,7 @@ function reviewCommand(base, positional, lang) {
 
 async function main() {
   const [, , command, ...rest] = process.argv;
-  const { flags, positional, unknownFlag } = parseArgs(rest, { engines: engineIds() });
+  const { flags, positional, unknownFlag, seen } = parseArgs(rest, { engines: engineIds() });
   const root = projectRoot(process.cwd()).root;
   const manifest = readManifestSafe(root);
   // DT-4: o idioma nao depende dos outros campos do manifesto; um manifesto malformado nao o apaga.
@@ -77,6 +77,14 @@ async function main() {
   const lifecycle = `npx mgr-method@${manifest.version ?? "latest"}`;
   const M = getMessages(lang, { invocation, lifecycle });
   if (unknownFlag) { console.error(M.unknownFlag(unknownFlag)); return 1; }
+  // ADR-0040: a flag conhecida que o comando não usa é recusada antes do despacho; a que só um comando de
+  // ciclo de vida aceita aponta para o `npx mgr-method@<versão>`.
+  const julgamento = checkFlags({ commands: RUNTIME_COMMANDS, fallback: PACKAGE_COMMANDS, command, positional, seen });
+  if (!julgamento.ok) {
+    const frase = julgamento.lifecycle ? M.flagNotAcceptedLifecycle : M.flagNotAccepted;
+    console.error(frase(julgamento.flag, julgamento.entry, julgamento.acceptedBy));
+    return 1;
+  }
   const base = {
     root,
     cwd: process.cwd(),

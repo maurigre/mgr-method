@@ -50,7 +50,7 @@ import {
 import { diff as lockfileDiff, readLockfile, replacedByEngine, LOCKFILE_NAME } from "../src/install/lockfile.js";
 import { detect } from "../src/plugins/detector.js";
 import { hookFilePath, planOwnedHooks, removeHook, rewriteOwnedHooks, runtimeCommand, syncOwnedHooks, writeHook, writtenEvents } from "../src/install/hooks.js";
-import { checkBareModelFlag, checkEffortFlags, effortFlagLevels, mergeEfforts, parseArgs, resolveEffortFlags, resolveModelFlags } from "../src/core/cli-args.js";
+import { PACKAGE_COMMANDS, checkBareModelFlag, checkEffortFlags, checkFlags, effortFlagLevels, mergeEfforts, parseArgs, resolveEffortFlags, resolveModelFlags } from "../src/core/cli-args.js";
 
 const SCOPES = ["project", "global"];
 // Comandos de skill plugável: o posicional é o nome da skill/registry, nunca o repositório.
@@ -1219,7 +1219,7 @@ function cmdValidate() {
 
 async function main() {
   const [, , command, ...rest] = process.argv;
-  const { flags, positional, unknownFlag } = parseArgs(rest, { engines: installer.ENGINES });
+  const { flags, positional, unknownFlag, seen } = parseArgs(rest, { engines: installer.ENGINES });
   // Refina o idioma da CLI: flag > manifesto (project > global) > locale (default acima).
   const semRepoPosicional = PLUGIN_COMMANDS.includes(command) || SUBCOMMAND_COMMANDS.includes(command);
   const repo = !semRepoPosicional && positional[0] ? path.resolve(positional[0]) : projectRoot(process.cwd()).root;
@@ -1243,6 +1243,9 @@ async function main() {
     }
   }
   if (unknownFlag) { console.error(M.unknownFlag(unknownFlag)); process.exit(1); }
+  // ADR-0040: a flag conhecida que o comando não usa é recusada aqui, antes de qualquer escrita.
+  const julgamento = checkFlags({ commands: PACKAGE_COMMANDS, command, positional, seen });
+  if (!julgamento.ok) { console.error(M.flagNotAccepted(julgamento.flag, julgamento.entry, julgamento.acceptedBy)); process.exit(1); }
   try {
     switch (command) {
       case "install": return await cmdInstall(flags, positional);

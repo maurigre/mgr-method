@@ -90,7 +90,6 @@ export const CASOS_DE_CLI = [
     plantar: campo("engines", ["claude-code", "copilot"]),
   },
   { id: "CA-14:update architecture null", comando: "update", args: ATUALIZAR, plantar: campo("architecture", null) },
-  { id: "CA-15:update com --engine e engines numero", comando: "update", args: ["-y", "--engine", "copilot"], plantar: campo("engines", 7) },
   {
     id: "CA-16:update engines vazio sem engine", comando: "update", args: ATUALIZAR,
     plantar: (manifesto) => ({ ...manifesto, engine: undefined, engines: [] }),
@@ -160,6 +159,7 @@ export const CASOS_FORA_DO_LACO = [
   { id: "CA-27", razao: "ja coberto por tres testes de idioma de doctor neste arquivo (classes A, B e C)" },
   { id: "CA-32", razao: "migrateOld e chamado pela API, sem saida de CLI" },
   { id: "CA-33", razao: "ja coberto por teste proprio neste arquivo (rotulo [project]/[projeto])" },
+  { id: "CA-15", razao: "o update nao aceita --engine (ADR-0040); provado pela CA-8 da fatia flag-nao-usada-pelo-comando, e o caso restante era identico ao CA-6" },
 ];
 
 export function rodar(cmd, dir, env = {}) {

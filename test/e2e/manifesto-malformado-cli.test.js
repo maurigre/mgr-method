@@ -201,11 +201,11 @@ test("shouldAcceptUnknownLanguageTextOnUpdateAndAnnounceSkillLeaving", () => {
   });
 });
 
-test("shouldRefuseUpdateWithEngineFlagWhenEnginesOutOfShapeAndSuggestNoUpdateFlag", () => {
+test("shouldRefuseUpdateWhenEnginesOutOfShapeAndSuggestNoUpdateFlag", () => {
   comRepo((repo) => {
     const plantado = plantar(repo, "engines", 7);
     const antes = bytesDoManifesto(repo);
-    const saida = afirmarRecusaNoUpdate(repo, plantado, ["update", "-y", "--engine", "copilot", repo], M, antes);
+    const saida = afirmarRecusaNoUpdate(repo, plantado, ["update", "-y", repo], M, antes);
     assert.ok(saida.includes(M.manifestRefusedOrInstall("--engine")), saida);
     assert.doesNotMatch(saida, /update --[a-z]/);
   });

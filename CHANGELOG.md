@@ -33,6 +33,10 @@ ele nos itens marcados "esta versão" e nas seções das betas posteriores à su
   Modificado).
 - **CI que roda `mgr update` sem `-y`** sai 1 quando o projeto fica divergente; `-y` aceita as
   remoções oferecidas (`0.7.0-beta.10`, Modificado, R-2).
+- **Outras quebras de contrato da `0.7.0-beta.10`** (Modificado): o `update` de instalação `custom`
+  (`--skills-dir`) deixa de migrar para `.claude/skills`; o `install` grava `.mgr-core/config.json`
+  quando há resposta; o `update` grava evento de hook; a linha `hooks written` sai só quando o comando
+  muda o arquivo. As que só valem com plugin ou para um `dist/` local estão na mesma seção.
 - **As skills param quando o runtime falta**, em vez de seguir sem ele, e dizem como restaurá-lo
   (`0.7.0-beta.10`, Modificado). `shared/scripts/sdd-check.sh` deixa de existir; o equivalente é
   `node <runtime> sdd-check` (mesma seção).

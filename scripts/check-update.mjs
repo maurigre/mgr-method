@@ -33,6 +33,9 @@ const PACKAGE = "mgr-method";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TAIL_LINES = 20;
 const STEP_TIMEOUT_MS = 5 * 60 * 1000;
+// D-1 (CHECKPOINT 3): so a pasta do motor que fica vazia avisa sem reprovar; qualquer outra pasta
+// vazia que sobra e sobra do MGR.
+const ENGINE_DIRS = Object.freeze([".claude", ".github"]);
 
 // Arquivos do usuario no projeto de teste. O `.gitignore` e o `.claude/settings.json` ficam onde o
 // MGR tambem escreve: provam que o uninstall devolve o que era do usuario sem mudar um byte.
@@ -52,7 +55,8 @@ const USER_FILES = Object.freeze({
  * - `versions`: `{ expected, afterUpdate }`, a versao do pacote em teste e a do manifesto depois do
  *   update (ausente quando o update nao chegou a rodar com sucesso);
  * - `userBefore` e `after`: `{ caminho: sha256 }` antes do install e depois do uninstall;
- * - `emptyDirsAfter`: pastas vazias que sobraram e nao existiam antes.
+ * - `emptyDirsAfter`: pastas vazias que sobraram e nao existiam antes (a do motor so avisa; as
+ *   outras reprovam).
  */
 export function judgeUpdate({ registry, setup = { ok: true }, steps = [], versions, userBefore = {}, after = {}, emptyDirsAfter = [] }) {
   if (!registry?.ok) {
@@ -70,13 +74,17 @@ export function judgeUpdate({ registry, setup = { ok: true }, steps = [], versio
     failures.push({ kind: "version-mismatch", expected: versions.expected, found: versions.afterUpdate ?? null });
   }
   for (const [arquivo, hash] of Object.entries(userBefore)) {
-    if (!(arquivo in after)) failures.push({ kind: "user-missing", path: arquivo });
+    if (!Object.hasOwn(after, arquivo)) failures.push({ kind: "user-missing", path: arquivo });
     else if (after[arquivo] !== hash) failures.push({ kind: "user-changed", path: arquivo });
   }
   for (const arquivo of Object.keys(after)) {
-    if (!(arquivo in userBefore)) failures.push({ kind: "mgr-leftover", path: arquivo });
+    if (!Object.hasOwn(userBefore, arquivo)) failures.push({ kind: "mgr-leftover", path: arquivo });
   }
-  const warnings = emptyDirsAfter.map((pasta) => ({ kind: "empty-dir", path: pasta }));
+  const warnings = [];
+  for (const pasta of emptyDirsAfter) {
+    if (ENGINE_DIRS.includes(pasta)) warnings.push({ kind: "empty-dir", path: pasta });
+    else failures.push({ kind: "mgr-leftover-dir", path: pasta });
+  }
   return { ok: failures.length === 0, failures, warnings };
 }
 
@@ -123,7 +131,8 @@ const MENSAGEM = {
   "user-missing": (item) => `arquivo do usuario sumiu: ${item.path}`,
   "user-changed": (item) => `arquivo do usuario mudou: ${item.path}`,
   "mgr-leftover": (item) => `arquivo do MGR sobrou depois do uninstall: ${item.path}`,
-  "empty-dir": (item) => `pasta vazia sobrou depois do uninstall (nao reprova): ${item.path}`,
+  "empty-dir": (item) => `pasta vazia do motor sobrou depois do uninstall (nao reprova): ${item.path}`,
+  "mgr-leftover-dir": (item) => `pasta vazia do MGR sobrou depois do uninstall: ${item.path}`,
 };
 
 export function describeItem(item) {
@@ -177,13 +186,14 @@ function fotografar(raiz) {
 
 function montarProjeto(env) {
   const projeto = tempDir("check-update-");
-  // LOG-1: linha antes e depois da gravacao dos arquivos do usuario.
-  console.log(`check-update: gravando ${Object.keys(USER_FILES).join(", ")} em ${projeto}`);
+  // LOG-1: linha antes e depois de cada arquivo do usuario gravado.
   for (const [arquivo, conteudo] of Object.entries(USER_FILES)) {
-    mkdirSync(path.dirname(path.join(projeto, arquivo)), { recursive: true });
-    writeFileSync(path.join(projeto, arquivo), conteudo);
+    const destino = path.join(projeto, arquivo);
+    console.log(`check-update: gravando ${destino}`);
+    mkdirSync(path.dirname(destino), { recursive: true });
+    writeFileSync(destino, conteudo);
+    console.log(`check-update: ${destino} gravado`);
   }
-  console.log(`check-update: ${Object.keys(USER_FILES).length} arquivos do usuario gravados`);
   const git = run("git", ["init", "-q"], projeto, env);
   if (git.exit !== 0) return { projeto, setup: { ok: false, detail: cauda(git.saida) || `git init saiu ${git.exit}` } };
   return { projeto, setup: { ok: true } };

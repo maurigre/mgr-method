@@ -113,6 +113,23 @@ test("should stay ok and warn with empty-dir when an empty folder survives and n
   assert.ok(describeItem(resultado.warnings[0]).includes("nao reprova"));
 });
 
+test("should fail with mgr-leftover when a leftover file is named like an Object prototype property", () => {
+  const after = { "README.md": "h1", "src/app.js": "h2", constructor: "h3" };
+  const resultado = judgeUpdate(fatosVerdes({ after }));
+  assert.deepStrictEqual(resultado.failures, [{ kind: "mgr-leftover", path: "constructor" }]);
+});
+
+test("should fail with user-missing when a user file named like an Object prototype property is gone", () => {
+  const resultado = judgeUpdate(fatosVerdes({ userBefore: { toString: "h1" }, after: {} }));
+  assert.deepStrictEqual(resultado.failures, [{ kind: "user-missing", path: "toString" }]);
+});
+
+test("should fail with mgr-leftover-dir when an empty folder other than the engine folder survives", () => {
+  const resultado = judgeUpdate(fatosVerdes({ emptyDirsAfter: [".mgr-core"] }));
+  assert.deepStrictEqual(resultado.failures, [{ kind: "mgr-leftover-dir", path: ".mgr-core" }]);
+  assert.deepStrictEqual(resultado.warnings, []);
+});
+
 test("should default to version 0.5.0 and no tarball when no argument is given", () => {
   assert.deepStrictEqual(parseArgs([]), { from: ["0.5.0"], tarball: null });
 });

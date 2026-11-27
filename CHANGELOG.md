@@ -14,7 +14,78 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
+## [0.7.0-rc.1] - 2026-11-26
+> Release candidate da 0.7.0. Pré-release no dist-tag `next`. Se a sessão real passar, a `0.7.0`
+> estável sai com este mesmo conteúdo.
+
+### Da 0.5.0 para a 0.7.0
+O que exige ação ou pode quebrar para quem atualiza da `0.5.0` (o `latest`), juntando as betas
+`0.6.0-beta.1` a `0.7.0-beta.11` e esta versão. Cada item diz em que seção está o detalhe. A
+atualização a partir da `0.5.0` publicada é provada no CI: `install` pela `0.5.0`, `update -y`,
+`doctor` e `uninstall` (veja Adicionado). Quem já está numa beta da 0.7.0 encontra o que muda para
+ele nos itens marcados "esta versão" e nas seções das betas posteriores à sua.
+
+- **Atualize com `npx mgr-method@<versão> update`.** A migração é automática e anunciada: o runtime
+  passa a uma cópia só em `.mgr-core/runtime/` (quem vem da `0.5.0`, que não tinha runtime no
+  projeto, ganha a cópia; quem vem das betas com runtime por motor tem a cópia relocada), e
+  `manifest.model` passa a `self-contained-core-runtime` (esta versão, Alterado). O
+  `manifest.projectId` deixa de existir e vai para `.mgr-core/config.local.json` (`0.7.0-beta.10`,
+  Modificado).
+- **CI que roda `mgr update` sem `-y`** sai 1 quando o projeto fica divergente; `-y` aceita as
+  remoções oferecidas (`0.7.0-beta.10`, Modificado, R-2).
+- **Outras quebras de contrato da `0.7.0-beta.10`** (Modificado): o `update` de instalação `custom`
+  (`--skills-dir`) deixa de migrar para `.claude/skills`; o `install` grava `.mgr-core/config.json`
+  quando há resposta; o `update` grava evento de hook; a linha `hooks written` sai só quando o comando
+  muda o arquivo. Com plugin instalado (das betas `0.6.0` em diante): pasta de plugin, com
+  `mgr-manifest.json`, nunca é sobrescrita, e com `--skills-dir` a skill cedida a plugin não é mais
+  construída no diretório custom. Para quem roda do repositório: `version` de um `dist/` defasado
+  sai 1.
+- **As skills param quando o runtime falta**, em vez de seguir sem ele, e dizem como restaurá-lo
+  (`0.7.0-beta.10`, Modificado). `shared/scripts/sdd-check.sh` deixa de existir; o equivalente é
+  `node <runtime> sdd-check` (mesma seção).
+- **Ferramenta do projeto que exclui `**/skills/_shared/mgr/**`** deixa de casar; o equivalente é
+  `.mgr-core/runtime/**` (esta versão, Alterado).
+- **O runtime fica fora do git por padrão**, por um `.gitignore` dentro de `.mgr-core/runtime/`. Se ele
+  já estava no índice, o MGR só mostra `git rm -r --cached .mgr-core/runtime` e não roda nada (esta
+  versão, Adicionado e Alterado). O bloco gerenciado no `.gitignore` da raiz, que protege
+  `config.local.json` e `.env`, é oferecido com consentimento (`0.7.0-beta.10`, `install`); no teste
+  de atualização, o `update -y` o grava.
+- **Pasta de skill sem a marca do MGR nunca é sobrescrita nem apagada.** Com `-y` ou sem terminal ela
+  fica, o caso é anunciado e o comando sai 1 (esta versão, Segurança, C-20).
+- **Declaração do manifesto fora de forma** (e raiz que não é objeto) faz `install` e `update` saírem
+  1 sem gravar nada, com o campo nomeado; o `uninstall` recusa só pelo que usa (`engines` e a pasta do
+  `--skills-dir`). Campo que o MGR recalcula (`skillsDirs`, `scope`, `agents`) é reparado e anunciado
+  (esta versão, Alterado, ADR-0034).
+- **A mensagem de divergência do `update` sai no stdout** (`0.7.0-beta.10`, Modificado).
+- **O `doctor` ganha o exit 2** (não conseguiu diagnosticar). Os textos do `--json` passam a inglês
+  canônico em qualquer idioma: `expected` e `found` do `doctor`, `message`, `remediation` e `example`
+  do `spec validate` e o `warning` do `spec status`. Quem comparava esses textos em pt-BR precisa
+  trocar a comparação (esta versão, Alterado).
+- **`install` com `--effort` ou `--model` soltos sai 1**; a forma é por intenção
+  (`--effort-review`, `--model-drafting` etc.) (esta versão, Alterado, ADR-0030).
+- **`reviewGate` vira `agents.review`** na primeira escrita da política de review (esta versão,
+  Alterado, ADR-0031).
+- **`archive` passa a ser nome reservado em `specs/`** (esta versão, Adicionado).
+- **Quem importa módulos de `src/` diretamente** precisa dos caminhos novos por papel (esta versão,
+  Alterado, ADR-0035).
+- **O fluxo passa a delegar a agentes.** O gate de review roda no agente `mgr-review`
+  (`0.7.0-beta.2`), e a `spec-create` e a `spec-execute` encomendam a redação e as tasks a `mgr-draft`
+  e `mgr-task`, instalados em `.claude/agents/` (`0.7.0-beta.10`, Adicionado). O agente de redação não
+  vê a conversa: decisão tomada só falando, e nunca escrita em disco, não chega nele (mesma seção).
+- **Projetos com nomes antigos no `docs/sdd/`** passam a receber avisos do `sdd-check`, que não
+  bloqueiam (`0.7.0-beta.11`, Atenção).
+- **Novidades que não mudam nada até você usá-las:** skills plugáveis com `mgr add` e o lockfile
+  `mgr-skills.lock` (`0.6.0-beta.1`); a revisão externa, desligada por padrão (esta versão,
+  Adicionado).
+
 ### Adicionado
+- **Teste de atualização no CI.** Um job próprio instala um projeto pela `0.5.0` publicada, o atualiza
+  pelo pacote do repositório (`npm pack`), roda o `doctor` e o `uninstall`, e confere que nenhum
+  arquivo do MGR sobra e que os arquivos do usuário (inclusive `.gitignore` e `.claude/settings.json`)
+  voltam iguais byte a byte. Usa a rede (o registro npm), com cache npm vazio; se o registro não
+  responde ou a versão de origem não está publicada, o passo falha e diz qual dos dois. Roda com
+  `npm run check:update`. Depois do `update`, confere que o manifesto ficou na versão do pacote em
+  teste.
 - **Revisão externa opt-in (`mgr review`, ADR-0038 e ADR-0039).** Um revisor de outro fornecedor,
   chamado sem conversa e só leitura (o primeiro é o `codex`), revisa os arquivos que a fatia mudou
   nos dois eixos (Padrões e Spec), com cada citação conferida contra o guia e a spec. Desligada por

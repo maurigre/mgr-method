@@ -1,7 +1,7 @@
 name: ci
 on:
   push:
-    branches: [main]
+    branches: [main, "release/**"]
   pull_request:
 
 jobs:
@@ -61,3 +61,21 @@ jobs:
           # Coveralls e reporting, nao gate: nao derruba o CI se o upload falhar.
           # Quem veta a queda de cobertura e o step acima (--test-coverage-lines).
           fail-on-error: false
+
+  # Teste de atualizacao (fatia fecha-0-7-0): projeto instalado por versao PUBLICADA, atualizado
+  # pelo pacote deste repositorio (npm pack), doctor e uninstall. Job proprio porque USA A REDE (o
+  # registro npm): se o registro falhar, o passo falha alto e nomeia a rede, sem derrubar o job de
+  # testes. Nenhum passo publica nada (CONSTITUTION §6).
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "lts/*"
+          cache: npm
+      - run: npm ci
+
+      - name: Teste de atualizacao (usa a rede, registro npm)
+        run: npm run check:update

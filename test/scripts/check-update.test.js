@@ -1,7 +1,10 @@
 import { test } from "node:test";
+import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { classifyRegistry, describeItem, judgeUpdate, main, parseArgs, STEPS } from "../../scripts/check-update.mjs";
+import { tempDir } from "../../scripts/lib/tmp.mjs";
+import { classifyRegistry, describeItem, fotografar, judgeUpdate, main, parseArgs, STEPS } from "../../scripts/check-update.mjs";
 
 function fatosVerdes(sobrescritos = {}) {
   return {
@@ -130,6 +133,21 @@ test("should fail with mgr-leftover-dir when an empty folder other than the engi
   assert.deepStrictEqual(resultado.warnings, []);
 });
 
+test("should keep a file named __proto__ in the snapshot as an own key", () => {
+  const raiz = tempDir("check-update-test-");
+  writeFileSync(path.join(raiz, "__proto__"), "x");
+  assert.deepStrictEqual(Object.keys(fotografar(raiz).arquivos), ["__proto__"]);
+});
+
+test("should ignore only the root .git and report a nested .git as a file", () => {
+  const raiz = tempDir("check-update-test-");
+  mkdirSync(path.join(raiz, ".git"));
+  writeFileSync(path.join(raiz, ".git", "HEAD"), "ref");
+  mkdirSync(path.join(raiz, "sub", ".git"), { recursive: true });
+  writeFileSync(path.join(raiz, "sub", ".git", "HEAD"), "ref");
+  assert.deepStrictEqual(Object.keys(fotografar(raiz).arquivos), [path.join("sub", ".git", "HEAD")]);
+});
+
 test("should default to version 0.5.0 and no tarball when no argument is given", () => {
   assert.deepStrictEqual(parseArgs([]), { from: ["0.5.0"], tarball: null });
 });
@@ -165,6 +183,15 @@ test("should exit 2 from main on an invalid argument before running anything", (
 test("should exit 2 from main when the tarball does not exist or is not a package", () => {
   assert.equal(main(["--tarball", path.join(import.meta.dirname, "nao-existe.tgz")]), 2);
   assert.equal(main(["--tarball", import.meta.dirname]), 2);
+});
+
+test("should exit 2 from main when the tarball declares a version that is not a version", () => {
+  const raiz = tempDir("check-update-test-");
+  mkdirSync(path.join(raiz, "package"));
+  writeFileSync(path.join(raiz, "package", "package.json"), JSON.stringify({ name: "mgr-method", version: "abc" }));
+  const tarball = path.join(raiz, "x.tgz");
+  assert.equal(spawnSync("tar", ["-czf", tarball, "-C", raiz, "package"]).status, 0);
+  assert.equal(main(["--tarball", tarball]), 2);
 });
 
 test("should resolve the tarball to an absolute path ending with the given name", () => {

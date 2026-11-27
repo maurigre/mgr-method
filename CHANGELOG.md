@@ -36,7 +36,10 @@ ele nos itens marcados "esta versão" e nas seções das betas posteriores à su
 - **Outras quebras de contrato da `0.7.0-beta.10`** (Modificado): o `update` de instalação `custom`
   (`--skills-dir`) deixa de migrar para `.claude/skills`; o `install` grava `.mgr-core/config.json`
   quando há resposta; o `update` grava evento de hook; a linha `hooks written` sai só quando o comando
-  muda o arquivo. As que só valem com plugin ou para um `dist/` local estão na mesma seção.
+  muda o arquivo. Com plugin instalado (das betas `0.6.0` em diante): pasta de plugin, com
+  `mgr-manifest.json`, nunca é sobrescrita, e com `--skills-dir` a skill cedida a plugin não é mais
+  construída no diretório custom. Para quem roda do repositório: `version` de um `dist/` defasado
+  sai 1.
 - **As skills param quando o runtime falta**, em vez de seguir sem ele, e dizem como restaurá-lo
   (`0.7.0-beta.10`, Modificado). `shared/scripts/sdd-check.sh` deixa de existir; o equivalente é
   `node <runtime> sdd-check` (mesma seção).

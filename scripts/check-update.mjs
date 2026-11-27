@@ -165,13 +165,14 @@ function conferirRegistro(from, env) {
   return classifyRegistry(from, run("npm", ["view", `${PACKAGE}@${from}`, "version"], REPO, env));
 }
 
-// Arquivos e pastas do projeto, fora do `.git`. Arquivos viram `{ caminho: sha256 }`; link simbolico
+// Arquivos e pastas do projeto, fora do `.git` da raiz (um `.git` mais fundo conta como sobra). Arquivos viram `{ caminho: sha256 }`; link simbolico
 // vira `link:<destino>`, para que trocar um arquivo do usuario por um link com o mesmo conteudo reprove.
-function fotografar(raiz) {
-  const arquivos = {};
+// Objeto sem prototipo: um arquivo chamado `__proto__` vira chave propria, e nao some.
+export function fotografar(raiz) {
+  const arquivos = Object.create(null);
   const pastasVazias = [];
   const andar = (pasta) => {
-    const entradas = readdirSync(pasta, { withFileTypes: true }).filter((e) => e.name !== ".git");
+    const entradas = readdirSync(pasta, { withFileTypes: true }).filter((e) => pasta !== raiz || e.name !== ".git");
     if (entradas.length === 0 && pasta !== raiz) pastasVazias.push(path.relative(raiz, pasta));
     for (const entrada of entradas) {
       const completo = path.join(pasta, entrada.name);
@@ -278,8 +279,8 @@ export function main(argv) {
     tarball = pacote.tarball;
   }
   const expected = versaoDoTarball(tarball, env);
-  if (!expected) {
-    console.error(`check-update: --tarball nao e um pacote npm legivel (sem package/package.json com versao): ${tarball}`);
+  if (typeof expected !== "string" || !VERSION_RE.test(expected)) {
+    console.error(`check-update: --tarball nao e um pacote npm legivel (sem package/package.json com versao valida): ${tarball}`);
     return 2;
   }
   console.log(`check-update: pacote em teste ${tarball} (versao ${expected})`);

@@ -16,8 +16,8 @@
 //
 // Sai 0 so se TODAS as origens passarem em install, update, doctor e uninstall; 1 em qualquer
 // falha; 2 em argumento invalido. A regra de julgamento e pura (`judgeUpdate`) e e o que a suite
-// testa, junto com o exit 2 do `main`, que sai antes de qualquer subprocesso: a suite nunca chama a
-// rede.
+// testa, junto com o exit 2 do `main`: argumento invalido sai antes de qualquer subprocesso, e
+// pacote ilegivel sai depois de um `tar` local. A suite nunca chama a rede.
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -28,7 +28,10 @@ import { tempDir } from "./lib/tmp.mjs";
 
 export const STEPS = Object.freeze(["install", "update", "doctor", "uninstall"]);
 const DEFAULT_FROM = Object.freeze(["0.5.0"]);
-const VERSION_RE = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
+// SemVer 2.0.0 sem build: numero sem zero a esquerda e pre-release sem identificador vazio.
+const NUM = "(0|[1-9]\\d*)";
+const PRE = "(0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)";
+const VERSION_RE = new RegExp(`^${NUM}\\.${NUM}\\.${NUM}(-${PRE}(\\.${PRE})*)?$`);
 const PACKAGE = "mgr-method";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TAIL_LINES = 20;
@@ -44,6 +47,8 @@ const USER_FILES = Object.freeze({
   "src/app.js": "export const app = 1;\n",
   ".gitignore": "node_modules/\n",
   ".claude/settings.json": '{\n  "permissions": {}\n}\n',
+  "docs/notas.md": "# notas\n",
+  "specs/minha-fatia/01-brief.md": "# brief\n",
 });
 
 /**
@@ -73,6 +78,7 @@ export function judgeUpdate({ registry, setup = { ok: true }, steps = [], versio
   if (versions && versions.afterUpdate !== versions.expected) {
     failures.push({ kind: "version-mismatch", expected: versions.expected, found: versions.afterUpdate ?? null });
   }
+  if (exitPorPasso.get("uninstall") !== 0) return { ok: false, failures, warnings: [] };
   for (const [arquivo, hash] of Object.entries(userBefore)) {
     if (!Object.hasOwn(after, arquivo)) failures.push({ kind: "user-missing", path: arquivo });
     else if (after[arquivo] !== hash) failures.push({ kind: "user-changed", path: arquivo });
@@ -121,7 +127,7 @@ export function parseArgs(argv) {
 }
 
 const MENSAGEM = {
-  registry: (item) => `registro npm inacessivel (o teste usa a rede): ${item.detail}`,
+  registry: (item) => `consulta ao registro npm falhou (rede ou registro; o teste usa a rede): ${item.detail}`,
   "not-published": (item) => `versao de origem nao publicada no registro npm: ${item.detail}`,
   setup: (item) => `montagem do projeto de teste falhou: ${item.detail}`,
   "step-missing": (item) => `passo ${item.step} nao rodou`,

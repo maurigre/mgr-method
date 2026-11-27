@@ -57,8 +57,10 @@ ele nos itens marcados "esta versão" e nas seções das betas posteriores à su
   `--skills-dir`). Campo que o MGR recalcula (`skillsDirs`, `scope`, `agents`) é reparado e anunciado
   (esta versão, Alterado, ADR-0034).
 - **A mensagem de divergência do `update` sai no stdout** (`0.7.0-beta.10`, Modificado).
-- **O `doctor` ganha o exit 2** (não conseguiu diagnosticar), e os textos do `--json` saem em inglês
-  canônico em qualquer idioma (esta versão, Alterado).
+- **O `doctor` ganha o exit 2** (não conseguiu diagnosticar). Os textos do `--json` passam a inglês
+  canônico em qualquer idioma: `expected` e `found` do `doctor`, `message`, `remediation` e `example`
+  do `spec validate` e o `warning` do `spec status`. Quem comparava esses textos em pt-BR precisa
+  trocar a comparação (esta versão, Alterado).
 - **`install` com `--effort` ou `--model` soltos sai 1**; a forma é por intenção
   (`--effort-review`, `--model-drafting` etc.) (esta versão, Alterado, ADR-0030).
 - **`reviewGate` vira `agents.review`** na primeira escrita da política de review (esta versão,

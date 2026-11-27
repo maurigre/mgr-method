@@ -168,7 +168,8 @@ function candidate(command, positional) {
   if (SET_ONLY.includes(command)) return withOptionalVerb(command, sub, "set");
   if (command === "instructions") return withOptionalVerb(command, sub, "write");
   if (command === "review" || command === "registry") return sub === undefined ? NONE : named(`${command} ${sub}`);
-  return named(command);
+  // Nome composto só sai de argumentos separados: `"origin set"` num argumento só é comando desconhecido.
+  return command.includes(" ") ? NONE : named(command);
 }
 
 export function resolveEntry(commands, command, positional, seen = []) {

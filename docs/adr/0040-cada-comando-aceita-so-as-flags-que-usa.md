@@ -58,7 +58,10 @@ risco de "`--effort-*` passado a outro comando ser ignorado em silêncio".
 ## Consequences
 
 ### Positive
-- Nenhuma flag passada a um comando é ignorada em silêncio; o `--dry-run` nunca mais grava.
+- Fora do modo hook, nenhuma flag passada a um comando é ignorada em silêncio, e o `--dry-run` passado a um
+  comando que não o honra é recusado antes de gravar. No modo hook (`detect --hook`, `precompact --hook`) a
+  flag a mais continua ignorada e o hook roda como sempre, inclusive gravando o hand-off: é a exceção
+  declarada na decisão. A linha do hook é gravada pelo próprio MGR, não digitada por uma pessoa.
 - Fecha o risco que o ADR-0030 deixou sem mitigação (`--effort-*` ignorado em outro comando).
 - A tabela é a fonte única do que cada comando aceita, e a mensagem diz onde a flag vale.
 

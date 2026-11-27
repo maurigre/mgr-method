@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { tempDir } from "../../scripts/lib/tmp.mjs";
 import { fotografar } from "../../scripts/check-update.mjs";
 import { getMessages } from "../../src/core/messages.js";
+import { effortFlagLevels } from "../../src/core/cli-args.js";
 import { criarCodexFalso } from "../helpers/codex-falso.js";
 
 const RAIZ = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -14,6 +15,7 @@ const BIN = path.join(RAIZ, "bin", "mgr.js");
 const RUNTIME = path.join(".mgr-core", "runtime", "bin", "mgr-runtime.js");
 const TEM_SCRIPT = spawnSync("script", ["--version"], { encoding: "utf8" }).status === 0;
 const CODEX_FALSO = criarCodexFalso("ok");
+const aspas = (texto) => `'${String(texto).replace(/'/g, "'\\''")}'`;
 
 function prepararModelo() {
   const projeto = tempDir("flag-modelo-");
@@ -123,20 +125,21 @@ test("should judge each subcommand by its own set of flags", () => {
 });
 
 test("should keep the own refusals of the flags read only to refuse", () => {
+  const propria = getMessages("en");
   const casos = [
-    ["install", "--model", "x"],
-    ["install", "--effort", "max"],
-    ["spec", "next", "--all"],
-    ["spec", "archive", "x", "--all"],
-    ["review", "external", "x", "--all"],
-    ["review", "waive", "x", "--all"],
+    [["install", "--model", "x"], propria.modelFlagBare()],
+    [["install", "--effort", "max"], propria.effortFlagBare(effortFlagLevels.join(" | "))],
+    [["spec", "next", "--all"], propria.specNextAllRefused],
+    [["spec", "archive", "x", "--all"], propria.specArchiveAllRefused],
+    [["review", "external", "x", "--all"], propria.reviewNeedsSlug],
+    [["review", "waive", "x", "--all"], propria.reviewWaiveNeedsSlug],
   ];
-  for (const argv of casos) {
+  for (const [argv, frase] of casos) {
     const saida = rodar("pacote", argv, copiar(modelo));
     assert.equal(saida.status, 1, argv.join(" "));
+    assert.ok(saida.stderr.includes(frase), `${argv.join(" ")}: ${saida.stderr}`);
     assert.doesNotMatch(saida.stderr, /it is accepted by/, argv.join(" "));
   }
-  assert.match(rodar("pacote", ["install", "--model", "x"], copiar(modelo)).stderr, new RegExp(mensagens.modelFlagBare().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
 test("should refuse a harmless flag, --json without json output, and flags on version and help", () => {
@@ -171,7 +174,7 @@ test("should refuse review enable --dry-run in a real terminal before asking and
   const alvo = copiar(modelo);
   const config = path.join(alvo.projeto, ".mgr-core");
   const antes = fotografar(config).arquivos;
-  const saida = spawnSync("script", ["-qec", `stty cols 200 rows 50; ${process.execPath} ${BIN} review enable --dry-run`, "/dev/null"], { cwd: alvo.projeto, env: env(alvo.home), encoding: "utf8", input: "\n", timeout: 60000 });
+  const saida = spawnSync("script", ["-qec", `stty cols 200 rows 50; ${[process.execPath, BIN, "review", "enable", "--dry-run"].map(aspas).join(" ")}`, "/dev/null"], { cwd: alvo.projeto, env: env(alvo.home), encoding: "utf8", input: "\n", timeout: 60000 });
   assert.equal(saida.status, 1, saida.stdout);
   assert.match(saida.stdout, /review enable does not accept --dry-run/);
   assert.doesNotMatch(saida.stdout, new RegExp(mensagens.reviewEnableConfirm.slice(0, 20).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));

@@ -283,6 +283,8 @@ test("should resolve each command line to its entry name or to none", () => {
     [["-h"], "help"],
     [[undefined], "help"],
     [["hooks"], null],
+    [["origin set"], null],
+    [["spec status"], null],
   ];
   for (const [[command, ...positional], name] of cases) {
     const expected = name === null ? { state: "none" } : { state: "entry", name };

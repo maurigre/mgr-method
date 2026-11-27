@@ -5,7 +5,7 @@
 // porque casa pelo fim do caminho. Na saída do processo, grava as chaves lidas em `FLAG_READS_OUT`.
 // O código de produção não ganha gancho nenhum.
 import { writeFileSync } from "node:fs";
-import { registerHooks } from "node:module";
+import * as nodeModule from "node:module";
 import process from "node:process";
 
 const SUFIXO = "/src/core/cli-args.js";
@@ -38,7 +38,9 @@ export function parseArgs(...args) {
   return `data:text/javascript,${encodeURIComponent(fonte)}`;
 }
 
-if (destino) registerHooks({
+// `module.registerHooks` existe a partir do Node 22.15.0 (doc oficial); antes dele a pré-carga não faz nada e a
+// guarda se declara pulada.
+if (destino && typeof nodeModule.registerHooks === "function") nodeModule.registerHooks({
   resolve(specifier, context, next) {
     const resolvido = next(specifier, context);
     // Quem importa do invólucro (`data:`) recebe o módulo real, na mesma URL de sempre: sem sufixo, a

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import * as nodeModule from "node:module";
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,6 +14,11 @@ const BIN = path.join(RAIZ, "bin", "mgr.js");
 const RUNTIME = path.join(".mgr-core", "runtime", "bin", "mgr-runtime.js");
 const ESPIAO = path.join(RAIZ, "test", "helpers", "registra-leitura-de-flags.mjs");
 const TEM_SCRIPT = spawnSync("script", ["--version"], { encoding: "utf8" }).status === 0;
+const TEM_GANCHO = typeof nodeModule.registerHooks === "function";
+const SEM_GANCHO = TEM_GANCHO ? false : "Node sem module.registerHooks (anterior a 22.15.0): a guarda nao consegue medir as leituras";
+const SEM_SCRIPT = TEM_SCRIPT ? false : "sem o utilitario script, nao ha pty para medir add e uninstall";
+const RECUSA_NOVA = "it is accepted by";
+const aspas = (texto) => `'${String(texto).replace(/'/g, "'\\''")}'`;
 const ENV = { ...criarCodexFalso("ok").env, NO_COLOR: "1", CI: "true" };
 
 const PLANO = `<!-- mgr-plan-format: 1 -->
@@ -115,28 +121,35 @@ const DO_RUNTIME = [
   { entrada: "help", argv: ["help"] },
 ];
 
+// Toda invocação leva `--user-language en`: a guarda também prova que a flag global passa pelos pontos de
+// entrada reais (P6) sem a recusa nova.
 function lerChaves(cenario, cli, modelo) {
   const projeto = tempDir("flags-cenario-");
   if (!cenario.vazio) cpSync(modelo, projeto, { recursive: true });
   const saidaLeituras = path.join(projeto, "..", `${path.basename(projeto)}-leituras.json`);
   const programa = cli === "pacote" ? BIN : path.join(projeto, RUNTIME);
   const env = { ...ENV, FLAG_READS_OUT: saidaLeituras };
-  if (cenario.terminal) {
-    const linha = [process.execPath, "--import", ESPIAO, programa, ...cenario.argv].join(" ");
-    spawnSync("script", ["-qec", `stty cols 200 rows 50; ${linha}`, "/dev/null"], { cwd: projeto, env, input: "\n", timeout: 60000 });
-  } else {
-    spawnSync(process.execPath, ["--import", ESPIAO, programa, ...cenario.argv], { cwd: projeto, env, input: "", timeout: 60000 });
-  }
-  return JSON.parse(readFileSync(saidaLeituras, "utf8")).filter((chave) => !GLOBAL_FLAGS.includes(chave));
+  const argv = [...cenario.argv, "--user-language", "en"];
+  const execucao = cenario.terminal
+    ? spawnSync("script", ["-qec", `stty cols 200 rows 50; ${[process.execPath, "--import", ESPIAO, programa, ...argv].map(aspas).join(" ")}`, "/dev/null"], { cwd: projeto, env, input: "\n", encoding: "utf8", timeout: 60000 })
+    : spawnSync(process.execPath, ["--import", ESPIAO, programa, ...argv], { cwd: projeto, env, input: "", encoding: "utf8", timeout: 60000 });
+  return {
+    chaves: JSON.parse(readFileSync(saidaLeituras, "utf8")).filter((chave) => !GLOBAL_FLAGS.includes(chave)),
+    recusou: `${execucao.stdout}${execucao.stderr}`.includes(RECUSA_NOVA),
+  };
 }
 
 function medir(cenarios, cli, modelo) {
   const lidas = {};
+  const recusadas = [];
+  if (!TEM_GANCHO) return { lidas, recusadas };
   for (const cenario of cenarios) {
     if (cenario.terminal && !TEM_SCRIPT) continue;
-    lidas[cenario.entrada] = lerChaves(cenario, cli, modelo);
+    const { chaves, recusou } = lerChaves(cenario, cli, modelo);
+    lidas[cenario.entrada] = chaves;
+    if (recusou) recusadas.push(`${cli} ${cenario.entrada}`);
   }
-  return lidas;
+  return { lidas, recusadas };
 }
 
 function conferir(tabela, cenarios, lidas) {
@@ -153,27 +166,43 @@ function conferir(tabela, cenarios, lidas) {
 }
 
 const modelo = prepararModelo();
-const lidasPacote = medir(PACOTE, "pacote", modelo);
-const lidasRuntime = medir(DO_RUNTIME, "runtime", modelo);
+const pacote = medir(PACOTE, "pacote", modelo);
+const runtime = medir(DO_RUNTIME, "runtime", modelo);
+const lidasPacote = pacote.lidas;
+const lidasRuntime = runtime.lidas;
+const esperadas = (cenarios) => cenarios.filter((c) => TEM_SCRIPT || !c.terminal).map((c) => c.entrada).sort();
 
 test("should give every entry of both tables a measured scenario", () => {
   assert.deepEqual(PACOTE.map((c) => c.entrada).sort(), Object.keys(PACKAGE_COMMANDS).sort());
   assert.deepEqual(DO_RUNTIME.map((c) => c.entrada).sort(), Object.keys(RUNTIME_COMMANDS).sort());
 });
 
-test("should never read a flag outside the accepted set of the package entry", () => {
+test("should measure every scenario that can run here", { skip: SEM_GANCHO }, () => {
+  assert.deepEqual(Object.keys(lidasPacote).sort(), esperadas(PACOTE));
+  assert.deepEqual(Object.keys(lidasRuntime).sort(), esperadas(DO_RUNTIME));
+});
+
+test("should measure the terminal scenarios add and uninstall", { skip: SEM_GANCHO || SEM_SCRIPT }, () => {
+  assert.ok(Object.hasOwn(lidasPacote, "add") && Object.hasOwn(lidasPacote, "uninstall"));
+});
+
+test("should pass --user-language through every real entry point without the new refusal", { skip: SEM_GANCHO }, () => {
+  assert.deepEqual([...pacote.recusadas, ...runtime.recusadas], []);
+});
+
+test("should never read a flag outside the accepted set of the package entry", { skip: SEM_GANCHO }, () => {
   assert.deepEqual(conferir(PACKAGE_COMMANDS, PACOTE, lidasPacote).fora, []);
 });
 
-test("should read every flag the package entry accepts", () => {
+test("should read every flag the package entry accepts", { skip: SEM_GANCHO }, () => {
   assert.deepEqual(conferir(PACKAGE_COMMANDS, PACOTE, lidasPacote).naoLidas, []);
 });
 
-test("should never read a flag outside the accepted set of the runtime entry", () => {
+test("should never read a flag outside the accepted set of the runtime entry", { skip: SEM_GANCHO }, () => {
   assert.deepEqual(conferir(RUNTIME_COMMANDS, DO_RUNTIME, lidasRuntime).fora, []);
 });
 
-test("should read every flag the runtime entry accepts", () => {
+test("should read every flag the runtime entry accepts", { skip: SEM_GANCHO }, () => {
   assert.deepEqual(conferir(RUNTIME_COMMANDS, DO_RUNTIME, lidasRuntime).naoLidas, []);
 });
 

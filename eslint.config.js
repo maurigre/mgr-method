@@ -81,7 +81,7 @@ function qual8Seletores({ comClasse, comNewError }) {
 export default [
   {
     // `specs/` e gitignored (artefatos SDD locais, com arneses de medicao que nao sao do produto).
-    ignores: ["dist/", "coverage/", ".claude/", "node_modules/", "specs/"],
+    ignores: ["dist/", "coverage/", ".claude/", ".mgr-core/runtime/", "node_modules/", "specs/"],
   },
 
   js.configs.recommended,

@@ -1052,3 +1052,65 @@ for (const idioma of IDIOMAS) {
     exigirIdiomaUnico(idioma, [recusa.out, recusa.err], PADRAO_ARCHIVE_REVISAO, [projeto], "recusa (4) do archive");
   });
 }
+
+const PADRAO_RECUSA_DE_FLAG = /^flagNotAccepted/;
+const FRAGMENTO_DA_RECUSA_DE_FLAG = { en: "does not accept", "pt-BR": "não aceita" };
+
+for (const idioma of IDIOMAS) {
+  test(`should refuse update --dry-run in ${idioma} with the manifest language and no marker of the other`, () => {
+    comRepo(() => instalacaoLimpa({ userLanguage: idioma }), (repo) => {
+      const resultado = cli(["update", "--dry-run", repo], { env: { LC_ALL: LOCALE_CONTRARIO[idioma] } });
+      const esperada = getMessages(idioma).flagNotAccepted("--dry-run", "update", ["install"]);
+      assert.equal(resultado.status, 1, `update --dry-run e recusado com exit 1: ${resultado.err}`);
+      assert.equal(resultado.out, "", "a recusa nao escreve nada em stdout");
+      assert.equal(resultado.err.trim(), esperada, `a linha de recusa em ${idioma} vem da tabela ${idioma}`);
+      assert.equal(resultado.err.trim().split("\n").length, 1, "a recusa e uma linha so em stderr");
+      assert.ok(resultado.err.includes(FRAGMENTO_DA_RECUSA_DE_FLAG[idioma]),
+        `o fragmento de ${idioma} tem de aparecer na recusa`);
+      assert.ok(!resultado.err.includes(FRAGMENTO_DA_RECUSA_DE_FLAG[OUTRO[idioma]]),
+        `o fragmento de ${OUTRO[idioma]} nao pode aparecer na recusa de ${idioma}`);
+      exigirIdiomaUnico(idioma, [resultado.out, resultado.err], PADRAO_RECUSA_DE_FLAG, [repo], "recusa de update --dry-run");
+    });
+  });
+
+  test(`should refuse update --dry-run in ${idioma} when --user-language beats a contrary locale and manifest`, () => {
+    comRepo(() => instalacaoLimpa({ userLanguage: OUTRO[idioma] }), (repo) => {
+      const resultado = cli(["update", "--dry-run", "--user-language", idioma, repo], { env: { LC_ALL: LOCALE_CONTRARIO[idioma] } });
+      const esperada = getMessages(idioma).flagNotAccepted("--dry-run", "update", ["install"]);
+      assert.equal(resultado.status, 1, `update --dry-run e recusado com exit 1: ${resultado.err}`);
+      assert.equal(resultado.err.trim(), esperada,
+        `a flag --user-language ${idioma} vence o locale contrario e o manifesto: a recusa sai em ${idioma}`);
+      exigirIdiomaUnico(idioma, [resultado.out, resultado.err], PADRAO_RECUSA_DE_FLAG, [repo], "recusa de update com --user-language sobre locale contrario");
+    });
+  });
+
+  test(`should refuse origin set --dry-run through the runtime in ${idioma} with the lifecycle variant`, () => {
+    comRepo(() => instalacaoLimpa({ userLanguage: idioma }), (repo) => {
+      const versao = lerManifesto(repo).version;
+      const resultado = pelRuntime(repo, ["origin", "set", "greenfield", "--dry-run"], { LC_ALL: LOCALE_CONTRARIO[idioma] });
+      const esperada = getMessages(idioma, { lifecycle: `npx mgr-method@${versao}` })
+        .flagNotAcceptedLifecycle("--dry-run", "origin set", ["install"]);
+      assert.equal(resultado.status, 1, `origin set --dry-run e recusado pelo runtime com exit 1: ${resultado.err}`);
+      assert.equal(resultado.out, "", "a recusa do runtime nao escreve nada em stdout");
+      assert.equal(resultado.err.trim(), esperada,
+        `a recusa do runtime em ${idioma} e a variante de ciclo de vida da tabela ${idioma}`);
+      assert.ok(resultado.err.includes(`npx mgr-method@${versao}`), "a variante de ciclo de vida aponta para o npx com a versao do manifesto");
+      assert.ok(!resultado.err.includes(FRAGMENTO_DA_RECUSA_DE_FLAG[OUTRO[idioma]]),
+        `o fragmento de ${OUTRO[idioma]} nao pode aparecer na recusa do runtime em ${idioma}`);
+      exigirIdiomaUnico(idioma, [resultado.out, resultado.err], PADRAO_RECUSA_DE_FLAG, [repo], "recusa de origin set --dry-run pelo runtime");
+    });
+  });
+
+  test(`should refuse origin set --dry-run through the runtime in ${idioma} when --user-language beats a contrary locale and manifest`, () => {
+    comRepo(() => instalacaoLimpa({ userLanguage: OUTRO[idioma] }), (repo) => {
+      const versao = lerManifesto(repo).version;
+      const resultado = pelRuntime(repo, ["origin", "set", "greenfield", "--dry-run", "--user-language", idioma], { LC_ALL: LOCALE_CONTRARIO[idioma] });
+      const esperada = getMessages(idioma, { lifecycle: `npx mgr-method@${versao}` })
+        .flagNotAcceptedLifecycle("--dry-run", "origin set", ["install"]);
+      assert.equal(resultado.status, 1, `origin set --dry-run e recusado pelo runtime com exit 1: ${resultado.err}`);
+      assert.equal(resultado.err.trim(), esperada,
+        `a flag --user-language ${idioma} vence o locale contrario e o manifesto no runtime: a recusa sai em ${idioma}`);
+      exigirIdiomaUnico(idioma, [resultado.out, resultado.err], PADRAO_RECUSA_DE_FLAG, [repo], "recusa de origin set pelo runtime com --user-language");
+    });
+  });
+}

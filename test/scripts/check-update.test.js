@@ -162,8 +162,8 @@ test("should not blame the uninstall for leftovers when the uninstall did not ru
   ]);
 });
 
-test("should default to version 0.5.0 and no tarball when no argument is given", () => {
-  assert.deepStrictEqual(parseArgs([]), { from: ["0.5.0"], tarball: null });
+test("should default to the published origins 0.5.0 and 0.7.0 and no tarball when no argument is given", () => {
+  assert.deepStrictEqual(parseArgs([]), { from: ["0.5.0", "0.7.0"], tarball: null });
 });
 
 test("should keep every --from in order when the flag is repeated", () => {

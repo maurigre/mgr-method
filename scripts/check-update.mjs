@@ -6,7 +6,7 @@
 // Uso:
 //   node scripts/check-update.mjs [--from <versao>]... [--tarball <caminho.tgz>]
 //
-// --from     versao publicada de origem (repetivel; padrao 0.5.0)
+// --from     versao publicada de origem (repetivel; padrao 0.5.0 e 0.7.0)
 // --tarball  pacote a testar; sem ele, o script roda `npm pack` do repositorio num temporario
 //
 // USA A REDE: baixa a versao de origem e as dependencias do pacote do registro npm, com um cache
@@ -27,7 +27,7 @@ import { fileURLToPath } from "node:url";
 import { tempDir } from "./lib/tmp.mjs";
 
 export const STEPS = Object.freeze(["install", "update", "doctor", "uninstall"]);
-const DEFAULT_FROM = Object.freeze(["0.5.0"]);
+const DEFAULT_FROM = Object.freeze(["0.5.0", "0.7.0"]);
 // SemVer 2.0.0 sem build: numero sem zero a esquerda e pre-release sem identificador vazio.
 const NUM = "(0|[1-9]\\d*)";
 const PRE = "(0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)";
@@ -235,7 +235,7 @@ function versaoDoManifesto(projeto) {
   }
 }
 
-function comandoDoPasso(step, from, tarball) {
+export function comandoDoPasso(step, from, tarball) {
   if (step === "install") {
     return ["npx", ["-y", `${PACKAGE}@${from}`, "install", "--engine", "claude-code", "--language", "javascript", "--arch", "layered", "-y"]];
   }

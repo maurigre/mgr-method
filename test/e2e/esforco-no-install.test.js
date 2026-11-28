@@ -60,10 +60,11 @@ for (const value of ["maxx", "MAX", ""]) {
 }
 
 test("should refuse an effort-review flag left without a value as the last argument", () => {
-  assertRefused(
-    install(["--engine", "claude-code", "--effort-review"], { flagsLast: true }),
-    msg.effortFlagInvalid("review", "", LEVELS),
-  );
+  const run = install(["--engine", "claude-code", "--effort-review"], { flagsLast: true });
+  assert.equal(run.result.status, 1, run.result.stdout + run.result.stderr);
+  assert.equal(run.result.stderr, `${msg.flagNeedsValue("--effort-review")}\n`);
+  assert.equal(run.result.stdout, "");
+  assert.deepEqual(fs.readdirSync(run.project), []);
 });
 
 test("should refuse an invalid effort level with a skills dir and not create the skills dir", () => {

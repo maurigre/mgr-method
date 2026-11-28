@@ -14,6 +14,30 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
 - Suporte a Cursor como motor de instalação.
 - Modo scaffold (geração de estrutura de código no greenfield).
 
+### Modificado
+- **Quebra de contrato (ADR-0040):** todo comando das duas CLIs, a do pacote e a do runtime do projeto,
+  recusa a flag conhecida que ele não usa, com exit 1 e antes de escrever qualquer coisa, do mesmo jeito
+  que já recusava a flag desconhecida. Antes, a flag era aceita e ignorada sem aviso, com exit 0:
+  `uninstall -y --dry-run` apagava a instalação e `update --dry-run` atualizava. A mensagem nomeia a flag
+  e os comandos que a aceitam; no runtime, quando só um comando de ciclo de vida a aceita, nomeia o
+  `npx mgr-method@<versão> <comando>`. **O que fazer:** tirar do script a flag recusada; ela nunca teve
+  efeito naquele comando. `--user-language` continua aceita por todos os comandos. **Exceção declarada:**
+  com `--hook`, o `detect` e o `precompact` seguem o contrato do hook — a flag a mais é ignorada e o
+  exit é o de hoje. Fecha o risco que o ADR-0030 deixou sem mitigação (`--effort-*` passado a outro
+  comando ser ignorado em silêncio).
+- **Quebra de contrato (ADR-0040):** a flag que leva valor e chega sem ele — no fim da linha, ou seguida de
+  outra flag (token que começa com `--`, ou `-y`) — é recusada com exit 1 e `--<flag> precisa de um valor`,
+  antes de gravar, nas duas CLIs. Antes, `install --engine` sem valor quebrava com `TypeError`;
+  `update --scope`, `install --arch`, `build --out` e `install --model-review` sem valor saíam 0 ignorando a
+  flag; `agents set --model x --effort` gravava só o modelo; e `update --scope --dry-run` tomava o
+  `--dry-run` como valor do `--scope`. `--effort-*` sem valor já era recusado e continua, agora com essa
+  frase. Um valor que começa com um traço e espaço (`--reason "- falso positivo"`) continua valendo.
+  `detect --hook` passa a exigir o motor (`--hook <motor>`), como os hooks que o MGR grava. A flag
+  desconhecida e, no runtime, a frase de comando de ciclo de vida continuam vencendo esta recusa. **O que
+  fazer:** passar o valor da flag, ou tirá-la.
+- O teste de atualização (`npm run check:update`) passa a partir também da `0.7.0` publicada, além da
+  `0.5.0`.
+
 ## [0.7.0] - 2026-11-27
 > Versão estável, com o mesmo conteúdo da `0.7.0-rc.1`. Quem vem da `0.5.0` encontra o que exige ação
 > ou pode quebrar em "Da 0.5.0 para a 0.7.0", na seção `[0.7.0-rc.1]` abaixo.

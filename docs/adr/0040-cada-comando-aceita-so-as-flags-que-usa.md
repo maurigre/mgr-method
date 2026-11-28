@@ -5,7 +5,9 @@ Deciders: Mauri Reis
 
 ## Status
 
-Proposed
+Accepted
+
+> Aceito pelo autor em 2026-11-27, depois do merge da fatia flag-nao-usada-pelo-comando (PR #68).
 
 ## Context
 

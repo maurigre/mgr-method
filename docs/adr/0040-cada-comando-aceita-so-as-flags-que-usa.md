@@ -37,6 +37,12 @@ risco de "`--effort-*` passado a outro comando ser ignorado em silêncio".
     `install --effort`, `spec next --all`, `spec archive --all`, `review external --all`,
     `review waive --all`) mantêm essa mensagem e nunca aparecem como "aceita por".
 - `precompact` sem `--hook` recebe a recusa comum.
+- **Flag de valor sem valor** (emenda de 2026-11-27, achado R2-S1 da revisão externa): a flag que leva valor
+  e chega sem ele — fim da linha, ou o token seguinte começa com `--` ou é uma flag conhecida, e não é
+  consumido como valor — é anotada pelo parser (`missingValue`), que segue lendo; a borda a recusa com exit
+  1 e `<flag> precisa de um valor`, depois da flag desconhecida, só em comando com entrada na tabela (no
+  runtime, a frase de ciclo de vida continua vencendo), e antes da recusa de flag não usada. Antes, `--engine` sem valor quebrava com `TypeError`,
+  outras flags de valor sem valor eram ignoradas em silêncio, e a flag seguinte virava valor.
 - **Guarda da tabela:** uma pré-carga só de teste envolve o `flags` num `Proxy` e mede as chaves que
   cada comando de fato lê; o teste reprova a tabela estreita (recusaria invocação válida), a larga (o
   defeito voltando) e a flag sem entrada.

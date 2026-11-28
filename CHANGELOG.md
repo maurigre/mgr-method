@@ -25,6 +25,16 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · [SemVer]
   com `--hook`, o `detect` e o `precompact` seguem o contrato do hook — a flag a mais é ignorada e o
   exit é o de hoje. Fecha o risco que o ADR-0030 deixou sem mitigação (`--effort-*` passado a outro
   comando ser ignorado em silêncio).
+- **Quebra de contrato (ADR-0040):** a flag que leva valor e chega sem ele — no fim da linha, ou seguida de
+  outra flag (token que começa com `--`, ou `-y`) — é recusada com exit 1 e `--<flag> precisa de um valor`,
+  antes de gravar, nas duas CLIs. Antes, `install --engine` sem valor quebrava com `TypeError`;
+  `update --scope`, `install --arch`, `build --out` e `install --model-review` sem valor saíam 0 ignorando a
+  flag; `agents set --model x --effort` gravava só o modelo; e `update --scope --dry-run` tomava o
+  `--dry-run` como valor do `--scope`. `--effort-*` sem valor já era recusado e continua, agora com essa
+  frase. Um valor que começa com um traço e espaço (`--reason "- falso positivo"`) continua valendo.
+  `detect --hook` passa a exigir o motor (`--hook <motor>`), como os hooks que o MGR grava. A flag
+  desconhecida e, no runtime, a frase de comando de ciclo de vida continuam vencendo esta recusa. **O que
+  fazer:** passar o valor da flag, ou tirá-la.
 - O teste de atualização (`npm run check:update`) passa a partir também da `0.7.0` publicada, além da
   `0.5.0`.
 

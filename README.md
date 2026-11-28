@@ -64,7 +64,9 @@ Each command accepts only the flags it uses. Any other known flag is refused wit
 anything is written, and the message names the commands that accept it (ADR-0040): `--dry-run` is
 honored only by `install`, so `update --dry-run` or `uninstall -y --dry-run` are refused instead of
 writing. `--user-language` works with every command. The hook commands (`detect --hook`,
-`precompact --hook`) are the declared exception: they keep the hook contract.
+`precompact --hook`) are the declared exception: they keep the hook contract. A flag that takes a value
+and gets none — at the end of the line, or followed by another flag — is refused the same way
+(`--scope needs a value`).
 
 ### Installed layout
 

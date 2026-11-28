@@ -43,26 +43,39 @@ export const FLAGS = Object.freeze([
 const FLAG_BY_TOKEN = new Map(FLAGS.flatMap((flag) => flag.tokens.map((token) => [token, flag])));
 
 // Leitura pura dos argumentos da CLI. Não toca em process, console nem saída: a borda decide o
-// que fazer com a flag desconhecida devolvida em `unknownFlag` e com as grafias reconhecidas em `seen`,
-// na ordem da linha de comando.
+// que fazer com a flag desconhecida devolvida em `unknownFlag`, com a primeira flag de valor que chegou sem
+// valor em `missingValue` (fim da linha, ou o token seguinte começa com `--` ou é uma flag conhecida: ele não
+// é consumido como valor; `- texto` é valor) e com as
+// grafias reconhecidas em `seen`, na ordem da linha de comando.
 export function parseArgs(argv, { engines }) {
   const flags = { engines: [] };
   const positional = [];
   const seen = [];
   let unknownFlag = null;
+  let missingValue = null;
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i];
     const flag = FLAG_BY_TOKEN.get(token);
     if (flag) {
       seen.push(token);
-      if (flag.key === "engines") flags.engines.push(...argv[++i].split(","));
-      else flags[flag.key] = flag.value ? argv[++i] : true;
+      if (!flag.value) { flags[flag.key] = true; continue; }
+      const valor = argv[i + 1];
+      if (valor === undefined || valor.startsWith("--") || FLAG_BY_TOKEN.has(valor)) {
+        // Sem valor: anota a primeira e segue lendo, para uma flag desconhecida adiante ainda vencer (RN-7).
+        // A chave fica com `undefined`, como antes; a borda recusa antes de qualquer consumidor lê-la.
+        if (missingValue === null) missingValue = token;
+        if (flag.key !== "engines") flags[flag.key] = undefined;
+        continue;
+      }
+      i += 1;
+      if (flag.key === "engines") flags.engines.push(...valor.split(","));
+      else flags[flag.key] = valor;
     } else if (token.startsWith("-")) { unknownFlag = token; break; }
     else positional.push(token);
   }
   // compat: --engine both = todos os motores recebidos
   flags.engines = flags.engines.flatMap((e) => (e === "both" ? engines : [e]));
-  return { flags, positional, unknownFlag, seen };
+  return { flags, positional, unknownFlag, missingValue, seen };
 }
 
 // Flags que todo comando das duas CLIs aceita: a borda lê `--user-language` para resolver o idioma.

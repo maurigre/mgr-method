@@ -88,9 +88,11 @@ test("should refuse through the runtime pointing to the lifecycle command that a
 });
 
 test("should keep the lifecycle refusal of the runtime when the flag is also unused", () => {
-  for (const argv of [["update"], ["runtime-versioning", "set", "versioned"], ["review", "enable"]]) {
+  for (const [argv, comando] of [[["update"], "update"], [["runtime-versioning", "set", "versioned"], "runtime-versioning"], [["review", "enable"], "review enable"]]) {
     const semFlag = rodar("runtime", argv, copiar(modelo));
     const comFlag = rodar("runtime", [...argv, "--dry-run"], copiar(modelo));
+    assert.equal(comFlag.status, 1, argv.join(" "));
+    assert.equal(comFlag.stderr, `${mensagens.runtimeLifecycleRefused(comando)}\n`, argv.join(" "));
     assert.equal(comFlag.status, semFlag.status, argv.join(" "));
     assert.equal(comFlag.stderr, semFlag.stderr, argv.join(" "));
   }
@@ -116,8 +118,11 @@ test("should judge each subcommand by its own set of flags", () => {
   recusaSemEfeito("pacote", ["agents", "--model", "x"], mensagens.flagNotAccepted("--model", "agents", ["agents set", "review set"]));
   recusaSemEfeito("pacote", ["registry", "list", "--trusted"], mensagens.flagNotAccepted("--trusted", "registry list", ["registry add"]));
   recusaSemEfeito("pacote", ["update", "--engine", "both"], mensagens.flagNotAccepted("--engine", "update", ["install", "add", "agents set"]));
-  const grava = rodar("pacote", ["agents", "set", "drafting", "--model", "x"], copiar(modelo));
+  const alvo = copiar(modelo);
+  const grava = rodar("pacote", ["agents", "set", "drafting", "--model", "x"], alvo);
   assert.equal(grava.status, 0, grava.stderr);
+  const config = JSON.parse(readFileSync(path.join(alvo.projeto, ".mgr-core", "config.json"), "utf8"));
+  assert.equal(config.agents.drafting.model["claude-code"], "x", JSON.stringify(config.agents));
   const vazio = { projeto: tempDir("flag-vazio-"), home: tempDir("flag-home-") };
   spawnSync("git", ["init", "-q"], { cwd: vazio.projeto });
   const install = rodar("pacote", ["install", "--engine", "both", "--language", "javascript", "--arch", "layered", "-y"], vazio);
@@ -149,6 +154,24 @@ test("should refuse a harmless flag, --json without json output, and flags on ve
     assert.equal(saida.status, 1, argv.join(" "));
     assert.match(saida.stderr, /does not accept/, argv.join(" "));
   }
+});
+
+test("should refuse a value flag without its value in both CLIs without writing anything", () => {
+  const casos = [
+    ["pacote", ["install", "--engine"], "--engine"],
+    ["pacote", ["agents", "set", "drafting", "--engine"], "--engine"],
+    ["pacote", ["update", "--scope"], "--scope"],
+    ["pacote", ["update", "--scope", "--dry-run"], "--scope"],
+    ["pacote", ["build", "--out"], "--out"],
+    ["runtime", ["instructions", "write", "--engine"], "--engine"],
+    ["runtime", ["review", "external", "x", "--base"], "--base"],
+  ];
+  for (const [cli, argv, flag] of casos) recusaSemEfeito(cli, argv, mensagens.flagNeedsValue(flag));
+});
+
+test("should keep the unknown flag and the lifecycle phrase ahead of the missing value", () => {
+  recusaSemEfeito("pacote", ["update", "--scope", "--dry-run", "--nada"], mensagens.unknownFlag("--nada"));
+  recusaSemEfeito("runtime", ["update", "--scope"], mensagens.runtimeLifecycleRefused("update"));
 });
 
 test("should accept --user-language on a command that reads no other flag", () => {

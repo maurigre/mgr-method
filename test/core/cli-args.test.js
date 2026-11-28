@@ -234,6 +234,46 @@ test("should create the date key with undefined when --date is the last argument
   assert.equal(flags.date, undefined);
 });
 
+test("should report a value flag at the end of the line as missing its value", () => {
+  for (const flag of ["--effort-review", "--base", "--reviewer", "--reason", "--date"]) {
+    assert.equal(parseArgs([flag], { engines: ENGINES }).missingValue, flag);
+  }
+});
+
+test("should not consume the next flag as the value of a value flag", () => {
+  const { flags, missingValue, seen } = parseArgs(["--scope", "--dry-run"], { engines: ENGINES });
+  assert.equal(missingValue, "--scope");
+  assert.equal(flags.scope, undefined);
+  assert.equal(flags.dryRun, true);
+  assert.deepEqual(seen, ["--scope", "--dry-run"]);
+  assert.equal(parseArgs(["--scope", "-y"], { engines: ENGINES }).missingValue, "--scope");
+});
+
+test("should report --engine without a value instead of throwing", () => {
+  assert.equal(parseArgs(["--engine"], { engines: ENGINES }).missingValue, "--engine");
+});
+
+test("should accept a value that starts with a single dash and a space", () => {
+  const { flags, missingValue } = parseArgs(["--reason", "- falso positivo"], { engines: ENGINES });
+  assert.equal(missingValue, null);
+  assert.equal(flags.reason, "- falso positivo");
+});
+
+test("should still report an unknown flag that comes after a value flag without value", () => {
+  const { missingValue, unknownFlag } = parseArgs(["--scope", "--dry-run", "--nada"], { engines: ENGINES });
+  assert.equal(missingValue, "--scope");
+  assert.equal(unknownFlag, "--nada");
+});
+
+test("should keep valid values unchanged around the missing value rule", () => {
+  const { flags, missingValue } = parseArgs(["--engine", "claude-code,copilot", "--scope", "global", "--effort-review", "max"], { engines: ENGINES });
+  assert.equal(missingValue, null);
+  assert.deepEqual(flags.engines, ["claude-code", "copilot"]);
+  assert.equal(flags.scope, "global");
+  assert.equal(flags.effortReview, "max");
+  assert.deepEqual(parseArgs(["--engine", "both"], { engines: ENGINES }).flags.engines, ENGINES);
+});
+
 test("should keep positional arguments when --archived and --date are combined with them", () => {
   const { flags, positional, unknownFlag } = parseArgs(
     ["repo", "--archived", "--date", "2026-01-15", "slug"],

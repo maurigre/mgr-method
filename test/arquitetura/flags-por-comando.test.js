@@ -133,8 +133,10 @@ function lerChaves(cenario, cli, modelo) {
   const execucao = cenario.terminal
     ? spawnSync("script", ["-qec", `stty cols 200 rows 50; ${[process.execPath, "--import", ESPIAO, programa, ...argv].map(aspas).join(" ")}`, "/dev/null"], { cwd: projeto, env, input: "\n", encoding: "utf8", timeout: 60000 })
     : spawnSync(process.execPath, ["--import", ESPIAO, programa, ...argv], { cwd: projeto, env, input: "", encoding: "utf8", timeout: 60000 });
+  const registro = JSON.parse(readFileSync(saidaLeituras, "utf8"));
   return {
-    chaves: JSON.parse(readFileSync(saidaLeituras, "utf8")).filter((chave) => !GLOBAL_FLAGS.includes(chave)),
+    chaves: registro.lidas.filter((chave) => !GLOBAL_FLAGS.includes(chave)),
+    instrumentado: registro.instrumentado,
     recusou: `${execucao.stdout}${execucao.stderr}`.includes(RECUSA_NOVA),
   };
 }
@@ -142,14 +144,16 @@ function lerChaves(cenario, cli, modelo) {
 function medir(cenarios, cli, modelo) {
   const lidas = {};
   const recusadas = [];
-  if (!TEM_GANCHO) return { lidas, recusadas };
+  const semGancho = [];
+  if (!TEM_GANCHO) return { lidas, recusadas, semGancho };
   for (const cenario of cenarios) {
     if (cenario.terminal && !TEM_SCRIPT) continue;
-    const { chaves, recusou } = lerChaves(cenario, cli, modelo);
+    const { chaves, instrumentado, recusou } = lerChaves(cenario, cli, modelo);
     lidas[cenario.entrada] = chaves;
     if (recusou) recusadas.push(`${cli} ${cenario.entrada}`);
+    if (!instrumentado) semGancho.push(`${cli} ${cenario.entrada}`);
   }
-  return { lidas, recusadas };
+  return { lidas, recusadas, semGancho };
 }
 
 function conferir(tabela, cenarios, lidas) {
@@ -180,6 +184,10 @@ test("should give every entry of both tables a measured scenario", () => {
 test("should measure every scenario that can run here", { skip: SEM_GANCHO }, () => {
   assert.deepEqual(Object.keys(lidasPacote).sort(), esperadas(PACOTE));
   assert.deepEqual(Object.keys(lidasRuntime).sort(), esperadas(DO_RUNTIME));
+});
+
+test("should run the instrumented parser in every measured scenario", { skip: SEM_GANCHO }, () => {
+  assert.deepEqual([...pacote.semGancho, ...runtime.semGancho], []);
 });
 
 test("should measure the terminal scenarios add and uninstall", { skip: SEM_GANCHO || SEM_SCRIPT }, () => {

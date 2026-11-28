@@ -49,6 +49,7 @@ const FONTE_DO_RUNTIME_PT = {
 
 const en = ({ invocation, lifecycle }) => ({
   unknownFlag: (flag) => `unknown flag: ${flag}`,
+  flagNeedsValue: (flag) => `${flag} needs a value`,
   flagNotAccepted: (flag, command, acceptedBy) => `${command} does not accept ${flag}; it is accepted by: ${acceptedBy.join(", ")}`,
   flagNotAcceptedLifecycle: (flag, command, acceptedBy) => `${command} does not accept ${flag}; it is accepted by lifecycle commands: ${acceptedBy.map((c) => `${lifecycle} ${c}`).join(", ")}`,
   unknownCommand: (command) => `unknown command: ${command}\n`,
@@ -979,6 +980,7 @@ Plugin skills (https://github.com/maurigre/mgr-method/blob/main/docs/plugins.md)
 
 const ptBR = ({ invocation, lifecycle }) => ({
   unknownFlag: (flag) => `flag desconhecida: ${flag}`,
+  flagNeedsValue: (flag) => `${flag} precisa de um valor`,
   flagNotAccepted: (flag, command, acceptedBy) => `${command} não aceita ${flag}; a flag é aceita por: ${acceptedBy.join(", ")}`,
   flagNotAcceptedLifecycle: (flag, command, acceptedBy) => `${command} não aceita ${flag}; a flag é aceita por comandos de ciclo de vida: ${acceptedBy.map((c) => `${lifecycle} ${c}`).join(", ")}`,
   unknownCommand: (command) => `comando desconhecido: ${command}\n`,

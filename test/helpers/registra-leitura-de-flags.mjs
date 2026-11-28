@@ -18,7 +18,10 @@ globalThis.__mgrFlagReads = (chave) => {
 // Sem `FLAG_READS_OUT` a pré-carga não faz nada: o `node --test` sem lista de arquivos também executa este
 // `.mjs` como se fosse teste, e ele não pode falhar nem medir nada nesse caso.
 const destino = process.env.FLAG_READS_OUT;
-if (destino) process.on("exit", () => writeFileSync(destino, JSON.stringify([...lidas].sort())));
+// `instrumentado` prova que o invólucro rodou: sem ele, uma lista vazia de leituras não mediria nada.
+let instrumentado = false;
+globalThis.__mgrFlagParsed = () => { instrumentado = true; };
+if (destino) process.on("exit", () => writeFileSync(destino, JSON.stringify({ instrumentado, lidas: [...lidas].sort() })));
 
 function involucro(urlReal) {
   const fonte = `
@@ -31,6 +34,7 @@ const espia = (alvo) => new Proxy(alvo, {
   getOwnPropertyDescriptor(destino, chave) { anota(chave); return Reflect.getOwnPropertyDescriptor(destino, chave); },
 });
 export function parseArgs(...args) {
+  globalThis.__mgrFlagParsed();
   const saida = real.parseArgs(...args);
   return { ...saida, flags: espia(saida.flags) };
 }

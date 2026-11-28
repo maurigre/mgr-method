@@ -68,7 +68,8 @@ Cada comando aceita só as flags que usa. Qualquer outra flag conhecida é recus
 gravar qualquer coisa, e a mensagem diz que comandos a aceitam (ADR-0040): o `--dry-run` só vale no
 `install`, então `update --dry-run` ou `uninstall -y --dry-run` são recusados em vez de gravar. O
 `--user-language` vale em todo comando. Os comandos de hook (`detect --hook`, `precompact --hook`) são
-a exceção declarada: seguem o contrato do hook.
+a exceção declarada: seguem o contrato do hook. A flag que leva valor e chega sem ele — no fim da linha, ou
+seguida de outra flag — é recusada do mesmo jeito (`--scope precisa de um valor`).
 
 ### Layout instalado
 
